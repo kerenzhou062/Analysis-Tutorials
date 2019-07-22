@@ -89,6 +89,19 @@ STAR --runThreadN 20 --genomeDir STAR_index/ --readFilesCommand zcat \
 * ENCODE pipline: [STAR_RSEM.sh](https://github.com/KR-Chow/Analysis-Tutorials/blob/master/scripts/STAR_RSEM.sh)
 
 ### Mapping using Hisat2
+* installation
+```bash
+# Get latest STAR source from releases
+wget https://github.com/alexdobin/STAR/archive/2.7.1a.tar.gz
+tar -xzf 2.7.1a.tar.gz
+cd STAR-2.7.1a
+
+# Compile
+cd STAR/source
+make STAR
+# for easy use, add bin/ to your PATH
+```
+
 
 ## <a name="coverage"></a> Genomic Coverage
 
