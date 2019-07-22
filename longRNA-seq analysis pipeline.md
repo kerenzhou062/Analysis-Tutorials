@@ -10,8 +10,8 @@ This pipeline including quality cheking, reads mapping and estimation of gene ex
 * [Introduction](#intro)
 * [Quality check](#quality)
 * [Mapping](#mapping)
-* [Genomic coverage](#coverage)
-* [Peak calling](#peakCalling)
+* [Estimation of Gene Expression](#expression)
+* [Differential Gene Expression](#peakCalling)
 * [Reference](#ref)
 * [Licence](#licence)
 * [Acknowledgments](#acknowledgments)
@@ -86,7 +86,9 @@ STAR --runThreadN 20 --genomeDir STAR_index/ --readFilesCommand zcat \
 --outSAMtype BAM Unsorted SortedByCoordinate, or
 
 ```
-* ENCODE pipline:[STAR_RSEM.sh](https://github.com/KR-Chow/Analysis-Tutorials/blob/master/scripts/STAR_RSEM.sh)
+* ENCODE pipline: [STAR_RSEM.sh](https://github.com/KR-Chow/Analysis-Tutorials/blob/master/scripts/STAR_RSEM.sh)
+
+### Mapping using Hisat2
 
 ## <a name="coverage"></a> Genomic Coverage
 
