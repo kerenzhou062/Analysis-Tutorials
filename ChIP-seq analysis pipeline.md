@@ -64,7 +64,7 @@ igvtools count -z 7 -w 25 -e 250 mapBam.sorted.bam mapBam.cov.tdf genome.chrom.s
 There are 2 types of ChIP-seq peaks, narrow peaks (e.g. transcrption factor) and broad peaks (e.g. histone modification).
 
 
-#### Peak types of histone modifications
+#### <a href="https://sites.google.com/site/anshulkundaje/projects/encodehistonemodsPeak"></a> types of histone modifications
 
 Peak Type | Histone Modification
 ----------- | ----------
