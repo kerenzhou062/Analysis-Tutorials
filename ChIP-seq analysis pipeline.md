@@ -61,9 +61,15 @@ igvtools count -z 7 -w 25 -e 250 mapBam.sorted.bam mapBam.cov.tdf genome.chrom.s
 
 ## <a name="peakCalling"></a> Peak Calling
 
-The data for ChIP-seq peak calling are stacks of aligned reads across a genome. 
+There are 2 types of ChIP-seq peaks, narrow peaks (e.g. transcrption factor) and broad peaks (e.g. histone modification).
 
-There are 2 types of ChIP-seq peaks, narrow (transcrption factor) and broad (histone modification).
+
+#### Peak types of histone modifications
+
+Peak Type | Histone Modification
+----------- | ----------
+Narrow | H3K4me3, H3K4me2, H3K4me1, H3K9ac, H3K27ac, H2A.Z
+Broad| H3K36me3, H3K79me2, H3K27me3, H3K9me3, H3K9me1
 
 Many software are available for peak-calling.
 * [MACS](http://liulab.dfci.harvard.edu/MACS/)
