@@ -42,18 +42,66 @@ After confirming reads passed quality check, we align sequencing reads to the ge
 
 ### Mapping using STAR
 * installation
-
 ```bash
-#using bowtie to map sequencing
-bowtie -t -p 16 -v 2 -m 1 --best --strata --sam bowtieIndex_UCSC/hg19 fastq.map.sam
-samtools view -h -bS -F 4 --threads 8 fastq.map.sam fastq.map.bam
+# Get latest STAR source from releases
+wget https://github.com/alexdobin/STAR/archive/2.7.1a.tar.gz
+tar -xzf 2.7.1a.tar.gz
+cd STAR-2.7.1a
 
-#convert sam to bam (samtools v1.3.1)
-samtools sort --threads 8 -m 2G -O bam -o fastqMap.sorted.bam fastq.map.bam
-samtools index -b fastq.map.sorted.bam
+# Compile
+cd STAR/source
+make STAR
+# for easy use, add bin/ to your PATH
+```
 
-#delete temp files
-rm -f fastq.map.sam fastq.map.bam
+* building index of reference genome
+```bash
+# downloading dna index fasta file
+nohup wget -c http://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz &
+
+# download gft annotation file
+nohup wget -c ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_31/gencode.v31.annotation.gtf.gz &
+
+mkdir STAR_index && cd STAR_index
+STAR --runMode genomeGenerate --genomeDir STAR_index/ --genomeFastaFiles hg38.fa --sjdbGTFfile gencode.v31.annotation.gtf --sjdbOverhang 199
+
+# --sjdbOverhang = reads length-1
+```
+
+* basic usage of STAR
+```bash
+# STAR parameters: common
+STARparCommon=" --genomeDir $STARgenomeDir  --readFilesIn $read1 $read2   --outSAMunmapped Within --outFilterType BySJout \
+ --outSAMattributes NH HI AS NM MD    --outFilterMultimapNmax 20   --outFilterMismatchNmax 999   \
+ --outFilterMismatchNoverReadLmax 0.04   --alignIntronMin 20   --alignIntronMax 1000000   --alignMatesGapMax 1000000   \
+ --alignSJoverhangMin 8   --alignSJDBoverhangMin 1 --sjdbScore 1 --readFilesCommand zcat"
+
+# STAR parameters: run-time, controlled by DCC
+STARparRun=" --runThreadN $nThreadsSTAR --genomeLoad LoadAndKeep  --limitBAMsortRAM 10000000000"
+
+# STAR parameters: type of BAM output: quantification or sorted BAM or both
+#     OPTION: sorted BAM output
+## STARparBAM="--outSAMtype BAM SortedByCoordinate"
+#     OPTION: transcritomic BAM for quantification
+## STARparBAM="--outSAMtype None --quantMode TranscriptomeSAM"
+#     OPTION: both
+STARparBAM="--outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM"
+
+# STAR parameters: strandedness, affects bedGraph (wiggle) files and XS tag in BAM 
+
+case "$dataType" in
+str_SE|str_PE)
+      #OPTION: stranded data
+      STARparStrand=""
+      STARparWig="--outWigStrand Stranded"
+      ;;
+      #OPTION: unstranded data
+unstr_SE|unstr_PE)
+      STARparStrand="--outSAMstrandField intronMotif"
+      STARparWig="--outWigStrand Unstranded"
+      ;;
+esac
+
 ```
 
 ## <a name="coverage"></a> Genomic Coverage
