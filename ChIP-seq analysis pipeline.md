@@ -66,10 +66,11 @@ There are 2 types of ChIP-seq peaks, narrow peaks (e.g. transcrption factor) and
 
 #### types of histone modifications
 
-Peak Type | [Histone Modification](https://sites.google.com/site/anshulkundaje/projects/encodehistonemodsPeak)
+Peak Type | [Histone Modification](https://www.encodeproject.org/chip-seq/histone/)
 ----------- | ----------
-Narrow | H3K4me3, H3K4me2, H3K4me1, H3K9ac, H3K27ac, H2A.Z
-Broad| H3K36me3, H3K79me2, H3K27me3, H3K9me3, H3K9me1
+Narrow      | H2AFZ, H3ac, H3K27ac, H3K4me2, H3K4me3, H3K9ac, 
+Broad       | H3F3A, H3K27me3, H3K36me3, H3K4me1, H3K79me2, H3K79me3, H3K9me1, H3K9me2, H4K20me1
+Exceptions  | H3K9me3
 
 Many software are available for peak-calling.
 * [MACS](http://liulab.dfci.harvard.edu/MACS/)
