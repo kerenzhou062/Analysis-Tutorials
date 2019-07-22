@@ -70,39 +70,23 @@ STAR --runMode genomeGenerate --genomeDir STAR_index/ --genomeFastaFiles hg38.fa
 
 * basic usage of STAR
 ```bash
-# STAR parameters: common
-STARparCommon=" --genomeDir $STARgenomeDir  --readFilesIn $read1 $read2   --outSAMunmapped Within --outFilterType BySJout \
- --outSAMattributes NH HI AS NM MD    --outFilterMultimapNmax 20   --outFilterMismatchNmax 999   \
- --outFilterMismatchNoverReadLmax 0.04   --alignIntronMin 20   --alignIntronMax 1000000   --alignMatesGapMax 1000000   \
- --alignSJoverhangMin 8   --alignSJDBoverhangMin 1 --sjdbScore 1 --readFilesCommand zcat"
+STAR
+--runThreadN NumberOfThreads
+--genomeDir /path/to/genomeDir
+--readFilesIn /path/to/read1 [/path/to/read2]
+--outSAMtype BAM SortedByCoordinate
 
-# STAR parameters: run-time, controlled by DCC
-STARparRun=" --runThreadN $nThreadsSTAR --genomeLoad LoadAndKeep  --limitBAMsortRAM 10000000000"
+# example
+STAR --runThreadN 20 --genomeDir STAR_index/ --readFilesCommand zcat \
+--readFilesIn reads_1.fq.gz reads_2.fq.gz --outSAMtype BAM SortedByCoordinate
 
-# STAR parameters: type of BAM output: quantification or sorted BAM or both
-#     OPTION: sorted BAM output
-## STARparBAM="--outSAMtype BAM SortedByCoordinate"
-#     OPTION: transcritomic BAM for quantification
-## STARparBAM="--outSAMtype None --quantMode TranscriptomeSAM"
-#     OPTION: both
-STARparBAM="--outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM"
-
-# STAR parameters: strandedness, affects bedGraph (wiggle) files and XS tag in BAM 
-
-case "$dataType" in
-str_SE|str_PE)
-      #OPTION: stranded data
-      STARparStrand=""
-      STARparWig="--outWigStrand Stranded"
-      ;;
-      #OPTION: unstranded data
-unstr_SE|unstr_PE)
-      STARparStrand="--outSAMstrandField intronMotif"
-      STARparWig="--outWigStrand Unstranded"
-      ;;
-esac
+# unsorted or sorted bam file
+--outSAMtype BAM Unsorted, or
+--outSAMtype BAM SortedByCoordinate, or
+--outSAMtype BAM Unsorted SortedByCoordinate, or
 
 ```
+* ENCODE pipline:[STAR_RSEM.sh](https://github.com/KR-Chow/Analysis-Tutorials/blob/master/scripts/STAR_RSEM.sh)
 
 ## <a name="coverage"></a> Genomic Coverage
 
