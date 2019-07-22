@@ -18,9 +18,13 @@ This pipeline including quality cheking, reads mapping and estimation of gene ex
 * * *
 
 ## <a name="intro"></a> Introduction
-ChIP-sequencing, also known as ChIP-seq, is a method used to analyze protein interactions with DNA. 
-ChIP-seq combines chromatin immunoprecipitation (ChIP) with massively parallel DNA sequencing to identify the binding sites of DNA-associated proteins. 
-It can be used to map global binding sites precisely for any protein of interest. 
+RNA-Seq is used to analyze the continuously changing cellular transcriptome. 
+Specifically, RNA-Seq facilitates the ability to look at alternative gene spliced transcripts, 
+post-transcriptional modifications, gene fusion, mutations/SNPs and changes in gene expression over time, 
+or differences in gene expression in different groups or treatments. In addition to mRNA transcripts, 
+RNA-Seq can look at different populations of RNA to include total RNA, small RNA, such as miRNA, tRNA, 
+and ribosomal profiling. RNA-Seq can also be used to determine exon/intron boundaries and verify or amend previously
+annotated 5' and 3' gene boundaries. Recent advances in RNA-seq include single cell sequencing and in situ sequencing of fixed tissue.
 
 ## <a name="quality"></a> Quality Check
 
@@ -34,7 +38,10 @@ fastqc fastq1.fastq fastq2.fastq -o outputDirectory
 
 ## <a name="mapping"></a> Reads Mapping 
 
-After confirming reads passed quality check, we align sequencing reads to the genome using [bowtie](http://bowtie-bio.sourceforge.net/index.shtml).
+After confirming reads passed quality check, we align sequencing reads to the genome using [STAR](https://github.com/alexdobin/STAR) (ENCODE recommended) or [Hisat2](http://bowtie-bio.sourceforge.net/index.shtml).
+
+### Mapping using STAR
+* installation
 
 ```bash
 #using bowtie to map sequencing
