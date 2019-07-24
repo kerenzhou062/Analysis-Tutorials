@@ -98,6 +98,15 @@ cd hisat2-2.1.0
 # for easy use, add bin/ to your PATH
 ```
 
+* building index of reference genome
+```bash
+# Extract splice-site and exon information from gene annotation files
+extract_splice_sites.py gencode.v31.annotation.gtf > gencodeV31.ss
+extract_exons.py gencode.v31.annotation.gtf > gencodeV31.exon
+
+# Building a HISAT2 index
+hisat2-build --ss gencodeV31.ss --exon gencodeV31.exon hg38.fa hg38
+```
 
 ## <a name="coverage"></a> Genomic Coverage
 
