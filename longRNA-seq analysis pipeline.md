@@ -38,7 +38,7 @@ fastqc fastq1.fastq fastq2.fastq -o outputDirectory
 
 ## <a name="mapping"></a> Reads Mapping 
 
-After confirming reads passed quality check, we align sequencing reads to the genome using [STAR](https://github.com/alexdobin/STAR) (ENCODE recommended) or [Hisat2](http://bowtie-bio.sourceforge.net/index.shtml).
+After confirming reads passed quality check, we align sequencing reads to the genome using [STAR](https://github.com/alexdobin/STAR) (ENCODE recommended) or [HISAT2](http://bowtie-bio.sourceforge.net/index.shtml).
 
 ### Mapping using STAR
 * installation
@@ -88,17 +88,13 @@ STAR --runThreadN 20 --genomeDir STAR_index/ --readFilesCommand zcat \
 ```
 * ENCODE pipline: [STAR_RSEM.sh](https://github.com/KR-Chow/Analysis-Tutorials/blob/master/scripts/STAR_RSEM.sh)
 
-### Mapping using Hisat2
+### Mapping using HISAT2
 * installation
 ```bash
 # Get latest STAR source from releases
-wget https://github.com/alexdobin/STAR/archive/2.7.1a.tar.gz
-tar -xzf 2.7.1a.tar.gz
-cd STAR-2.7.1a
-
-# Compile
-cd STAR/source
-make STAR
+wget http://ccb.jhu.edu/software/hisat2/dl/hisat2-2.1.0-Linux_x86_64.zip
+tar -xzf hisat2-2.1.0-Linux_x86_64.zip
+cd hisat2-2.1.0
 # for easy use, add bin/ to your PATH
 ```
 
