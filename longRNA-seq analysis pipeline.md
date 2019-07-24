@@ -95,6 +95,7 @@ STAR --runThreadN 20 --genomeDir STAR_index/ --readFilesCommand zcat \
 wget http://ccb.jhu.edu/software/hisat2/dl/hisat2-2.1.0-Linux_x86_64.zip
 tar -xzf hisat2-2.1.0-Linux_x86_64.zip
 cd hisat2-2.1.0
+
 # for easy use, add bin/ to your PATH
 ```
 
@@ -105,8 +106,25 @@ extract_splice_sites.py gencode.v31.annotation.gtf > gencodeV31.ss
 extract_exons.py gencode.v31.annotation.gtf > gencodeV31.exon
 
 # Building a HISAT2 index
-hisat2-build --ss gencodeV31.ss --exon gencodeV31.exon hg38.fa hg38
+hisat2-build --ss gencodeV31.ss --exon gencodeV31.exon hg38.fa hg38Transcrits
 ```
+
+* align reads to reference genome
+```bash
+# for paired-end reads
+hisat2 -p 3 --rna-strandness R --dta -x hg38Transcrits -q -1 reads_1.fq -2 reads_2.fq -S readsMapped.sam
+
+# for single reads
+hisat2 -p 3 --rna-strandness R --dta -x hg38Transcrits -q reads.fq -S readsMapped.sam
+
+# sam to index bam by using samtools
+sort --threads 8 -O bam -o reads.sorted.bam reads.sam
+samtools index -b reads.sorted.bam
+
+# stringtie: assbemle transcriptome
+stringtie -p 8 --rf -G gencode.v31.annotation.gtf -o readsMapped.gtf readsMapped.sorted.bam
+ ```
+
 
 ## <a name="coverage"></a> Genomic Coverage
 
