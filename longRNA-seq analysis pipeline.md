@@ -121,7 +121,7 @@ hisat2 -p 3 --rna-strandness R --dta -x hg38Transcrits -q reads.fq -S readsMappe
 sort --threads 8 -O bam -o reads.sorted.bam reads.sam
 samtools index -b reads.sorted.bam
 
-# stringtie: assbemle transcriptome
+# stringtie: assemble transcriptome
 stringtie -p 8 --rf -G gencode.v31.annotation.gtf -o readsMapped.gtf readsMapped.sorted.bam
  ```
 
