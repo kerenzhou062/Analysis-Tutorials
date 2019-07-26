@@ -126,7 +126,7 @@ stringtie -p 8 --rf -G gencode.v31.annotation.gtf -o readsMapped.gtf readsMapped
  ```
 
 
-## <a name="coverage"></a> Genomic Coverage
+## <a name="expression"></a> Estimation of Gene Expression
 
 A tiled data file (TDF) file (.tdf) is a binary file that contains genomic coverage used for faster display in IGV.
 
