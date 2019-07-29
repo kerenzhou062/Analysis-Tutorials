@@ -11,7 +11,7 @@ This pipeline including quality cheking, reads mapping and estimation of gene ex
 * [Quality check](#quality)
 * [Mapping](#mapping)
 * [Estimation of Gene Expression](#expression)
-* [Differential Gene Expression](#peakCalling)
+* [Differential Gene Expression](#differential)
 * [Reference](#ref)
 * [Licence](#licence)
 * [Acknowledgments](#acknowledgments)
@@ -144,10 +144,30 @@ rsem-calculate-expression  --phred33-quals \
     reads
 ```
 
-## <a name="peakCalling"></a> Peak Calling
+## <a name="differential"></a> Differential Gene Expression
 
-There are 2 types of ChIP-seq peaks, narrow peaks (e.g. transcrption factor) and broad peaks (e.g. histone modification).
+Differential gene expression can be estimated by DESeq2, EdgeR, DEGSeq and RSEM.
 
+* DESeq2
+```R
+#!/usr/bin/env Rscript
+# exomepeak Script 2
+# R script
+# Define parameters and load library
+#source("https://bioconductor.org/biocLite.R")
+library("DESeq2")
+
+setwd("working_directory")
+condition <- c("treated","treated","treated","untreated","untreated","untreated","untreated")
+
+# sampleTable:sampleName,fileName,condition
+sampleTable <- read.delim("sampleTable.txt", header=TRUE, check.names=FALSE, stringsAsFactors=FALSE);
+ddsHTSeq <- DESeqDataSetFromHTSeqCount(sampleTable = sampleTable,directory = "gene",design= ~ condition)
+dds <- DESeq(ddsHTSeq)
+res <- results(dds)
+resOrdered <- res[order(res$pvalue),]
+write.table(as.data.frame(resOrdered), file="DEGenesResult.txt",quote=FALSE, row.names=TRUE, col.names=TRUE, sep="\t")
+ ```
 
 #### peak types of histone modifications
 
