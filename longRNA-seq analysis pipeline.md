@@ -112,10 +112,10 @@ hisat2-build --ss gencodeV31.ss --exon gencodeV31.exon hg38.fa hg38Transcrits
 * align reads to reference genome
 ```bash
 # for paired-end reads
-hisat2 -p 3 --rna-strandness R --dta -x hg38Transcrits -q -1 reads_1.fq -2 reads_2.fq -S readsMapped.sam
+hisat2 -p 3 --rna-strandness R --dta -x hg38Transcripts -q -1 reads_1.fq -2 reads_2.fq -S readsMapped.sam
 
 # for single reads
-hisat2 -p 3 --rna-strandness R --dta -x hg38Transcrits -q reads.fq -S readsMapped.sam
+hisat2 -p 3 --rna-strandness R --dta -x hg38Transcripts -q reads.fq -S readsMapped.sam
 
 # sam to index bam by using samtools
 sort --threads 8 -O bam -o reads.sorted.bam reads.sam
@@ -127,13 +127,21 @@ stringtie -p 8 --rf -G gencode.v31.annotation.gtf -o readsMapped.gtf readsMapped
 
 
 ## <a name="expression"></a> Estimation of Gene Expression
-
-A tiled data file (TDF) file (.tdf) is a binary file that contains genomic coverage used for faster display in IGV.
-
-TDF can be generated using  [IGVtools](https://software.broadinstitute.org/software/igv/igvtools).
+You can esimate gene expression using stringtie or RSEM by employing bowtie2/STAR
 
 ```bash
-igvtools count -z 7 -w 25 -e 250 mapBam.sorted.bam mapBam.cov.tdf genome.chrom.sizes > /dev/null 2>
+# gene expression estimated by stringtie
+stringtie -p 8 --rf -G gencode.v31.annotation.gtf -A readsMapped_gene_abund.txt-o readsMapped.gtf -l readsMapped readsMapped.sorted.bam
+
+# gene expression estimated by RSEM
+rsem-calculate-expression  --phred33-quals \
+    --strandedness reverse \
+    --bowtie2 \
+    --output-genome-bam \
+    -p 8 \
+    --paired-end reads_1.fastq reads_2.fastq \
+    hg38Transcripts \
+    reads
 ```
 
 ## <a name="peakCalling"></a> Peak Calling
