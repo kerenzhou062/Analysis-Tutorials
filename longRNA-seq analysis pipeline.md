@@ -169,6 +169,27 @@ resOrdered <- res[order(res$pvalue),]
 write.table(as.data.frame(resOrdered), file="DEGenesResult.txt",quote=FALSE, row.names=TRUE, col.names=TRUE, sep="\t")
  ```
 
+* EdgeR
+```R
+#!/usr/bin/env Rscript
+# exomepeak Script 2
+# R script
+# Define parameters and load library
+#source("https://bioconductor.org/biocLite.R")
+library("DESeq2")
+
+setwd("working_directory")
+condition <- c("treated","treated","treated","untreated","untreated","untreated","untreated")
+
+# sampleTable:sampleName,fileName,condition
+sampleTable <- read.delim("sampleTable.txt", header=TRUE, check.names=FALSE, stringsAsFactors=FALSE);
+ddsHTSeq <- DESeqDataSetFromHTSeqCount(sampleTable = sampleTable,directory = "gene",design= ~ condition)
+dds <- DESeq(ddsHTSeq)
+res <- results(dds)
+resOrdered <- res[order(res$pvalue),]
+write.table(as.data.frame(resOrdered), file="DEGenesResult.txt",quote=FALSE, row.names=TRUE, col.names=TRUE, sep="\t")
+ ```
+
 #### peak types of histone modifications
 
 Peak Type | [Histone Modification](https://www.encodeproject.org/chip-seq/histone/)
