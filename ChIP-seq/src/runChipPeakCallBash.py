@@ -22,6 +22,8 @@ parser.add_argument('-dtype', action='store', type=str,
 parser.add_argument('-cpu', action='store', type=int,
                     default=10, help='threads used for \
                     callMacs2Parallel.py|callEncodeIdrParallel.py')
+parser.add_argument('-extsize', action='store', type=int,
+                    help='--extsize parameter (macs2, histone:147)')
 parser.add_argument('-gsize', action='store', type=str,
                     default='hs', help='-g parameter (macs2, mm|hs|dm|ce)')
 parser.add_argument('-input', action='store', type=str,
@@ -66,8 +68,8 @@ tagAlignPoolPr2App = '.pooled.pr2.tagAlign.gz'
 tagAlignPoolApp = '.pooled.tagAlign.gz'
 
 # filename: HepG2_shWTAP_IP_rep1_run1_1.fastq, HepG2_shWTAP_IP_rep1_run1_2.fastq, HepG2_shWTAP_IP_run_rep1_NA.fastq
-fastqList = sorted(glob(os.path.join(basepath, "*.fastq")) 
-    + glob(os.path.join(basepath, "*.fq")))
+extsList = ["*.fastq", '*.fq', '*.fastq.gz', '*.fq.gz']
+fastqList = sorted([f for ext in extsList for f in glob(os.path.join(basepath, ext))])
 mainAlignDir = os.path.join(basepath, 'alignment')
 mainPeakDir = os.path.join(basepath, 'peak')
 bashDir = os.path.join(basepath, 'runBash')
@@ -98,14 +100,15 @@ for fastq in fastqList:
     else:
         expDict[exp][ip] = [rep]
     # get fragment size (estFragLen) from cross-correlation ScoreFile
-    if exp not in expExtsizeDict and exp.find('input') < 0:
-        ccScoreFile = '_'.join([exp, 'IP', 'rep1']) + '.trim.filt.sample.15.tagAlign.gz.cc.qc'
-        ccScoreFilePath = os.path.join(mainAlignDir, exp, 'IP', 'rep1', ccScoreFile)
-        with open(ccScoreFilePath, 'r') as f:
-            line = f.readline()
-            row = line.strip().split('\t')
-            estFragLen = row[2]
-            expExtsizeDict[exp] = estFragLen
+    if bool(xargs.extsize):
+        if exp not in expExtsizeDict and exp.find('input') < 0:
+            ccScoreFile = '_'.join([exp, 'IP', 'rep1']) + '.trim.filt.sample.15.tagAlign.gz.cc.qc'
+            ccScoreFilePath = os.path.join(mainAlignDir, exp, 'IP', 'rep1', ccScoreFile)
+            with open(ccScoreFilePath, 'r') as f:
+                line = f.readline()
+                row = line.strip().split('\t')
+                estFragLen = row[2]
+                expExtsizeDict[exp] = estFragLen
 
 # infering public control input samples
 pubConExpFlag = False
@@ -327,7 +330,10 @@ with open(runSbatchScript, 'w') as sbatchO:
         nameStr = ' '.join(expLinkDict[exp]['name'])
         otherStr = ','.join(expLinkDict[exp]['other'])
         outputStr = ' '.join(expLinkDict[exp]['output'])
-        extsize = expExtsizeDict[exp]
+        if bool(args.extsize):
+            extsize = args.extsize
+        else:
+            extsize = expExtsizeDict[exp]
         # special for broad peak
         otherBroadStr = ','.join(['--broad --broad-cutoff {0}'.format(pval) 
             for i in range(len(expLinkDict[exp]['name']))])
