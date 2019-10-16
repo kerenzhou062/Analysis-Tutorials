@@ -41,8 +41,8 @@ fasta = anno.fasta(args.fasta)
 basepath = os.path.realpath(args.input)
 
 #filename: HepG2_shWTAP_IP_rep1_run1_1.fastq, HepG2_shWTAP_IP_rep1_run1_2.fastq, HepG2_shWTAP_IP_run_rep1_NA.fastq
-fastqList = sorted(glob(os.path.join(basepath, "*.fastq")) 
-    + glob(os.path.join(basepath, "*.fq")))
+extsList = ["*.fastq", '*.fq', '*.fastq.gz', '*.fq.gz']
+fastqList = sorted([f for ext in extsList for f in glob(os.path.join(basepath, ext))])
 bashDir = os.path.join(basepath, 'runBash')
 logDir = os.path.join(bashDir, 'log')
 os.makedirs(logDir, exist_ok=True)
