@@ -6,7 +6,7 @@ import re
 from glob import glob
 from collections import defaultdict
 import datetime
-from pubAlbum import Anno
+from PubAlbum import Anno
 
 #usage: runChipSeBowtie2AlignBash.py or runChipSeBowtie2AlignBash.py <fastq dir>
 
