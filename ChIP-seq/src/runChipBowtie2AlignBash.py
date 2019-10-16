@@ -458,13 +458,15 @@ for i in `find ./ -maxdepth 1 -type l -name "*.filt.srt.nodup.bam"|grep -v 'pool
 do
   BTILT_PREFIX=${{i%%.bam}}
   NODUP_BFILT_BAM=${{BTILT_PREFIX}}.bfilt.bam
-  FINAL_BAM_INDEX_FILE=${{NODUP_BFILT_BAM}}.bfilt.bai
+  FINAL_BAM_INDEX_FILE=${{BTILT_PREFIX}}.bfilt.bai
   bedtools intersect -nonamecheck -v -abam ${{i}} -b ${{BLACKLIST}} > ${{NODUP_BFILT_BAM}}
   samtools index ${{NODUP_BFILT_BAM}} ${{FINAL_BAM_INDEX_FILE}}
-  NODUP_BFILT_BAMS=`echo "${{NODUP_BAMS}}"" ""${{NODUP_BFILT_BAM}}"`
+  NODUP_BFILT_BAMS=`echo "${{NODUP_BFILT_BAMS}}"" ""${{NODUP_BFILT_BAM}}"`
   REPS=`echo "${{REPS}}"" ""rep${{COUNTER}}"`
   COUNTER=$[$COUNTER +1]
 done
+
+echo "Plotting Jensen-Shannon distance"
 
 C_ALL=en_US.UTF-8 LANG=en_US.UTF-8 plotFingerprint -b ${{NODUP_BFILT_BAMS}} \\
   --labels ${{REPS}} --outQualityMetrics ${{JSD_LOG}} \\
@@ -507,6 +509,7 @@ plotGC.py -data ${{GC_BIAS_LOG}} -prefix ${{FINAL_BAM_PREFIX}}
 sbatchS1To2cgTemplate = '''#!/bin/bash
 #SBATCH --job-name=ChipAlign_{baseExpName}    # Job name
 #SBATCH --mail-type=END,FAIL          # Mail events (NONE, BEGIN, END, FAIL, ALL)
+#SBATCH --mail-user=kzhou@cho.org          # Mail user
 #SBATCH -n {threadNum}                          # Number of cores
 #SBATCH -N 1-1                        # Min - Max Nodes
 #SBATCH -p all                        # default queue is all if you don't specify
@@ -638,6 +641,7 @@ echo "Step 2g done!"
 sbatchS2dTo2fTemplate = '''#!/bin/bash
 #SBATCH --job-name=ChipPoolPeak_{baseExpName}    # Job name
 #SBATCH --mail-type=END,FAIL          # Mail events (NONE, BEGIN, END, FAIL, ALL)
+#SBATCH --mail-user=kzhou@cho.org          # Mail user
 #SBATCH -n 1                          # Number of cores
 #SBATCH -N 1-1                        # Min - Max Nodes
 #SBATCH -p all                        # default queue is all if you don't specify
