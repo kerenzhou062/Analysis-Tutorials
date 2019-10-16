@@ -397,7 +397,7 @@ with open(runSbatchScript, 'w') as sbatchO:
         #write sbatch file
         logName = "{baseExpName}_PeakCall.macs2_idr.log".format(**vars())
         logPath = os.path.join(logDir, logName)
-        sbatchScript = os.path.join(bashDir, baseExpName + '_PeakCallIdr.macs2_idr.sh')
+        sbatchScript = os.path.join(bashDir, baseExpName + '_PeakCall.macs2_idr.sh')
         sbatchCont = sbatchMacs2IdrTemplate.format(**vars())
         with open (sbatchScript, 'w') as sbatchScriptO:
             sbatchScriptO.write(sbatchCont)
