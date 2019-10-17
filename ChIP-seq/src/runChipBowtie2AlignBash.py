@@ -47,14 +47,13 @@ bashDir = os.path.join(basepath, 'runBash')
 logDir = os.path.join(bashDir, 'log')
 os.makedirs(logDir, exist_ok=True)
 
-fastqDict = defaultdict(dict)
-# fastq nested data structure
-#defaultdict(<class 'dict'>, {'test_control': 
-#  {'IP': defaultdict(<class 'dict'>, 
-#  {'rep1': {'1': ['HepG2_control_IP_rep1_run1_1.fastq', 
-#  'HepG2_control_IP_rep1_run2_1.fastq']}})}})
+readLen = 0
+fqExt = '' # .fq.gz|.fq|.fastq|.fastq.gz
+expFqDict = defaultdict(dict)
+# expFqDict: exp->IP->rep->[fq1,fq2]
 for fastq in fastqList:
     basename = os.path.basename(fastq)
+    fqExt = re.findall(r'\..+$', basename)[0]
     cleanBasename = re.sub(r'\..+$', '', basename)
     #HepG2 shWTAP IP rep1 1
     basenameList = cleanBasename.split('_')
@@ -64,14 +63,35 @@ for fastq in fastqList:
     rep = basenameList[3]
     run = basenameList[4]
     pairedNum = basenameList[5]
-    if ip in fastqDict[exp]:
-        if pairedNum in fastqDict[exp][ip][rep]:
-            fastqDict[exp][ip][rep][pairedNum].append(basename)
+    if ip in expFqDict[exp]:
+        if pairedNum in expFqDict[exp][ip][rep]:
+            expFqDict[exp][ip][rep][pairedNum].append(basename)
         else:
-            fastqDict[exp][ip][rep][pairedNum] = [basename]
+            expFqDict[exp][ip][rep][pairedNum] = [basename]
     else:
-        fastqDict[exp][ip] = defaultdict(dict)
-        fastqDict[exp][ip][rep][pairedNum] = [basename]
+        expFqDict[exp][ip] = defaultdict(dict)
+        expFqDict[exp][ip][rep][pairedNum] = [basename]
+    if readLen == 0:
+        if re.search(r'gz', fqExt):
+            import gzip
+            with gzip.open(fastq,'rt') as f:
+                for i, line in enumerate(f):
+                    if i == 1:
+                        readLen = len(line.strip())
+                    elif i > 1:
+                        break
+        else:
+            with open(fastq,'rt') as f:
+                for i, line in enumerate(f):
+                    if i == 1:
+                        readLen = len(line.strip())
+                    elif i > 1:
+                        break
+
+trim = 50
+if readLen < trim:
+    trim = readLen
+
 mainAlignDir = os.path.join(basepath, 'alignment')
 
 # ================================
@@ -282,13 +302,13 @@ ln -sf ${{FINAL_TA_FILE}} ${{ipDir}}
 
 step2bBothCommand = '''
 #### for both PE and SE samples
-# Trim R1 fastq to 50bp
+# Trim R1 fastq to {trim}bp
 echo "Starting trimming fastq..."
 
 TRIM_OFPREFIX="${{prefix}}.trim"
 TRIMMED_FASTQ_R1="${{TRIM_OFPREFIX}}.fastq.gz"
 
-python $(which trimfastq.py) ${{fastqR1}} 50 | gzip -nc > ${{TRIMMED_FASTQ_R1}}
+python $(which trimfastq.py) ${{fastqR1}} {trim} | gzip -nc > ${{TRIMMED_FASTQ_R1}}
 
 # Align $TRIMMED_FASTQ_R1 (not paired) with bowtie2 (step 1a SE) and use it for filtering
 # step (1b) and then get $FILT_BAM_FILE (not the deduped $FINAL_BAM_FILE), which is
@@ -702,14 +722,11 @@ runSbatchScript = os.path.join(bashDir, "runEncodeChipBowtie2Qc.sbatch")
 with open(runSbatchScript, 'w') as sbatchO:
     sbatchO.write('#!/bin/sh\n')
     sbatchO.write('BASE={0}\n\n'.format(bashDir))
-    #defaultdict(<class 'dict'>, {'test_control': 
-    #  {'IP': defaultdict(<class 'dict'>, 
-    #  {'rep1': {'1': ['HepG2_control_IP_rep1_run1_1.fastq', 
-    #  'HepG2_control_IP_rep1_run2_1.fastq']}})}})
     sbatchO.write('#sbatch for step 1 to step 2c and step 2g\n')
-    for exp in sorted(fastqDict.keys()):
-        for ip in sorted(fastqDict[exp].keys()):
-            ipDict = fastqDict[exp][ip]
+    # expFqDict: exp->IP->rep->[fq1,fq2]
+    for exp in sorted(expFqDict.keys()):
+        for ip in sorted(expFqDict[exp].keys()):
+            ipDict = expFqDict[exp][ip]
             for rep in sorted(ipDict.keys()):
                 pairedNumList = sorted(ipDict[rep].keys())
                 baseExpName = '_'.join([exp, ip, rep])
@@ -721,8 +738,8 @@ with open(runSbatchScript, 'w') as sbatchO:
                 catCommand = ''
                 if len(pairedNumList) > 1:
                     if len(runFileList) > 1:
-                        catFastqR1 = '${prefix}' + '_1.fastq'
-                        catFastqR2 = '${prefix}' + '_2.fastq'
+                        catFastqR1 = '${prefix}' + '_1.{fqExt}'.format(**vars())
+                        catFastqR2 = '${prefix}' + '_2.{fqExt}'.format(**vars())
                         fastqR1Runs = ' '.join(list(map(lambda x: '$BASE/'+x, sorted(ipDict[rep]['1']))))
                         fastqR2Runs = ' '.join(list(map(lambda x: '$BASE/'+x, sorted(ipDict[rep]['2']))))
                         catCommand = 'echo "cat fastqs..."\ncat {fastqR1Runs} | \\ >{catFastqR1}\n\
@@ -769,9 +786,9 @@ with open(runSbatchScript, 'w') as sbatchO:
                     sbatchO.write('sbatch $BASE/{baseExpName}.s1To2cg.sh\n'.format(**vars()))
     ## generate sbatch script for step1 to step2d and step 2f
     sbatchO.write('\n#sbatch for step 2d to step 2f\n')
-    for exp in sorted(fastqDict.keys()):
-        for ip in sorted(fastqDict[exp].keys()):
-            ipDict = fastqDict[exp][ip]
+    for exp in sorted(expFqDict.keys()):
+        for ip in sorted(expFqDict[exp].keys()):
+            ipDict = expFqDict[exp][ip]
             baseExpName = '_'.join([exp, ip])
             sbatchS2dTo2fScript = os.path.join(bashDir, baseExpName + '.s2dTo2f.sh')
             with open (sbatchS2dTo2fScript, 'w') as sbatchS2dTo2f:
