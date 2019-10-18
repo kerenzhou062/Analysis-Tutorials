@@ -18,7 +18,7 @@ parser.add_argument('-cpu', action='store', type=str,
 parser.add_argument('-fasta', action='store', type=str,
                     default='hg38', help='fasta for genome: prefix or file (eg. hg38)')
 parser.add_argument('-input', action='store', type=str,
-                    default='./', help='input fastq directory (eg. HepG2_shWTAP_IP_rep1_run1_2.fastq)')
+                    default='./', help='input fastq directory (eg. HepG2_CTCF_knockdown_IP_rep1_run1_2.fastq)')
 parser.add_argument('-index', action='store', type=str,
                     default='hg38', help='bowtie2 genome index: prefix or file (eg. hg38)')
 parser.add_argument('-memory', action='store', type=str,
@@ -40,7 +40,7 @@ blacklist = anno.blacklist(args.blacklist)
 fasta = anno.fasta(args.fasta)
 basepath = os.path.realpath(args.input)
 
-#filename: HepG2_shWTAP_IP_rep1_run1_1.fastq, HepG2_shWTAP_IP_rep1_run1_2.fastq, HepG2_shWTAP_IP_run_rep1_NA.fastq
+#file pattern: HepG2_CTCF_knockdown_IP_rep1_run1_1.fastq, HepG2_CTCF_knockdown_IP_rep1_run1_2.fastq
 extsList = ["*.fastq", '*.fq', '*.fastq.gz', '*.fq.gz']
 fastqList = sorted([f for ext in extsList for f in glob(os.path.join(basepath, ext))])
 bashDir = os.path.join(basepath, 'runBash')
@@ -55,14 +55,14 @@ for fastq in fastqList:
     basename = os.path.basename(fastq)
     fqExt = re.findall(r'\..+$', basename)[0]
     cleanBasename = re.sub(r'\..+$', '', basename)
-    #HepG2 shWTAP IP rep1 1
+    #HepG2 CTCF knockdown IP rep1 run1 1
     basenameList = cleanBasename.split('_')
-    #HepG2_shWTAP
-    exp = '_'.join(basenameList[0:2])
-    ip = basenameList[2]
-    rep = basenameList[3]
-    run = basenameList[4]
-    pairedNum = basenameList[5]
+    #HepG2_CTCF_knockdown
+    exp = '_'.join(basenameList[0:3])
+    ip = basenameList[3]
+    rep = basenameList[4]
+    run = basenameList[5]
+    pairedNum = basenameList[6]
     if ip in expFqDict[exp]:
         if pairedNum in expFqDict[exp][ip][rep]:
             expFqDict[exp][ip][rep][pairedNum].append(basename)
