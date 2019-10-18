@@ -17,7 +17,7 @@ parser.add_argument('-control', action='store', type=str,
                     help='The prefix name of control input sample (like:HepG2_input) \
                     (otherwise infer it automatically)')
 parser.add_argument('-dtype', action='store', type=str,
-                    choices=['narrowPeak','broadPeak','bed','gff'],
+                    choices=['narrowPeak','broadPeak'],
                     default='narrowPeak', help='--input-file-type parameter (idr)')
 parser.add_argument('-cpu', action='store', type=int,
                     default=10, help='threads used for \
@@ -38,8 +38,8 @@ parser.add_argument('-memory', action='store', type=str,
 parser.add_argument('-pval', action='store', type=str,
                     default='1e-2', help='-p parameter (macs2)')
 parser.add_argument('-rank', action='store', type=str,
-                    default='signal.value', help='--rank parameter (idr) \
-                    (signal.value|p.value|q.value|columnIndex)')
+                    choices=['p.value','q.value','signal.value'],
+                    default='p.value', help='--rank parameter (idr)')
 parser.add_argument('-shift', action='store', type=str,
                     default='0', help='--shift parameter (macs2)')
 
