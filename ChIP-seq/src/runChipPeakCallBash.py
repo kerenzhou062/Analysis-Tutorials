@@ -16,16 +16,18 @@ parser.add_argument('-blacklist', action='store', type=str,
 parser.add_argument('-control', action='store', type=str,
                     help='The prefix name of control input sample (like:HepG2_input) \
                     (otherwise infer it automatically)')
-parser.add_argument('-dtype', action='store', type=str,
-                    choices=['narrowPeak','broadPeak'],
-                    default='narrowPeak', help='--input-file-type parameter (idr)')
 parser.add_argument('-cpu', action='store', type=int,
                     default=10, help='threads used for \
                     callMacs2Parallel.py|callEncodeIdrParallel.py')
+parser.add_argument('-dtype', action='store', type=str,
+                    choices=['narrowPeak','broadPeak'],
+                    default='narrowPeak', help='--input-file-type parameter (idr)')
 parser.add_argument('-extsize', action='store', type=int,
                     help='--extsize parameter (macs2, histone:147)')
 parser.add_argument('-gsize', action='store', type=str,
                     default='hs', help='-g parameter (macs2, mm|hs|dm|ce)')
+parser.add_argument('-gtf', action='store', type=str,
+                    default='hg38v31', help='gtf annotation build or file (eg. hg38v31)')
 parser.add_argument('-input', action='store', type=str,
                     default='./', help='input fastq directory \
                     (eg. HepG2_shWTAP_IP_rep1_run1_2.fastq)')
@@ -35,6 +37,8 @@ parser.add_argument('-maxPeak', action='store', type=str,
                     default='300000', help='-maxPeak parameter (SPP)')
 parser.add_argument('-memory', action='store', type=str,
                     default='50G', help='memory used for sbatch')
+parser.add_argument('-noIDR', action='store_true',
+                    default=False, help='disable idr calling')
 parser.add_argument('-pval', action='store', type=str,
                     default='1e-2', help='-p parameter (macs2)')
 parser.add_argument('-rank', action='store', type=str,
@@ -293,7 +297,10 @@ callMacs2Parallel.py -cpu ${{THREADS}} \\
   -rank ${{RANK}}
 
 echo "Broad-peak-calling done..."
+{idrCommand}
+'''
 
+idrTemplate = '''
 # =========running IDR pipeline ===========
 # running on macs2 narrow peaks
 # =======================
@@ -320,9 +327,7 @@ callEncodeIdrParallel.py -cpu ${{THREADS}} \\
   -rank ${{RANK}}
 
 echo "IDR done..."
-
 '''
-
 # generate sbatch scripts and runBash script
 runSbatchScript = os.path.join(bashDir, "runEncodeChipPeakCall.sbatch")
 with open(runSbatchScript, 'w') as sbatchO:
@@ -405,6 +410,10 @@ with open(runSbatchScript, 'w') as sbatchO:
         logName = "{baseExpName}_PeakCall.macs2_idr.log".format(**vars())
         logPath = os.path.join(logDir, logName)
         sbatchScript = os.path.join(bashDir, baseExpName + '_PeakCall.macs2_idr.sh')
+        if args.noIDR:
+            idrCommand = ''
+        else:
+            idrCommand = idrTemplate.format(**vars())
         sbatchCont = sbatchMacs2IdrTemplate.format(**vars())
         with open (sbatchScript, 'w') as sbatchScriptO:
             sbatchScriptO.write(sbatchCont)
