@@ -67,7 +67,7 @@ tagAlignPoolPr1App = '.pooled.pr1.tagAlign.gz'
 tagAlignPoolPr2App = '.pooled.pr2.tagAlign.gz'
 tagAlignPoolApp = '.pooled.tagAlign.gz'
 
-# filename: HepG2_shWTAP_IP_rep1_run1_1.fastq, HepG2_shWTAP_IP_rep1_run1_2.fastq, HepG2_shWTAP_IP_run_rep1_NA.fastq
+#file pattern: HepG2_CTCF_knockdown_IP_rep1_run1_1.fastq, HepG2_CTCF_knockdown_IP_rep1_run1_2.fastq
 extsList = ["*.fastq", '*.fq', '*.fastq.gz', '*.fq.gz']
 fastqList = sorted([f for ext in extsList for f in glob(os.path.join(basepath, ext))])
 mainAlignDir = os.path.join(basepath, 'alignment')
@@ -81,19 +81,16 @@ os.makedirs(mainPeakDir, exist_ok=True)
 # read from 3col (estFragLen) CC_SCORES_FILE="${SUBSAMPLED_TA_FILE}.cc.qc"
 expInfoDict = defaultdict(dict)
 expDict = defaultdict(dict)
-# exp nested data structure
-#defaultdict(<class 'dict'>, {'test_control': 
-#  {'IP': defaultdict(<class 'dict'>, 
-#  {'rep1', 'rep2'}}})
+# expDict: exp->IP->[rep1, rep2]
 for fastq in fastqList:
     basename = os.path.basename(fastq)
     cleanBasename = re.sub(r'\..+$', '', basename)
-    #HepG2 shWTAP IP rep1 1
+    #HepG2 CTCF knockdown IP rep1 run1 1
     basenameList = cleanBasename.split('_')
-    #HepG2_shWTAP
-    exp = '_'.join(basenameList[0:2])
-    ip = basenameList[2]
-    rep = basenameList[3]
+    #HepG2_CTCF_knockdown
+    exp = '_'.join(basenameList[0:3])
+    ip = basenameList[3]
+    rep = basenameList[4]
     if ip in expDict[exp]:
         if rep not in expDict[exp][ip]:
             expDict[exp][ip].append(rep)
