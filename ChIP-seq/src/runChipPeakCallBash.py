@@ -17,8 +17,8 @@ parser.add_argument('-control', action='store', type=str,
                     help='The prefix name of control input sample (like:HepG2_input) \
                     (otherwise infer it automatically)')
 parser.add_argument('-dtype', action='store', type=str,
-                    default='narrowPeak', help='--input-file-type parameter \
-                    (idr, narrowPeak|broadPeak|bed|gff)')
+                    choices=['narrowPeak','broadPeak','bed','gff'],
+                    default='narrowPeak', help='--input-file-type parameter (idr)')
 parser.add_argument('-cpu', action='store', type=int,
                     default=10, help='threads used for \
                     callMacs2Parallel.py|callEncodeIdrParallel.py')
@@ -79,7 +79,7 @@ os.makedirs(mainPeakDir, exist_ok=True)
 
 # exp CC_SCORES dict: store extsize for macs2 (fragment size)
 # read from 3col (estFragLen) CC_SCORES_FILE="${SUBSAMPLED_TA_FILE}.cc.qc"
-expExtsizeDict = defaultdict(str)
+expInfoDict = defaultdict(dict)
 expDict = defaultdict(dict)
 # exp nested data structure
 #defaultdict(<class 'dict'>, {'test_control': 
@@ -100,34 +100,37 @@ for fastq in fastqList:
     else:
         expDict[exp][ip] = [rep]
     # get fragment size (estFragLen) from cross-correlation ScoreFile
-    if bool(xargs.extsize):
-        if exp not in expExtsizeDict and exp.find('input') < 0:
-            ccScoreFile = '_'.join([exp, 'IP', 'rep1']) + '.trim.filt.sample.15.tagAlign.gz.cc.qc'
-            ccScoreFilePath = os.path.join(mainAlignDir, exp, 'IP', 'rep1', ccScoreFile)
-            with open(ccScoreFilePath, 'r') as f:
-                line = f.readline()
-                row = line.strip().split('\t')
-                estFragLen = row[2]
-                expExtsizeDict[exp] = estFragLen
+    if bool(args.extsize) is False:
+        if exp.find('input') < 0:
+            if ip == 'IP':
+                ccScoreFile = '_'.join([exp, ip, rep]) + '.trim.filt.sample.15.tagAlign.gz.cc.qc'
+                ccScoreFilePath = os.path.join(mainAlignDir, exp, 'IP', rep, ccScoreFile)
+                with open(ccScoreFilePath, 'r') as f:
+                    line = f.readline()
+                    row = line.strip().split('\t')
+                    estFragLen = int(row[2])
+                    if 'extsize' in expInfoDict[exp]:
+                        expInfoDict[exp]['extsize'] += estFragLen
+                        expInfoDict[exp]['repNum'] += 1
+                    else:
+                        expInfoDict[exp]['extsize'] = estFragLen
+                        expInfoDict[exp]['repNum'] = 1
 
 # infering public control input samples
-pubConExpFlag = False
 pubConDict = defaultdict(list)
 expList = sorted(expDict.keys())
 if args.control:
     #like HepG2_input
-    pubConExpName = args.control
-    alignDir = os.path.join(mainAlignDir, args.control, 'input')
-    tagAlignFiles = sorted(golb(os.path.join(alignDir, "*" + tagAlignFinalApp)))
-    pubConDict['tagAlignFinal'] = list(map(lambda x:os.path.splitxt(x)[1], tagAlignFiles))
-    pubConDict['pooledName'] = pubConExpName + '_input' + tagAlignPoolApp
-    pubConDict['basename'] = pubConExpName
-    for i in range(1,len(tagAlignFiles)):
-        rep = 'rep' + str(i)
-        tagAlignPr1 = pubConExpName + '_input_' + rep + tagAlignPr1App
-        tagAlignPr2 = pubConExpName + '_input_' + rep + tagAlignPr2App
-        pubConDict['repPr'][rep] = [tagAlignPr1, tagAlignPr2]
-    pubConExpFlag = True
+    exp = args.control
+    pubConDict['basename'] = exp
+    for rep in sorted(expDict[exp]['input']):
+        repPrefix = '_'.join([exp, 'input', rep])
+        pubConDict['tagAlignFinal'].append(repPrefix + tagAlignFinalApp)
+        pubConDict['repPr1'].append(repPrefix + tagAlignPr1App)
+        pubConDict['repPr2'].append(repPrefix + tagAlignPr2App)
+    pubConDict['pooled'].append(exp + '_input' + tagAlignPoolApp)
+    pubConDict['pooled'].append(exp + '_input' + tagAlignPoolPr1App)
+    pubConDict['pooled'].append(exp + '_input' + tagAlignPoolPr2App)
 else:
     for exp in expList:
         if exp.find('input') > 0:
@@ -140,13 +143,12 @@ else:
             pubConDict['pooled'].append(exp + '_input' + tagAlignPoolApp)
             pubConDict['pooled'].append(exp + '_input' + tagAlignPoolPr1App)
             pubConDict['pooled'].append(exp + '_input' + tagAlignPoolPr2App)
-            pubConExpFlag = True
             break
 
 expLinkDict = defaultdict(dict)
 
 for exp in expList:
-    if exp.find('input') > 0:
+    if exp.find('input') > 0 or 'IP' not in expDict[exp]:
         continue
     if exp not in expLinkDict:
         expLinkDict[exp] = defaultdict(list)
@@ -206,6 +208,7 @@ for exp in expList:
 sbatchMacs2IdrTemplate = '''#!/bin/bash
 #SBATCH --job-name=Macs2_PeakCall_{baseExpName}    # Job name
 #SBATCH --mail-type=END,FAIL          # Mail events (NONE, BEGIN, END, FAIL, ALL)
+#SBATCH --mail-user=kzhou@cho.org          # Mail user
 #SBATCH -n {threadNum}                          # Number of cores
 #SBATCH -N 1-1                        # Min - Max Nodes
 #SBATCH -p all                        # default queue is all if you don't specify
@@ -243,13 +246,16 @@ OUTPUT="{outputStr}"
 EXTSIZE="{extsize}"
 SHIFT="{shift}"
 
+DTYPE="{dtype}"
+RANK="{rank}"
+
 echo "Change wd directory to ${{MAIN_PEAK_DIR}}"
 cd ${{MAIN_PEAK_DIR}}
 
 # =========call peak with macs2 ===========
 # Parallel running
 # =======================
-echo "Peak-calling starting..."
+echo "Peak-calling starting & sorting peak with {rank}..."
 
 callMacs2Parallel.py -cpu ${{THREADS}} \\
   -ip ${{IP_CHIP}} \\
@@ -261,14 +267,16 @@ callMacs2Parallel.py -cpu ${{THREADS}} \\
   -extsize ${{EXTSIZE}} \\
   -name ${{NAME}} \\
   -output ${{OUTPUT}} \\
-  -other "${{OTHER}}"
+  -other "${{OTHER}}" \\
+  -dtype ${{DTYPE}} \\
+  -rank ${{RANK}}
 
 echo "Peak-calling done..."
 
 # =========call peak with macs2 (broad)===========
 # Parallel running
 # =======================
-echo "Try to run peak-calling with broad peak mode..."
+echo "Try to run peak-calling with broad peak mode & sorting peak with {rank}..."
 
 OTHER_BROAD="{otherBroadStr}"
 OUTPUT_BROAD="{outputBroadStr}"
@@ -283,7 +291,9 @@ callMacs2Parallel.py -cpu ${{THREADS}} \\
   -extsize ${{EXTSIZE}} \\
   -name ${{NAME}} \\
   -output ${{OUTPUT_BROAD}} \\
-  -other "${{OTHER_BROAD}}"
+  -other "${{OTHER_BROAD}}" \\
+  -dtype ${{DTYPE}} \\
+  -rank ${{RANK}}
 
 echo "Broad-peak-calling done..."
 
@@ -333,7 +343,7 @@ with open(runSbatchScript, 'w') as sbatchO:
         if bool(args.extsize):
             extsize = args.extsize
         else:
-            extsize = expExtsizeDict[exp]
+            extsize = int(expInfoDict[exp]['extsize'] / expInfoDict[exp]['repNum'])
         # special for broad peak
         otherBroadStr = ','.join(['--broad --broad-cutoff {0}'.format(pval) 
             for i in range(len(expLinkDict[exp]['name']))])
