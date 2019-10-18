@@ -41,14 +41,8 @@ if len(sys.argv[1:]) == 0:
     parser.exit()
 
 def runIdr(sample, peaklist, prefix, output, blacklist, dtype, thresh, rank):
-    try:
-        shutil.rmtree(output)
-    except FileNotFoundError as e:
-        pass
-    os.makedirs(output, exist_ok=True)
     logThresh = -math.log(thresh, 10)
     thresh = str(thresh)
-
     #run IDR on samples and peaklist
     peakListParam = '--peak-list {0}'.format(peaklist) if bool(peaklist) else ''
     idrOutput = os.path.join(output, prefix + '.IDR.' + dtype)
@@ -112,6 +106,12 @@ for i in range(len(sampleList)):
         peaklist = ""
     prefix = prefixList[i]
     output = outputList[i]
+    # try to make dirs
+    try:
+        shutil.rmtree(output)
+    except FileNotFoundError as e:
+        pass
+    os.makedirs(output, exist_ok=True)
     #runIdr(sample, peaklist, prefix, output, blacklist, dtype, thresh, rank)
     result = pool.apply_async(runIdr, args=(sample, peaklist, prefix, output, 
         blacklist, dtype, thresh, rank))
