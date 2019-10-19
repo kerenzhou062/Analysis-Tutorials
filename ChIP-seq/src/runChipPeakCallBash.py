@@ -51,7 +51,7 @@ args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
     print("Running runChipPeakCallBash.py with defaultdict parameters...")
 
-#public arguments
+# public arguments
 threadNum = args.cpu
 dtype = args.dtype
 maxPeak = args.maxPeak
@@ -63,6 +63,7 @@ rank = args.rank
 shift = args.shift
 anno = Anno()
 blacklist = anno.blacklist(args.blacklist)
+gtf = anno.gtf(args.gtf)
 basepath = os.path.realpath(args.input)
 tagAlignFinalApp = '.filt.srt.nodup.final.tagAlign.gz'
 tagAlignPr1App = '.filt.nodup.pr1.tagAlign.gz'
@@ -71,7 +72,7 @@ tagAlignPoolPr1App = '.pooled.pr1.tagAlign.gz'
 tagAlignPoolPr2App = '.pooled.pr2.tagAlign.gz'
 tagAlignPoolApp = '.pooled.tagAlign.gz'
 
-#file pattern: HepG2_CTCF_knockdown_IP_rep1_run1_1.fastq, HepG2_CTCF_knockdown_IP_rep1_run1_2.fastq
+# file pattern: HepG2_CTCF_knockdown_IP_rep1_run1_1.fastq, HepG2_CTCF_knockdown_IP_rep1_run1_2.fastq
 extsList = ["*.fastq", '*.fq', '*.fastq.gz', '*.fq.gz']
 fastqList = sorted([f for ext in extsList for f in glob(os.path.join(basepath, ext))])
 mainAlignDir = os.path.join(basepath, 'alignment')
@@ -293,8 +294,8 @@ callMacs2Parallel.py -cpu ${{THREADS}} \\
   -name ${{NAME}} \\
   -output ${{OUTPUT_BROAD}} \\
   -other "${{OTHER_BROAD}}" \\
-  -dtype ${{DTYPE}} \\
-  -rank ${{RANK}}
+  -dtype "broadPeak" \\
+  -rank ${{RANK}} \\
 
 echo "Broad-peak-calling done..."
 {idrCommand}
