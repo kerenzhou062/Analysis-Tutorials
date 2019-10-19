@@ -43,17 +43,18 @@ if len(sys.argv[1:]) == 0:
 def runIdr(sample, peaklist, prefix, output, blacklist, dtype, thresh, rank):
     logThresh = -math.log(thresh, 10)
     thresh = str(thresh)
-    #run IDR on samples and peaklist
+    # run IDR on samples and peaklist
     peakListParam = '--peak-list {0}'.format(peaklist) if bool(peaklist) else ''
     idrOutput = os.path.join(output, prefix + '.IDR.' + dtype)
     idrCallCommand = 'idr --samples {sample} {peakListParam} \
+        --input-file-type {dtype} \
         --output-file {idrOutput} --rank {rank} \
         --soft-idr-threshold {thresh} --plot \
         --use-best-multisummit-IDR \
         > {output}/../{prefix}.IDR.Call.log 2>&1'.format(**vars())
     subprocess.run(idrCallCommand, shell=True)
 
-    #filter with IDR --soft-idr-thresh
+    # filter with IDR --soft-idr-thresh
     idrThredOutput = os.path.join(output, prefix + 
         'IDR.' + thresh + '.' + dtype)
     idrThredCommand = "awk 'BEGIN{{OFS=\"\\t\"}} $12>='{logThresh}' \
@@ -61,12 +62,12 @@ def runIdr(sample, peaklist, prefix, output, blacklist, dtype, thresh, rank):
         | sort | uniq | sort -k7n,7n > {idrThredOutput}".format(**vars())
     subprocess.run(idrThredCommand, shell=True)
 
-    #filter with blacklist bed
+    # filter with blacklist bed
     idrFiltOutput = os.path.join(output, prefix + 
         'IDR.' + thresh + '.filt.' + dtype)
     idrFiltCommand = "bedtools intersect -v -a {idrThredOutput} -b {blacklist} \
         | grep -P 'chr[\\dXY]+[ \t]' | awk 'BEGIN{{OFS=\"\\t\"}} \
-        {{if ($5>1000) $5=1000; print $0}}' \
+        {{if ($5>1000) $5=1000; $4={prefix}\"=\"FNR; print $0}}' \
         > {idrFiltOutput}".format(**vars())
     subprocess.run(idrFiltCommand, shell=True)
     return 1
