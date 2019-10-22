@@ -13,6 +13,8 @@ from PubAlbum import Anno
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-blacklist', action='store', type=str,
                     default='hg38', help='ENCODE blacklist: version or file (eg. hg38)')
+parser.add_argument('-chrsize', action='store', type=str,
+                    default='hg38', help='chromosome size file (eg. hg38.chrom.sizes)')
 parser.add_argument('-control', action='store', type=str,
                     help='The prefix name of control input sample (like:HepG2_input) \
                     (otherwise infer it automatically)')
@@ -26,17 +28,15 @@ parser.add_argument('-extsize', action='store', type=int,
                     help='--extsize parameter (macs2, histone:147)')
 parser.add_argument('-gsize', action='store', type=str,
                     default='hs', help='-g parameter (macs2, mm|hs|dm|ce)')
-parser.add_argument('-gtf', action='store', type=str,
-                    default='hg38v31', help='gtf annotation build or file (eg. hg38v31)')
 parser.add_argument('-input', action='store', type=str,
                     default='./', help='input fastq directory \
-                    (eg. HepG2_shWTAP_IP_rep1_run1_2.fastq)')
+                    (eg. HepG2_CTCF_control_IP_rep1_run1_1.fastq)')
 parser.add_argument('-idrThresh', action='store', type=float,
                     default=0.05, help='--soft-idr-threshold parameter (idr)')
 parser.add_argument('-maxPeak', action='store', type=str,
                     default='300000', help='-maxPeak parameter (SPP)')
 parser.add_argument('-memory', action='store', type=str,
-                    default='50G', help='memory used for sbatch')
+                    default='200G', help='memory used for sbatch')
 parser.add_argument('-noIDR', action='store_true',
                     default=False, help='disable idr calling')
 parser.add_argument('-pval', action='store', type=str,
@@ -63,7 +63,7 @@ rank = args.rank
 shift = args.shift
 anno = Anno()
 blacklist = anno.blacklist(args.blacklist)
-gtf = anno.gtf(args.gtf)
+chrsize = anno.gsize(args.chrsize)
 basepath = os.path.realpath(args.input)
 tagAlignFinalApp = '.filt.srt.nodup.final.tagAlign.gz'
 tagAlignPr1App = '.filt.nodup.pr1.tagAlign.gz'
@@ -247,6 +247,7 @@ OTHER="{otherStr}"
 OUTPUT="{outputStr}"
 EXTSIZE="{extsize}"
 SHIFT="{shift}"
+CHRSIZE="{chrsize}"
 
 DTYPE="{dtype}"
 RANK="{rank}"
@@ -260,6 +261,7 @@ cd ${{MAIN_PEAK_DIR}}
 echo "Peak-calling starting & sorting peak with {rank}..."
 
 callMacs2Parallel.py -cpu ${{THREADS}} \\
+  -chrsize ${{CHRSIZE}}\\
   -ip ${{IP_CHIP}} \\
   -input ${{CONTROL_CHIP}} \\
   -format BED \\
@@ -305,7 +307,7 @@ idrTemplate = '''
 # =========running IDR pipeline ===========
 # running on macs2 narrow peaks
 # =======================
-echo "Running IDR..."
+echo "Running IDR on narrow peaks..."
 
 BLACKLIST="{blacklist}"
 IDR_SAMPLE="{idrSampleStr}"
@@ -402,7 +404,7 @@ with open(runSbatchScript, 'w') as sbatchO:
         idrPeaklistList = list(map(lambda x: 
             os.path.join(idrPeaklistDirList[x], idrPeaklistNameList[x] + '_peaks.' + dtype), 
             range(len(idrPeaklistNameList))))
-        idrOuputList = list(map(lambda x:x.replace('/narrow/', '/idr/'), idrOuputDirList))
+        idrOuputList = list(map(lambda x:x.replace('/narrow/', '/idr_narrow/'), idrOuputDirList))
         idrSampleStr = ','.join(idrSampleList)
         idrPeaklistStr = ' '.join(idrPeaklistList)
         idrPrefixStr = ' '.join(idrPrefixList)
