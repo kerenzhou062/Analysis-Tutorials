@@ -81,18 +81,17 @@ blacklist = args.blacklist
 dtype = args.dtype
 thresh = args.thresh
 rank = args.rank
-
 # judge elements in same length
-if len(sampleList) == len(prefixList) and len(sampleList) == len(outputList):
-    if bool(peaklistList):
+if peaklistList is None:
+    pass
+else:
+    if len(sampleList) == len(prefixList) and len(sampleList) == len(outputList):
         if len(sampleList) == len(peaklistList):
             pass
         else:
             sys.exit('not equal parameters')
     else:
-        pass
-else:
-    sys.exit('not equal parameters')
+        sys.exit('not equal parameters')
 
 starttime = datetime.datetime.now()
 sys.stderr.write("Parallel IDR-running with idr!\n")
@@ -108,14 +107,15 @@ for i in range(len(sampleList)):
     prefix = prefixList[i]
     output = outputList[i]
     # try to make dirs
-    try:
-        shutil.rmtree(output)
-    except FileNotFoundError as e:
-        pass
-    os.makedirs(output, exist_ok=True)
-    #runIdr(sample, peaklist, prefix, output, blacklist, dtype, thresh, rank)
-    result = pool.apply_async(runIdr, args=(sample, peaklist, prefix, output, 
-        blacklist, dtype, thresh, rank))
+    if len(sample.split(' ')) == 2:
+        try:
+            shutil.rmtree(output)
+        except FileNotFoundError as e:
+            pass
+        os.makedirs(output, exist_ok=True)
+        #runIdr(sample, peaklist, prefix, output, blacklist, dtype, thresh, rank)
+        result = pool.apply_async(runIdr, args=(sample, peaklist, prefix, output, 
+            blacklist, dtype, thresh, rank))
 pool.close()
 pool.join()
 
