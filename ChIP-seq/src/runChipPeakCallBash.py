@@ -329,7 +329,29 @@ callEncodeIdrParallel.py -cpu ${{THREADS}} \\
   -thresh ${{IDR_THRESH}} \\
   -rank ${{RANK}}
 
-echo "IDR done..."
+echo "IDR done (narrow peak)..."
+
+# =========running IDR pipeline ===========
+# running on macs2 broad peaks
+# =======================
+echo "Running IDR on broad peaks..."
+
+IDR_BROAD_SAMPLE="{idrBroadSampleStr}"
+BROAD_PEAKLIST="{idrBroadPeaklistStr}"
+IDR_BROAD_OUTPUT="{idrBroadOutputStr}"
+DTYPE="broadPeak"
+
+callEncodeIdrParallel.py -cpu ${{THREADS}} \\
+  -sample "${{IDR_BROAD_SAMPLE}}" \\
+  -peaklist ${{BROAD_PEAKLIST}} \\
+  -blacklist ${{BLACKLIST}} \\
+  -dtype ${{DTYPE}} \\
+  -output ${{IDR_BROAD_OUTPUT}} \\
+  -prefix ${{IDR_PREFIX}} \\
+  -thresh ${{IDR_THRESH}} \\
+  -rank ${{RANK}}
+
+echo "IDR done (broad peak)..."
 '''
 # generate sbatch scripts and runBash script
 runSbatchScript = os.path.join(bashDir, "runEncodeChipPeakCall.sbatch")
@@ -339,6 +361,7 @@ with open(runSbatchScript, 'w') as sbatchO:
     sbatchO.write('#sbatch for macs2\n')
     for exp in sorted(expLinkDict.keys()):
         # for macs2: IP, input, name, other output
+        # calling peak for narrow peak
         baseExpName = exp
         ipChipStr = ' '.join(expLinkDict[exp]['IP'])
         conChipStr = ' '.join(expLinkDict[exp]['input'])
@@ -349,12 +372,12 @@ with open(runSbatchScript, 'w') as sbatchO:
             extsize = args.extsize
         else:
             extsize = int(expInfoDict[exp]['extsize'] / expInfoDict[exp]['repNum'])
-        # special for broad peak
+        # calling peak for broad peak
         otherBroadStr = ','.join(['--broad --broad-cutoff {0}'.format(pval) 
             for i in range(len(expLinkDict[exp]['name']))])
         outputBroadStr = ' '.join(list(map(lambda x: x.replace('/narrow/', '/broad/'), expLinkDict[exp]['output'])))
 
-        # for idr: input from macs2
+        # for idr: input from macs2 narrow peak
         pooledRepName = expLinkDict[exp]['name'][-3]
         pooledRepDir = expLinkDict[exp]['output'][-3]
         repFinalNameList = list(filter(lambda x:re.search(r'final$', x), 
@@ -367,15 +390,15 @@ with open(runSbatchScript, 'w') as sbatchO:
             expLinkDict[exp]['output'])))
         pooledPrNameList = expLinkDict[exp]['name'][-2:]
         pooledPrDirList = expLinkDict[exp]['output'][-2:]
-        # building pairs
-        ## true replicates
+        ## building pairs
+        ### true replicates
         idrSampleNameList = [repFinalNameList]
         idrSampleDirList = [repFinalDirList]
         idrPeaklistNameList = [pooledRepName]
         idrPeaklistDirList = [pooledRepDir]
         idrPrefixList = [pooledRepName + 'withRep']
         idrOuputDirList = [pooledRepDir + 'withRep']
-        ## self-pseudoreplicates
+        ### self-pseudoreplicates
         repCount = 0
         for i in range(0, len(repPrNameList), 2):
             idrSampleRepPrNameList = [repPrNameList[i], repPrNameList[i+1]]
@@ -387,14 +410,14 @@ with open(runSbatchScript, 'w') as sbatchO:
             idrPrefixList.append(repFinalNameList[repCount] + 'withPr')
             idrOuputDirList.append(repFinalDirList[repCount]+ 'withPr')
             repCount += 1
-        ## pooled-pseudoreplicates
+        ### pooled-pseudoreplicates
         idrSampleNameList.append(pooledPrNameList)
         idrSampleDirList.append(pooledPrDirList)
         idrPeaklistNameList.append(pooledRepName)
         idrPeaklistDirList.append(pooledRepDir)
         idrPrefixList.append(pooledRepName + 'withPoolPr')
         idrOuputDirList.append(pooledRepDir + 'withPoolPr')
-        ## generate final pairs
+        ### generate final pairs
         idrSampleList = list()
         for i in range(len(idrSampleNameList)):
             sample = ' '.join(list(map(lambda x: 
@@ -409,7 +432,16 @@ with open(runSbatchScript, 'w') as sbatchO:
         idrPeaklistStr = ' '.join(idrPeaklistList)
         idrPrefixStr = ' '.join(idrPrefixList)
         idrOutputStr = ' '.join(idrOuputList)
-        #write sbatch file
+        # for idr: input from macs2 broad peak
+        idrBroadSampleList = list(map(lambda x:x.replace('/narrow/', '/broad/'), idrSampleList))
+        idrBroadSampleList = list(map(lambda x:x.replace('.narrowPeak', '.broadPeak'), idrBroadSampleList))
+        idrBroadPeaklistList = list(map(lambda x:x.replace('/narrow/', '/broad/'), idrPeaklistList))
+        idrBroadPeaklistList = list(map(lambda x:x.replace('.narrowPeak', '.broadPeak'), idrBroadPeaklistList))
+        idrBroadOuputList = list(map(lambda x:x.replace('/narrow/', '/idr_Broad/'), idrOuputDirList))
+        idrBroadSampleStr = ','.join(idrBroadSampleList)
+        idrBroadPeaklistStr = ' '.join(idrBroadPeaklistList)
+        idrBroadOutputStr = ' '.join(idrBroadOuputList)
+        # write sbatch file
         logName = "{baseExpName}_PeakCall.macs2_idr.log".format(**vars())
         logPath = os.path.join(logDir, logName)
         sbatchScript = os.path.join(bashDir, baseExpName + '_PeakCall.macs2_idr.sh')
