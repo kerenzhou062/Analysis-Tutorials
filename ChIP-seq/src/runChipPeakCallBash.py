@@ -36,7 +36,7 @@ parser.add_argument('-idrThresh', action='store', type=float,
 parser.add_argument('-maxPeak', action='store', type=str,
                     default='300000', help='-maxPeak parameter (SPP)')
 parser.add_argument('-memory', action='store', type=str,
-                    default='200G', help='memory used for sbatch')
+                    default='100G', help='memory used for sbatch')
 parser.add_argument('-noIDR', action='store_true',
                     default=False, help='disable idr calling')
 parser.add_argument('-pval', action='store', type=str,
