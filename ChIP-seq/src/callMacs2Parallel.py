@@ -7,7 +7,7 @@ import os
 import argparse
 import datetime
 import shutil
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
 import subprocess
 
 parser = argparse.ArgumentParser()
