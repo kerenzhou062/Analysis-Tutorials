@@ -100,8 +100,9 @@ def runMacs2(ip, control, name, other, output, extsize, gsize, shift, pval, dFor
         subprocess.run(convertCommand, shell=True)
         os.remove('{0}.fc.signal.bedgraph'.format(prefix))
         os.remove('{0}.fc.signal.sorted.bedgraph'.format(prefix))
-        os.remove('{0}_treat_pileup.bdg'.format(prefix))
-        os.remove('{0}_control_lambda.bdg'.format(prefix))
+        # keep this files for macs2-bdfdiff analysis
+        ##os.remove('{0}_treat_pileup.bdg'.format(prefix))
+        ##os.remove('{0}_control_lambda.bdg'.format(prefix))
 
         # generate count signal track
         ## postive strand
