@@ -4,6 +4,7 @@ __author__ = "K.R.Chow"
 
 import sys
 import os
+import re
 import argparse
 import datetime
 import shutil
@@ -101,7 +102,7 @@ def runMacs2(ip, control, name, other, output, extsize, gsize, shift, pval, dFor
         os.remove('{0}.fc.signal.bedgraph'.format(prefix))
         os.remove('{0}.fc.signal.sorted.bedgraph'.format(prefix))
         # keep bdg files of pooled and true replicates for macs2-bdfdiff analysis
-        if re.search(r'pr', name, re.IGNORECASE):
+        if bool(re.search(r'pr', name, re.IGNORECASE)):
             os.remove('{0}_treat_pileup.bdg'.format(prefix))
             os.remove('{0}_control_lambda.bdg'.format(prefix))
 
