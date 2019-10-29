@@ -38,7 +38,8 @@ parser.add_argument('-output', nargs='+', type=str,
 parser.add_argument('-pval', action='store', type=float,
                     default=1e-2, help='The p-value cutoff')
 parser.add_argument('-other', action='store', type=str,
-                    help='The other commands, "," separated (eg.--broad,--broad)')
+                    help='The other commands, \
+                    "," separated (eg.--broad,--broad)')
 parser.add_argument('-rank', action='store', type=str,
                     default='signal.value', help='Which column to use to rank peaks \
                     (idr, signal.value|p.value|q.value)')
@@ -48,7 +49,10 @@ if len(sys.argv[1:]) == 0:
     parser.print_help()
     parser.exit()
 
-def runMacs2(ip, control, name, other, output, extsize, gsize, shift, pval, dFormat, dtype, rank, chrsize):
+
+def runMacs2(ip, control, name, other, output,
+             extsize, gsize, shift, pval,
+             dFormat, dtype, rank, chrsize, sortMem):
     # calling peaks
     logFile = '{output}/../{name}.macs2AndTrack.log 2>&1'.format(**vars())
     macs2Command = 'macs2 callpeak -t {ip} \
@@ -58,17 +62,17 @@ def runMacs2(ip, control, name, other, output, extsize, gsize, shift, pval, dFor
         {other} > {logFile} 2>&1'.format(**vars())
     subprocess.run(macs2Command, shell=True)
 
-    # sort peaks by signal.value | -log10(p-value) | -log10(p-value)
+    # sort -S {sortMem}% peaks by signal.value | -log10(p-value) | -log10(p-value)
     peakFile = os.path.join(output, name + '_peaks.{0}'.format(dtype))
     broadFlag = False
     if 'broadPeak' in dtype:
         broadFlag = True
     if rank == 'signal.value':
-        sortCommand = 'sort -k7,7n {0} -o {0}'.format(peakFile)
+        sortCommand = 'sort -S {sortMem}% -k7,7n {peakFile} -o {peakFile}'.format(**vars())
     elif rank == 'p.value':
-        sortCommand = 'sort -k8,8nr {0} -o {0}'.format(peakFile)
+        sortCommand = 'sort -S {sortMem}% -k8,8nr {peakFile} -o {peakFile}'.format(**vars())
     else:
-        sortCommand = 'sort -k9,9nr {0} -o {0}'.format(peakFile)
+        sortCommand = 'sort -S {sortMem}% -k9,9nr {peakFile} -o {peakFile}'.format(**vars())
     subprocess.run(sortCommand, shell=True)
 
     # generate signal track
@@ -76,7 +80,8 @@ def runMacs2(ip, control, name, other, output, extsize, gsize, shift, pval, dFor
         prefix = '{output}/{name}'.format(**vars())
         signalCommand = 'macs2 bdgcmp -t {prefix}_treat_pileup.bdg \
             -c {prefix}_control_lambda.bdg \
-            --outdir {output} -o {name}_FE.bdg -m FE >> {logFile} 2>&1'.format(**vars())
+            --outdir {output} -o {name}_FE.bdg -m FE \
+            >> {logFile} 2>&1'.format(**vars())
         subprocess.run(signalCommand, shell=True)
 
         # Remove coordinates outside chromosome sizes (stupid MACS2 bug)
@@ -86,14 +91,14 @@ def runMacs2(ip, control, name, other, output, extsize, gsize, shift, pval, dFor
         subprocess.run(removeCommand, shell=True)
         os.remove('{prefix}_FE.bdg'.format(**vars()))
 
-        # Convert bedgraph to bigwig
-        sortCommand = 'sort -k1,1 -k2,2n {prefix}.fc.signal.bedgraph \
+        # Convert bedgraph to bigwig, sort with -S N%, to reduce memory
+        sortCommand = 'sort -S {sortMem}% -k1,1 -k2,2n {prefix}.fc.signal.bedgraph \
             -o {prefix}.fc.signal.bedgraph'.format(**vars())
         subprocess.run(sortCommand, shell=True)
         mergeCommand = 'bedtools merge -i {prefix}.fc.signal.bedgraph -c 4 -d -1 -o max \
             > {prefix}.fc.signal.sorted.bedgraph'.format(**vars())
         subprocess.run(mergeCommand, shell=True)
-        sortCommand = 'sort -k1,1 -k2,2n {prefix}.fc.signal.sorted.bedgraph \
+        sortCommand = 'sort -S {sortMem}% -k1,1 -k2,2n {prefix}.fc.signal.sorted.bedgraph \
             -o {prefix}.fc.signal.sorted.bedgraph'.format(**vars())
         subprocess.run(sortCommand, shell=True)
         convertCommand = "bedGraphToBigWig {prefix}.fc.signal.sorted.bedgraph \
@@ -101,22 +106,24 @@ def runMacs2(ip, control, name, other, output, extsize, gsize, shift, pval, dFor
         subprocess.run(convertCommand, shell=True)
         os.remove('{0}.fc.signal.bedgraph'.format(prefix))
         os.remove('{0}.fc.signal.sorted.bedgraph'.format(prefix))
-        # keep bdg files of pooled and true replicates for macs2-bdfdiff analysis
+        # keep bdg files of pooled and true replicates
+        # for macs2-bdfdiff analysis
         if bool(re.search(r'pr', name, re.IGNORECASE)):
             os.remove('{0}_treat_pileup.bdg'.format(prefix))
             os.remove('{0}_control_lambda.bdg'.format(prefix))
 
         # generate count signal track
-        ## postive strand
-        countCommand = "zcat -f {ip} | sort -k1,1 -k2,2n | \
+        # postive strand
+        countCommand = "zcat -f {ip} | sort -S {sortMem}% -k1,1 -k2,2n | \
             bedtools genomecov -5 -bg -strand + -g {chrsize} \
             -i stdin > {output}/TMP.POS.BED".format(**vars())
         subprocess.run(countCommand, shell=True)
         countCommand = "bedGraphToBigWig {output}/TMP.POS.BED \
-            {chrsize} {output}/{name}.positive.bw >> {logFile} 2>&1".format(**vars())
+            {chrsize} {output}/{name}.positive.bw >> \
+            {logFile} 2>&1".format(**vars())
         subprocess.run(countCommand, shell=True)
-        ## negative strand
-        countCommand = "zcat -f {ip} | sort -k1,1 -k2,2n | \
+        # negative strand
+        countCommand = "zcat -f {ip} | sort -S {sortMem}% -k1,1 -k2,2n | \
             bedtools genomecov -5 -bg -strand - -g {chrsize} \
             -i stdin > {output}/TMP.POS.BED".format(**vars())
         subprocess.run(countCommand, shell=True)
@@ -125,6 +132,7 @@ def runMacs2(ip, control, name, other, output, extsize, gsize, shift, pval, dFor
         subprocess.run(countCommand, shell=True)
         os.remove('{output}/TMP.POS.BED'.format(**vars()))
     return 1
+
 
 # public variables
 ipList = args.ip
@@ -157,6 +165,7 @@ starttime = datetime.datetime.now()
 sys.stderr.write("Parallel peak-calling with macs2!\n")
 
 # multiple call macs2
+sortMem = int(95 / args.cpu)
 pool = Pool(processes=args.cpu)
 for i in range(len(ipList)):
     ip = ipList[i]
@@ -167,13 +176,15 @@ for i in range(len(ipList)):
     # try to make dirs
     try:
         shutil.rmtree(output)
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         pass
     os.makedirs(output, exist_ok=True)
-    #runMacs2(ip, control, name, other, 
+    # runMacs2(ip, control, name, other,
     #    output, extsize, gsize, shift, pval, dFormat, dtype, rank, chrsize)
-    result = pool.apply_async(runMacs2, args=(ip, control, name, other, 
-        output, extsize, gsize, shift, pval, dFormat, dtype, rank, chrsize))
+    result = pool.apply_async(runMacs2, args=(ip, control, name, other,
+                                              output, extsize, gsize,
+                                              shift, pval, dFormat,
+                                              dtype, rank, chrsize, sortMem))
 pool.close()
 pool.join()
 

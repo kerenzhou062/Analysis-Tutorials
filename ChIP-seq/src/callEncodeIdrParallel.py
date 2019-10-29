@@ -40,12 +40,16 @@ if len(sys.argv[1:]) == 0:
     parser.print_help()
     parser.exit()
 
-def runIdr(sample, peaklist, prefix, output, blacklist, dtype, thresh, rank):
+
+def runIdr(sample, peaklist, prefix,
+           output, blacklist, dtype,
+           thresh, rank):
     logThresh = -math.log(thresh, 10)
     thresh = str(thresh)
     # run IDR on samples and peaklist
-    peakListParam = '--peak-list {0}'.format(peaklist) if bool(peaklist) else ''
-    idrOutput = os.path.join(output, prefix + '.IDR.' + dtype)
+    peakListParam = '--peak-list {0}'.format(
+        peaklist) if bool(peaklist) else ''
+    idrOutput = os.path.join(output, prefix + '.IDR')
     idrCallCommand = 'idr --samples {sample} {peakListParam} \
         --input-file-type {dtype} \
         --output-file {idrOutput} --rank {rank} \
@@ -54,23 +58,44 @@ def runIdr(sample, peaklist, prefix, output, blacklist, dtype, thresh, rank):
         > {output}/../{prefix}.IDR.Call.log 2>&1'.format(**vars())
     subprocess.run(idrCallCommand, shell=True)
 
+    peakCol = ',$10'
+    if dtype == 'broadPeak':
+        peakCol = ''
+    # output IDR narrowPeak or broadPeak
+    idrPeakOutput = os.path.join(output, prefix +
+                                  '.IDR.' + dtype)
+    idrPeakCommand = "awk 'BEGIN{{OFS=\"\\t\"}} \
+        {{print $1,$2,$3,$4,$5,$6,$7,$8,$9{peakCol}}}' {idrOutput} \
+        | sort | uniq | sort -k1,1 -k2,2n > {idrPeakOutput}".format(**vars())
+    subprocess.run(idrPeakCommand, shell=True)
+
+    # filter with blacklist bed
+    idrFiltOutput = os.path.join(output, prefix +
+                                 '.IDR.filt.' + dtype)
+    idrFiltCommand = "bedtools intersect -v -a {idrPeakOutput} -b {blacklist} \
+        | grep -P 'chr[\\dXY]+[ \t]' | awk 'BEGIN{{OFS=\"\\t\"}} \
+        {{if ($5>1000) $5=1000; $4=FNR; print $0}}' \
+        > {idrFiltOutput}".format(**vars())
+    subprocess.run(idrFiltCommand, shell=True)
+
     # filter with IDR --soft-idr-thresh
-    idrThredOutput = os.path.join(output, prefix + 
-        'IDR.' + thresh + '.' + dtype)
+    idrThredOutput = os.path.join(output, prefix +
+                                  '.IDR.' + thresh + '.' + dtype)
     idrThredCommand = "awk 'BEGIN{{OFS=\"\\t\"}} $12>='{logThresh}' \
-        {{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10}}' {idrOutput} \
-        | sort | uniq | sort -k7n,7n > {idrThredOutput}".format(**vars())
+        {{print $1,$2,$3,$4,$5,$6,$7,$8,$9{peakCol}}}' {idrOutput} \
+        | sort | uniq | sort -k1,1 -k2,2n > {idrThredOutput}".format(**vars())
     subprocess.run(idrThredCommand, shell=True)
 
     # filter with blacklist bed
-    idrFiltOutput = os.path.join(output, prefix + 
-        'IDR.' + thresh + '.filt.' + dtype)
+    idrFiltOutput = os.path.join(output, prefix +
+                                 '.IDR.' + thresh + '.filt.' + dtype)
     idrFiltCommand = "bedtools intersect -v -a {idrThredOutput} -b {blacklist} \
         | grep -P 'chr[\\dXY]+[ \t]' | awk 'BEGIN{{OFS=\"\\t\"}} \
-        {{if ($5>1000) $5=1000; $4={prefix}\"=\"FNR; print $0}}' \
+        {{if ($5>1000) $5=1000; $4=FNR; print $0}}' \
         > {idrFiltOutput}".format(**vars())
     subprocess.run(idrFiltCommand, shell=True)
     return 1
+
 
 # public variables
 sampleList = args.sample.split(',')
@@ -85,7 +110,8 @@ rank = args.rank
 if peaklistList is None:
     pass
 else:
-    if len(sampleList) == len(prefixList) and len(sampleList) == len(outputList):
+    if (len(sampleList) == len(prefixList) and
+            len(sampleList) == len(outputList)):
         if len(sampleList) == len(peaklistList):
             pass
         else:
@@ -110,12 +136,16 @@ for i in range(len(sampleList)):
     if len(sample.split(' ')) == 2:
         try:
             shutil.rmtree(output)
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             pass
         os.makedirs(output, exist_ok=True)
-        #runIdr(sample, peaklist, prefix, output, blacklist, dtype, thresh, rank)
-        result = pool.apply_async(runIdr, args=(sample, peaklist, prefix, output, 
-            blacklist, dtype, thresh, rank))
+        # runIdr(sample, peaklist, prefix,
+        #        output, blacklist, dtype,
+        #        thresh, rank)
+        result = pool.apply_async(runIdr, args=(sample, peaklist,
+                                                prefix, output,
+                                                blacklist, dtype,
+                                                thresh, rank))
 pool.close()
 pool.join()
 

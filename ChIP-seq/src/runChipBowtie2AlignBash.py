@@ -5,34 +5,40 @@ import argparse
 import re
 from glob import glob
 from collections import defaultdict
-import datetime
 from PubAlbum import Anno
 
-#usage: runChipSeBowtie2AlignBash.py or runChipSeBowtie2AlignBash.py <fastq dir>
+# usage: runChipSeBowtie2AlignBash.py
+# or runChipSeBowtie2AlignBash.py <fastq dir>
 
-parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser = argparse.ArgumentParser(
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-blacklist', action='store', type=str,
-                    default='hg38', help='blacklist for genome: prefix or file (eg. hg38)')
+                    default='hg38', help='blacklist for genome: (prefix or file)')
 parser.add_argument('-cpu', action='store', type=str,
                     default='10', help='threads used for bowtie2')
 parser.add_argument('-fasta', action='store', type=str,
-                    default='hg38', help='fasta for genome: prefix or file (eg. hg38)')
+                    default='hg38', help='fasta for genome: (prefix or file)')
 parser.add_argument('-input', action='store', type=str,
-                    default='./', help='input fastq directory (eg. HepG2_CTCF_knockdown_IP_rep1_run1_2.fastq)')
+                    default='./', help='input fastq directory \
+                    (eg. HepG2_CTCF_KD_IP_rep1_run1_2.fastq)')
 parser.add_argument('-index', action='store', type=str,
-                    default='hg38', help='bowtie2 genome index: prefix or file (eg. hg38)')
+                    default='hg38', help='bowtie2 genome index (prefix or file)')
 parser.add_argument('-memory', action='store', type=str,
                     default='50G', help='memory used for sbatch')
+parser.add_argument('-part', action='store', type=str,
+                    default='all', help='partition of slurm server')
 parser.add_argument('-quality', action='store', type=str,
                     default='30', help='quality for filtering fastq')
 
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
-    print("Running runChipSeBowtie2AlignBash.py with defaultdict parameters...")
+    print("Running runChipSeBowtie2AlignBash.py \
+        with defaultdict parameters...")
 
-#public arguments
+# public arguments
 threadNum = args.cpu
 memory = args.memory
+partition = args.part
 quality = args.cpu
 anno = Anno()
 genomeIndex = anno.gindex(args.index)
@@ -40,24 +46,26 @@ blacklist = anno.blacklist(args.blacklist)
 fasta = anno.fasta(args.fasta)
 basepath = os.path.realpath(args.input)
 
-#file pattern: HepG2_CTCF_knockdown_IP_rep1_run1_1.fastq, HepG2_CTCF_knockdown_IP_rep1_run1_2.fastq
+# file pattern: HepG2_CTCF_knockdown_IP_rep1_run1_1.fastq,
+# HepG2_CTCF_knockdown_IP_rep1_run1_2.fastq
 extsList = ["*.fastq", '*.fq', '*.fastq.gz', '*.fq.gz']
-fastqList = sorted([f for ext in extsList for f in glob(os.path.join(basepath, ext))])
+fastqList = sorted(
+    [f for ext in extsList for f in glob(os.path.join(basepath, ext))])
 bashDir = os.path.join(basepath, 'runBash')
 logDir = os.path.join(bashDir, 'log')
 os.makedirs(logDir, exist_ok=True)
 
 readLen = 0
-fqExt = '' # .fq.gz|.fq|.fastq|.fastq.gz
+fqExt = ''  # .fq.gz|.fq|.fastq|.fastq.gz
 expFqDict = defaultdict(dict)
 # expFqDict: exp->IP->rep->[fq1,fq2]
 for fastq in fastqList:
     basename = os.path.basename(fastq)
     fqExt = re.findall(r'\..+$', basename)[0]
     cleanBasename = re.sub(r'\..+$', '', basename)
-    #HepG2 CTCF knockdown IP rep1 run1 1
+    # HepG2 CTCF knockdown IP rep1 run1 1
     basenameList = cleanBasename.split('_')
-    #HepG2_CTCF_knockdown
+    # HepG2_CTCF_knockdown
     exp = '_'.join(basenameList[0:3])
     ip = basenameList[3]
     rep = basenameList[4]
@@ -74,14 +82,14 @@ for fastq in fastqList:
     if readLen == 0:
         if re.search(r'gz', fqExt):
             import gzip
-            with gzip.open(fastq,'rt') as f:
+            with gzip.open(fastq, 'rt') as f:
                 for i, line in enumerate(f):
                     if i == 1:
                         readLen = len(line.strip())
                     elif i > 1:
                         break
         else:
-            with open(fastq,'rt') as f:
+            with open(fastq, 'rt') as f:
                 for i, line in enumerate(f):
                     if i == 1:
                         readLen = len(line.strip())
@@ -95,12 +103,13 @@ if readLen < trim:
 mainAlignDir = os.path.join(basepath, 'alignment')
 
 # ================================
-#step template
+# step template
 # ================================
-#mapping command
+# mapping command
 step1aSeCommand = '''
 # mapping single-end reads
-zcat -f ${{fastqR1}} | bowtie2 --mm -x ${{bwt2_idx}} --threads {threadNum} -U - 2> ${{log}} | \\
+zcat -f ${{fastqR1}} | bowtie2 --mm -x ${{bwt2_idx}} \\
+  --threads {threadNum} -U - 2> ${{log}} | \\
   samtools view -Su /dev/stdin | \\
   samtools sort -T ${{prefix}} -O bam -o ${{prefix}}.bam
 
@@ -115,7 +124,7 @@ bowtie2 -X2000 --mm -x ${{bwt2_idx}} --threads {threadNum} \
 
 '''
 
-#post-alignment filtering 2a steps
+# post-alignment filtering 2a steps
 step1bSeCommand = '''
 OFPREFIX="${{prefix}}"
 RAW_BAM_FILE="${{OFPREFIX}}.bam"
@@ -123,7 +132,8 @@ FILT_BAM_PREFIX="${{OFPREFIX}}.filt.srt"
 FILT_BAM_FILE="${{FILT_BAM_PREFIX}}.bam"
 MAPQ_THRESH={quality}
 
-samtools view -F 1804 -q ${{MAPQ_THRESH}} -b ${{RAW_BAM_FILE}} -o ${{FILT_BAM_FILE}}
+samtools view -F 1804 -q ${{MAPQ_THRESH}} \\
+  -b ${{RAW_BAM_FILE}} -o ${{FILT_BAM_FILE}}
 # ======================================
 # Mark duplicates
 # ====================================
@@ -180,7 +190,7 @@ bedtools bamtobed -i ${{FILT_BAM_FILE}} | \\
 ## rm ${{FILT_BAM_FILE}}
 
 # link ${{FINAL_BAM_FILE}} to ${{ipDir}}
-ln -sf ${{FINAL_BAM_FILE}} ${{ipDir}}
+ln -f ${{FINAL_BAM_FILE}} ${{ipDir}}
 
 '''
 
@@ -269,7 +279,7 @@ rm ${{OFPREFIX}}.srt.tmp.bam
 ## rm ${{FILT_BAM_FILE}}
 
 # link ${{FINAL_BAM_FILE}} to ${{ipDir}}
-ln -sf ${{FINAL_BAM_FILE}} ${{ipDir}}
+ln -f ${{FINAL_BAM_FILE}} ${{ipDir}}
 
 '''
 
@@ -281,7 +291,7 @@ bedtools bamtobed -i ${{FINAL_BAM_FILE}} | \
   gzip -nc > ${{FINAL_TA_FILE}}
 
 # link ${{FINAL_TA_FILE}} to ${{ipDir}}
-ln -sf ${{FINAL_TA_FILE}} ${{ipDir}}
+ln -f ${{FINAL_TA_FILE}} ${{ipDir}}
 
 '''
 
@@ -296,7 +306,7 @@ zcat ${{FINAL_BEDPE_FILE}} | \\
   gzip -nc > ${{FINAL_TA_FILE}}
 
 # link ${{FINAL_TA_FILE}} to ${{ipDir}}
-ln -sf ${{FINAL_TA_FILE}} ${{ipDir}}
+ln -f ${{FINAL_TA_FILE}} ${{ipDir}}
 
 '''
 
@@ -384,8 +394,8 @@ gzip -nc "${{PR_PREFIX}}01" > ${{PR2_TA_FILE}}
 rm "${{PR_PREFIX}}01"
 
 # link ${{PR1_TA_FILE}} and ${{PR2_TA_FILE}} to ${{ipDir}}
-ln -sf ${{PR1_TA_FILE}} ${{ipDir}}
-ln -sf ${{PR2_TA_FILE}} ${{ipDir}}
+ln -f ${{PR1_TA_FILE}} ${{ipDir}}
+ln -f ${{PR2_TA_FILE}} ${{ipDir}}
 
 '''
 
@@ -417,15 +427,15 @@ rm "${{PR_PREFIX}}01"
 rm -f ${{joined}}
 
 # link ${{PR1_TA_FILE}} and ${{PR2_TA_FILE}} to ${{ipDir}}
-ln -sf ${{PR1_TA_FILE}} ${{ipDir}}
-ln -sf ${{PR2_TA_FILE}} ${{ipDir}}
+ln -f ${{PR1_TA_FILE}} ${{ipDir}}
+ln -f ${{PR2_TA_FILE}} ${{ipDir}}
 
 '''
 
 step2dBothCommand = '''
 POOLED_TA_FILE="${{DATASET_PREFIX}}.pooled.tagAlign.gz"
 FINAL_TA_FILES=""
-for i in `find ./ -maxdepth 1 -type l -name "*.final.tagAlign.gz"|grep -v 'pooled'|sort`;
+for i in `find ./ -maxdepth 1 -type f -links +1 -name "*.final.tagAlign.gz"|grep -v 'pooled'|sort`;
 do
   FINAL_TA_FILES=`echo "${{FINAL_TA_FILES}}"" ""${{i}}"`
 done
@@ -443,13 +453,13 @@ PPR1_TA_FILE="${{DATASET_PREFIX}}.pooled.pr1.tagAlign.gz"
 PPR2_TA_FILE="${{DATASET_PREFIX}}.pooled.pr2.tagAlign.gz"
 
 PPR1_TA_FILES=""
-for i in `find ./ -maxdepth 1 -type l -name "*.pr1.tagAlign.gz"|grep -v 'pooled'|sort`;
+for i in `find ./ -maxdepth 1 -type f -links +1 -name "*.pr1.tagAlign.gz"|grep -v 'pooled'|sort`;
 do
   PPR1_TA_FILES=`echo "${{PPR1_TA_FILES}}"" ""${{i}}"`
 done
 
 PPR2_TA_FILES=""
-for i in `find ./ -maxdepth 1 -type l -name "*.pr2.tagAlign.gz"|grep -v 'pooled'|sort`;
+for i in `find ./ -maxdepth 1 -type f -links +1 -name "*.pr2.tagAlign.gz"|grep -v 'pooled'|sort`;
 do
   PPR2_TA_FILES=`echo "${{PPR2_TA_FILES}}"" ""${{i}}"`
 done
@@ -474,7 +484,7 @@ echo "Filtering bam with blacklist bed file..."
 NODUP_BFILT_BAMS=""
 REPS=""
 COUNTER=1
-for i in `find ./ -maxdepth 1 -type l -name "*.filt.srt.nodup.bam"|grep -v 'pooled'|sort`;
+for i in `find ./ -maxdepth 1 -type f -links +1 -name "*.filt.srt.nodup.bam"|grep -v 'pooled'|sort`;
 do
   BTILT_PREFIX=${{i%%.bam}}
   NODUP_BFILT_BAM=${{BTILT_PREFIX}}.bfilt.bam
@@ -523,17 +533,17 @@ plotGC.py -data ${{GC_BIAS_LOG}} -prefix ${{FINAL_BAM_PREFIX}}
 '''
 
 # ================================
-#sbatch main template: 
-#step 1 to 2c, 2g
+# sbatch main template:
+# step 1 to 2c, 2g
 # ================================
 sbatchS1To2cgTemplate = '''#!/bin/bash
 #SBATCH --job-name=ChipAlign_{baseExpName}    # Job name
 #SBATCH --mail-type=END,FAIL          # Mail events (NONE, BEGIN, END, FAIL, ALL)
-#SBATCH --mail-user=kzhou@cho.org          # Mail user
-#SBATCH -n {threadNum}                          # Number of cores
+#SBATCH --mail-user=kzhou@coh.org     # Mail user
+#SBATCH -n {threadNum}                # Number of cores
 #SBATCH -N 1-1                        # Min - Max Nodes
-#SBATCH -p all                        # default queue is all if you don't specify
-#SBATCH --mem={memory}                      # Amount of memory in GB
+#SBATCH -p {partition}                # default queue is all if you don't specify
+#SBATCH --mem={memory}                # Amount of memory in GB
 #SBATCH --time=72:00:00               # Time limit hrs:min:sec
 #SBATCH --output={s1T2cLogFilePath}   # Standard output and error log
 
@@ -565,7 +575,7 @@ log="${{prefix}}.align.log"
 flagstat_qc="${{prefix}}.flagstat.qc"
 
 # ===========step 0b==============
-# cat multiple run fastqs if necessary 
+# cat multiple run fastqs if necessary
 # ================================
 {catCommand}
 
@@ -654,20 +664,20 @@ echo "Step 2g done!"
 '''
 
 # ================================
-#sbatch main template: 
-#step 2d to 3
+# sbatch main template:
+# step 2d to 3
 # ================================
 
 sbatchS2dTo2fTemplate = '''#!/bin/bash
-#SBATCH --job-name=ChipPoolPeak_{baseExpName}    # Job name
+#SBATCH --job-name=ChipPoolPeak_{baseExpName} # Job name
 #SBATCH --mail-type=END,FAIL          # Mail events (NONE, BEGIN, END, FAIL, ALL)
-#SBATCH --mail-user=kzhou@cho.org          # Mail user
+#SBATCH --mail-user=kzhou@coh.org     # Mail user
 #SBATCH -n 1                          # Number of cores
 #SBATCH -N 1-1                        # Min - Max Nodes
-#SBATCH -p all                        # default queue is all if you don't specify
-#SBATCH --mem={memory}                      # Amount of memory in GB
+#SBATCH -p {partition}                # default queue is all if you don't specify
+#SBATCH --mem={memory}                # Amount of memory in GB
 #SBATCH --time=72:00:00               # Time limit hrs:min:sec
-#SBATCH --output={s2dTo2fLogFilePath}   # Standard output and error log
+#SBATCH --output={s2dTo2fLogFilePath} # Standard output and error log
 
 ### this pipeline mainly based on ENCODE3 pipeline:
 ###https://docs.google.com/document/d/1lG_Rd7fnYgRpSIqrIfuVlAz2dW1VaSQThzk836Db99c
@@ -732,18 +742,26 @@ with open(runSbatchScript, 'w') as sbatchO:
                 baseExpName = '_'.join([exp, ip, rep])
                 baseAlignDir = os.path.join(mainAlignDir, exp, ip, rep)
                 os.makedirs(baseAlignDir, exist_ok=True)
-                ##cat fastq files for multiple runs
+                # cat fastq files for multiple runs
                 pairedNum1 = pairedNumList[0]
                 runFileList = sorted(ipDict[rep][pairedNum1])
                 catCommand = ''
                 if len(pairedNumList) > 1:
                     if len(runFileList) > 1:
-                        catFastqR1 = '${prefix}' + '_1.{fqExt}'.format(**vars())
-                        catFastqR2 = '${prefix}' + '_2.{fqExt}'.format(**vars())
-                        fastqR1Runs = ' '.join(list(map(lambda x: '$BASE/'+x, sorted(ipDict[rep]['1']))))
-                        fastqR2Runs = ' '.join(list(map(lambda x: '$BASE/'+x, sorted(ipDict[rep]['2']))))
-                        catCommand = 'echo "cat fastqs..."\ncat {fastqR1Runs} | \\ >{catFastqR1}\n\
-                            cat {fastqR2Runs} | \\ > {catFastqR2}\n'.format(**vars())
+                        catFastqR1 = '${prefix}' + \
+                            '_1.{fqExt}'.format(**vars())
+                        catFastqR2 = '${prefix}' + \
+                            '_2.{fqExt}'.format(**vars())
+                        fastqR1Runs = ' '.join(
+                            list(map(lambda x: '$BASE/' + x,
+                                     sorted(ipDict[rep]['1']))))
+                        fastqR2Runs = ' '.join(
+                            list(map(lambda x: '$BASE/' + x,
+                                     sorted(ipDict[rep]['2']))))
+                        catCommand = 'echo "cat fastqs..."\n'
+                        catCommand += 'cat {fastqR1Runs} | \\ >{catFastqR1}\n'
+                        catCommand += 'cat {fastqR2Runs} | \\ > {catFastqR2}\n'
+                        catCommand = catCommand.format(**vars())
                         ipDict[rep]['1'] = catFastqR1
                         ipDict[rep]['2'] = catFastqR2
                     else:
@@ -751,15 +769,21 @@ with open(runSbatchScript, 'w') as sbatchO:
                         ipDict[rep]['2'] = '$BASE/' + ipDict[rep]['2'][0]
                 else:
                     if len(runFileList) > 1:
-                        catFastq =  '${prefix}' + '.fastq'
-                        fastqRuns = ' '.join(list(map(lambda x: '$BASE/'+x, sorted(ipDict[rep][pairedNum1]))))
-                        catCommand = 'echo "cat fastqs..."\ncat {fastqRuns} > {catFastq}\n'.format(**vars())
+                        catFastq = '${prefix}' + '.fastq'
+                        fastqRuns = ' '.join(
+                            list(map(lambda x: '$BASE/' + x,
+                                     sorted(ipDict[rep][pairedNum1]))))
+                        catCommand = 'echo "cat fastqs..."\n'
+                        catCommand += 'cat {fastqRuns} > {catFastq}\n'
+                        catCommand = catCommand.format(**vars())
                         ipDict[rep][pairedNum1] = catFastq
                     else:
-                        ipDict[rep][pairedNum1] = '$BASE/' + ipDict[rep][pairedNum1][0]
-                ## generate sbatch script for step1 to step2c and step 2g
-                sbatchS1To2cgScript = os.path.join(bashDir, baseExpName + '.s1To2cg.sh')
-                with open (sbatchS1To2cgScript, 'w') as sbatchS1To2cg:
+                        ipDict[rep][pairedNum1] = '$BASE/' + \
+                            ipDict[rep][pairedNum1][0]
+                # generate sbatch script for step1 to step2c and step 2g
+                sbatchS1To2cgScript = os.path.join(
+                    bashDir, baseExpName + '.s1To2cg.sh')
+                with open(sbatchS1To2cgScript, 'w') as sbatchS1To2cg:
                     step2bCommand = step2bBothCommand.format(**vars())
                     step2gCommand = step2gBothCommand.format(**vars())
                     if len(pairedNumList) > 1:
@@ -778,26 +802,34 @@ with open(runSbatchScript, 'w') as sbatchO:
                         step1bCommand = step1bSeCommand.format(**vars())
                         step2aCommand = step2aSeCommand.format(**vars())
                         step2cCommand = step2cSeCommand.format(**vars())
-                    s1T2cLogFileName = '_'.join(['runEncodeChipBowtie2Qc', baseExpName, '.s1To2cg.log'])
-                    s1T2cLogFilePath = os.path.join(basepath, 'runBash', 'log', s1T2cLogFileName)
+                    s1T2cLogFileName = '_'.join(
+                        ['runEncodeChipBowtie2Qc',
+                            baseExpName + '.s1To2cg.log'])
+                    s1T2cLogFilePath = os.path.join(
+                        basepath, 'runBash', 'log', s1T2cLogFileName)
                     sbatchS1To2cgCont = sbatchS1To2cgTemplate.format(**vars())
                     sbatchS1To2cg.write(sbatchS1To2cgCont)
                     os.chmod(sbatchS1To2cgScript, 0o755)
-                    sbatchO.write('sbatch $BASE/{baseExpName}.s1To2cg.sh\n'.format(**vars()))
-    ## generate sbatch script for step1 to step2d and step 2f
+                    sbatchO.write(
+                        'sbatch $BASE/{0}.s1To2cg.sh\n'.format(baseExpName))
+    # generate sbatch script for step1 to step2d and step 2f
     sbatchO.write('\n#sbatch for step 2d to step 2f\n')
     for exp in sorted(expFqDict.keys()):
         for ip in sorted(expFqDict[exp].keys()):
             ipDict = expFqDict[exp][ip]
             baseExpName = '_'.join([exp, ip])
-            sbatchS2dTo2fScript = os.path.join(bashDir, baseExpName + '.s2dTo2f.sh')
-            with open (sbatchS2dTo2fScript, 'w') as sbatchS2dTo2f:
+            sbatchS2dTo2fScript = os.path.join(
+                bashDir, baseExpName + '.s2dTo2f.sh')
+            with open(sbatchS2dTo2fScript, 'w') as sbatchS2dTo2f:
                 step2dCommand = step2dBothCommand.format(**vars())
                 step2fCommand = step2fBothCommand.format(**vars())
-                s2dTo2fLogFileName = '_'.join(['runEncodeChipBowtie2Qc', baseExpName, '.s2dTo2f.log'])
-                s2dTo2fLogFilePath = os.path.join(basepath, 'runBash', 'log', s2dTo2fLogFileName)
+                s2dTo2fLogFileName = '_'.join(
+                    ['runEncodeChipBowtie2Qc', baseExpName + '.s2dTo2f.log'])
+                s2dTo2fLogFilePath = os.path.join(
+                    basepath, 'runBash', 'log', s2dTo2fLogFileName)
                 sbatchS2dTo2fCont = sbatchS2dTo2fTemplate.format(**vars())
                 sbatchS2dTo2f.write(sbatchS2dTo2fCont)
                 os.chmod(sbatchS1To2cgScript, 0o755)
-                sbatchO.write('sbatch $BASE/{baseExpName}.s2dTo2f.sh\n'.format(**vars()))
+                sbatchO.write(
+                    'sbatch $BASE/{baseExpName}.s2dTo2f.sh\n'.format(**vars()))
 os.chmod(runSbatchScript, 0o755)

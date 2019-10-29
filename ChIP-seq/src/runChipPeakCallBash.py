@@ -12,7 +12,7 @@ from PubAlbum import Anno
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-blacklist', action='store', type=str,
-                    default='hg38', help='ENCODE blacklist: version or file (eg. hg38)')
+                    default='hg38', help='ENCODE blacklist: version or file')
 parser.add_argument('-chrsize', action='store', type=str,
                     default='hg38', help='chromosome size file (eg. hg38.chrom.sizes)')
 parser.add_argument('-control', action='store', type=str,
@@ -39,6 +39,8 @@ parser.add_argument('-memory', action='store', type=str,
                     default='100G', help='memory used for sbatch')
 parser.add_argument('-noIDR', action='store_true',
                     default=False, help='disable idr calling')
+parser.add_argument('-part', action='store', type=str,
+                    default='all', help='partition of slurm server')
 parser.add_argument('-pval', action='store', type=str,
                     default='1e-2', help='-p parameter (macs2)')
 parser.add_argument('-rank', action='store', type=str,
@@ -58,6 +60,7 @@ maxPeak = args.maxPeak
 gsize = args.gsize
 idrThresh = args.idrThresh
 memory = args.memory
+partition = args.part
 pval = args.pval
 rank = args.rank
 shift = args.shift
@@ -203,20 +206,19 @@ for exp in expList:
 
 
 # ================================
-#sbatch head
+#sbatch
 # ================================
-#mapping command
 
 sbatchMacs2IdrTemplate = '''#!/bin/bash
 #SBATCH --job-name=Macs2_PeakCall_{baseExpName}    # Job name
 #SBATCH --mail-type=END,FAIL          # Mail events (NONE, BEGIN, END, FAIL, ALL)
-#SBATCH --mail-user=kzhou@cho.org          # Mail user
-#SBATCH -n {threadNum}                          # Number of cores
+#SBATCH --mail-user=kzhou@coh.org     # Mail user
+#SBATCH -n {threadNum}                # Number of cores
 #SBATCH -N 1-1                        # Min - Max Nodes
-#SBATCH -p all                        # default queue is all if you don't specify
-#SBATCH --mem={memory}                      # Amount of memory in GB
+#SBATCH -p {partition}                # default queue is all if you don't specify
+#SBATCH --mem={memory}                # Amount of memory in GB
 #SBATCH --time=72:00:00               # Time limit hrs:min:sec
-#SBATCH --output={logPath}   # Standard output and error log
+#SBATCH --output={logPath}            # Standard output and error log
 
 ### this pipeline mainly based on ENCODE3 pipeline:
 ###https://docs.google.com/document/d/1lG_Rd7fnYgRpSIqrIfuVlAz2dW1VaSQThzk836Db99c
@@ -396,8 +398,8 @@ with open(runSbatchScript, 'w') as sbatchO:
         idrSampleDirList = [repFinalDirList]
         idrPeaklistNameList = [pooledRepName]
         idrPeaklistDirList = [pooledRepDir]
-        idrPrefixList = [pooledRepName + 'withRep']
-        idrOuputDirList = [pooledRepDir + 'withRep']
+        idrPrefixList = [pooledRepName + '_withRep']
+        idrOuputDirList = [pooledRepDir + '_withRep']
         ### self-pseudoreplicates
         repCount = 0
         for i in range(0, len(repPrNameList), 2):
@@ -407,16 +409,16 @@ with open(runSbatchScript, 'w') as sbatchO:
             idrSampleDirList.append(idrSampleRepPrDirList)
             idrPeaklistNameList.append(repFinalNameList[repCount])
             idrPeaklistDirList.append(repFinalDirList[repCount])
-            idrPrefixList.append(repFinalNameList[repCount] + 'withPr')
-            idrOuputDirList.append(repFinalDirList[repCount]+ 'withPr')
+            idrPrefixList.append(repFinalNameList[repCount] + '_withPr')
+            idrOuputDirList.append(repFinalDirList[repCount]+ '_withPr')
             repCount += 1
         ### pooled-pseudoreplicates
         idrSampleNameList.append(pooledPrNameList)
         idrSampleDirList.append(pooledPrDirList)
         idrPeaklistNameList.append(pooledRepName)
         idrPeaklistDirList.append(pooledRepDir)
-        idrPrefixList.append(pooledRepName + 'withPoolPr')
-        idrOuputDirList.append(pooledRepDir + 'withPoolPr')
+        idrPrefixList.append(pooledRepName + '_withPooledPr')
+        idrOuputDirList.append(pooledRepDir + '_withPooledPr')
         ### generate final pairs
         idrSampleList = list()
         for i in range(len(idrSampleNameList)):
@@ -437,7 +439,7 @@ with open(runSbatchScript, 'w') as sbatchO:
         idrBroadSampleList = list(map(lambda x:x.replace('.narrowPeak', '.broadPeak'), idrBroadSampleList))
         idrBroadPeaklistList = list(map(lambda x:x.replace('/narrow/', '/broad/'), idrPeaklistList))
         idrBroadPeaklistList = list(map(lambda x:x.replace('.narrowPeak', '.broadPeak'), idrBroadPeaklistList))
-        idrBroadOuputList = list(map(lambda x:x.replace('/narrow/', '/idr_Broad/'), idrOuputDirList))
+        idrBroadOuputList = list(map(lambda x:x.replace('/narrow/', '/idr_broad/'), idrOuputDirList))
         idrBroadSampleStr = ','.join(idrBroadSampleList)
         idrBroadPeaklistStr = ' '.join(idrBroadPeaklistList)
         idrBroadOutputStr = ' '.join(idrBroadOuputList)
