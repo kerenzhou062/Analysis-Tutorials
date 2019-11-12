@@ -92,7 +92,7 @@ while true; do
     --full-bed ) FULL_BED="$2"; shift 2 ;;
     --index ) BWA_INDEX="$2"; shift 2 ;;
     --longest-bed ) LONGEST_BED="$2"; shift 2 ;;
-    --reapeat-bed ) REPEAT_BED="$2"; shift 2 ;;
+    --repeat-bed ) REPEAT_BED="$2"; shift 2 ;;
     --skip-mapping ) SKIP_MAPPING=true; shift ;;
     --skip-pooling ) SKIP_POOLING=true; shift ;;
     --skip-calling ) SKIP_CALLING=true; shift ;;
@@ -157,38 +157,39 @@ if [[ ! -d $MAP_DIR  ]]; then
     mkdir -p $MAP_DIR
 fi
 
-echo "Estimating reads length..."
-READ_AVG_LENGTH=100
-for i in "$INPUT_DIR/${EXP_PREFIX}*.fastq"; do
-  READ_AVG_LENGTH=`awk '{if(NR%4==2) {count++; lengthSum += length} } END{print int(lengthSum/count)}' $i`
-  break 1
-done
-echo "Reads length:${READ_AVG_LENGTH}..."
-
-if (( $READ_AVG_LENGTH <= 17 )); then
-  MAX_DIFF=1
-elif (( $READ_AVG_LENGTH <= 20 )); then
-  MAX_DIFF=2
-elif (( $READ_AVG_LENGTH <= 45 )); then
-  MAX_DIFF=3
-elif (( $READ_AVG_LENGTH <= 73 )); then
-  MAX_DIFF=4
-elif (( $READ_AVG_LENGTH <= 104 )); then
-  MAX_DIFF=5
-elif (( $READ_AVG_LENGTH <= 137 )); then
-  MAX_DIFF=6
-elif (( $READ_AVG_LENGTH <= 172 )); then
-  MAX_DIFF=7
-elif (( $READ_AVG_LENGTH <= 208 )); then
-  MAX_DIFF=8
-elif (( $READ_AVG_LENGTH <= 244 )); then
-  MAX_DIFF=9
-fi
-echo "max_diff in BWA:${MAX_DIFF}"
-
-if ! $SKIP_MAPPING; then
+if $SKIP_MAPPING; then
+  echo "Skip mapping."
+else
+  # Estimating reads length
+  echo "Estimating reads length..."
+  READ_AVG_LENGTH=100
+  for i in "$INPUT_DIR/${EXP_PREFIX}*.fastq"; do
+    READ_AVG_LENGTH=`awk '{if(NR%4==2) {count++; lengthSum += length} } END{print int(lengthSum/count)}' $i`
+    break 1
+  done
+  echo "Reads length:${READ_AVG_LENGTH}..."
+  
+  if (( $READ_AVG_LENGTH <= 17 )); then
+    MAX_DIFF=1
+  elif (( $READ_AVG_LENGTH <= 20 )); then
+    MAX_DIFF=2
+  elif (( $READ_AVG_LENGTH <= 45 )); then
+    MAX_DIFF=3
+  elif (( $READ_AVG_LENGTH <= 73 )); then
+    MAX_DIFF=4
+  elif (( $READ_AVG_LENGTH <= 104 )); then
+    MAX_DIFF=5
+  elif (( $READ_AVG_LENGTH <= 137 )); then
+    MAX_DIFF=6
+  elif (( $READ_AVG_LENGTH <= 172 )); then
+    MAX_DIFF=7
+  elif (( $READ_AVG_LENGTH <= 208 )); then
+    MAX_DIFF=8
+  elif (( $READ_AVG_LENGTH <= 244 )); then
+    MAX_DIFF=9
+  fi
+  echo "max_diff in BWA:${MAX_DIFF}"
   # Read preprocessing
-  ## Read quality $FILT_DIR
   ## parallel start
   echo "Mapping with BWA."
   REP_NUM=`find $INPUT_DIR -type f -name "${EXP_PREFIX}*.trim.fastq" | wc -l`
@@ -223,23 +224,25 @@ if ! $SKIP_MAPPING; then
         sort -n | uniq -c | awk '{print $2"\t"$1}' \
         > ${PREFIX}.c.tag.seqlen.stat.txt
       
-      # Read mapping & parsing
+      ## Read mapping & parsing
       cd $MAP_DIR
       
       ## Read $MAP_DIR
       bwa aln -t ${MAP_THREAD} -n ${MAX_DIFF} -q ${QUALITY} \
         ${BWA_INDEX} $FILT_DIR/${PREFIX}.c.tag.fastq.gz \
         > ${PREFIX}.sai 2> ${PREFIX}.bwa.log
-      bwa samse $BWA_INDEX ${PREFIX}.sai $FILT_DIR/${PREFIX}.c.tag.fastq.gz | gzip -c > ${MAP_PREFIX}.sam.gz
+      bwa samse $BWA_INDEX ${PREFIX}.sai $FILT_DIR/${PREFIX}.c.tag.fastq.gz | \
+        gzip -c > ${MAP_PREFIX}.sam.gz
       
       ## Parsing SAM file
       parseAlignment.pl -v --map-qual 1 --min-len $MIN_LENGTH --mutation-file \
-        ${MAP_PREFIX}.mutation.txt ${MAP_PREFIX}.sam.gz ${MAP_PREFIX}.tag.bed
+        ${MAP_PREFIX}.mutation.txt ${MAP_PREFIX}.sam.gz ${MAP_PREFIX}.tag.bed \
+        > ${MAP_PREFIX}.parseAlignment.log 2>&1
   
       # Remove tags from rRNA and other repetitive RNA (optional)
       tagoverlap.pl -big -region ${REPEAT_BED} -ss --complete-overlap \
-        -r --keep-tag-name --keep-score -v ${MAP_PREFIX}.tag.bed ${MAP_PREFIX}.tag.norRNA.bed
-      
+        -r --keep-tag-name --keep-score -v ${MAP_PREFIX}.tag.bed \
+        ${MAP_PREFIX}.tag.norRNA.bed > ${MAP_PREFIX}.tagoverlap.log 2>&1
       # Collapse PCR duplicates
       tag2collapse.pl -big -v --random-barcode -EM 30 \
         --seq-error-model alignment -weight --weight-in-name \
@@ -259,10 +262,7 @@ if ! $SKIP_MAPPING; then
   wait
   exec 9>&-
   exec 9<&-
-  
   ## parallel end
-else
-  echo "Skip mapping."
 fi
 
 ## Merging biological replicates
