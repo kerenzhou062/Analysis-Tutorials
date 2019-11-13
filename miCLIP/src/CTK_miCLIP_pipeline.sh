@@ -141,8 +141,6 @@ CIMS_DIR="$OUTPUT_DIR/CIMS"
 CITS_DIR="$OUTPUT_DIR/CITS"
 FINAL_DIR="$OUTPUT_DIR/final"
 POOL_PREFIX="HepG2_m6A_WT_IP"
-CIMS_PREFIX="$POOL_PREFIX"
-CITS_PREFIX="$POOL_PREFIX"
 MAX_DIFF=3
 
 if [[ ! -d $OUTPUT_DIR ]]; then
@@ -272,11 +270,11 @@ else
   cd $MAP_DIR
   declare -a colorArr
   colorArr=("153,0,0" "153,76,0" "76,153,0" "0,76,153" "76,0,153" "153,76,0" "0,153,153")
-  vals=($(seq 1 1 $REP_NUM))
-  for i in "${vals[@]}";
+  for ((i=1; i<=$REP_NUM; i++))
   do
-    rep="${vals[$i]}"
-    color="${colorArr[$i]}"
+    rep=$i
+    colorIndex=$((i-1))
+    color="${colorArr[$colorIndex]}"
     bed2rgb.pl -v -col $color ${EXP_PREFIX}${rep}.tag.uniq.bed ${EXP_PREFIX}${rep}.tag.uniq.rgb.bed
   done
   
@@ -357,57 +355,57 @@ else
   ## Get specific types of mutations
   ### del: deletions, ins: insertions, sub: substitutions
   echo "CIMS calling..."
-  getMutationType.pl -t del ${POOL_PREFIX}.pool.tag.uniq.mutation.txt ${CIMS_PREFIX}.del.bed
-  getMutationType.pl -t ins ${POOL_PREFIX}.pool.tag.uniq.mutation.txt ${CIMS_PREFIX}.ins.bed
-  getMutationType.pl -t sub ${POOL_PREFIX}.pool.tag.uniq.mutation.txt ${CIMS_PREFIX}.sub.bed
+  getMutationType.pl -t del ${POOL_PREFIX}.pool.tag.uniq.mutation.txt ${POOL_PREFIX}.del.bed
+  getMutationType.pl -t ins ${POOL_PREFIX}.pool.tag.uniq.mutation.txt ${POOL_PREFIX}.ins.bed
+  getMutationType.pl -t sub ${POOL_PREFIX}.pool.tag.uniq.mutation.txt ${POOL_PREFIX}.sub.bed
   
-  CIMS.pl -big -n 10 -p -outp ${CIMS_PREFIX}.sub.posStat.txt \
+  CIMS.pl -big -n 10 -p -outp ${POOL_PREFIX}.sub.posStat.txt \
     -v ${POOL_PREFIX}.pool.tag.uniq.rgb.bed \
-    ${CIMS_PREFIX}.sub.bed \
-    ${CIMS_PREFIX}.sub.CIMS.txt \
-    > ${CIMS_PREFIX}.sub.CIMS.log 2>&1
+    ${POOL_PREFIX}.sub.bed \
+    ${POOL_PREFIX}.sub.CIMS.txt \
+    > ${POOL_PREFIX}.sub.CIMS.log 2>&1
 fi
-sort -k 9,9n -k 8,8nr -k 7,7n ${CIMS_PREFIX}.sub.CIMS.txt | \
-  cut -f 1-6 > ${CIMS_PREFIX}.sub.CIMS.bed
+sort -k 9,9n -k 8,8nr -k 7,7n ${POOL_PREFIX}.sub.CIMS.txt | \
+  cut -f 1-6 > ${POOL_PREFIX}.sub.CIMS.bed
 
 ## get C->T mutations
-ctk_C2T_mutation_filter.sh "${CIMS_PREFIX}.sub.CIMS.bed" \
+ctk_C2T_mutation_filter.sh "${POOL_PREFIX}.sub.CIMS.bed" \
   "${POOL_PREFIX}.pool.tag.uniq.mutation.txt" \
-  "${CIMS_PREFIX}.sub.CIMS.CT.bed"
+  "${POOL_PREFIX}.sub.CIMS.CT.bed"
 
 ## get m6A sites with RRACH motif
-bedtools shift -i ${CIMS_PREFIX}.sub.CIMS.CT.bed \
+bedtools shift -i ${POOL_PREFIX}.sub.CIMS.CT.bed \
   -g ${GENOME_SIZE} -m 1 -p -1 | \
   bedtools slop -i stdin -b 2 -g ${GENOME_SIZE} \
-  > ${CIMS_PREFIX}.temp.bed
+  > ${POOL_PREFIX}.temp.bed
 
-scanMotif.py -input ${CIMS_PREFIX}.temp.bed -format bed6 \
+scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
   -fasta ${FASTA} -motif RRACH -tag 3 \
-  -output ${CIMS_PREFIX}.sub.CIMS.CT.RRACH.bed
+  -output ${POOL_PREFIX}.sub.CIMS.CT.RRACH.bed
 
-rm ${CIMS_PREFIX}.temp.bed
+rm ${POOL_PREFIX}.temp.bed
 
 ##significant: get CIMS
-awk '{if($9<=0.05) {print $0}}' ${CIMS_PREFIX}.sub.CIMS.txt | \
-  sort -k 9,9n -k 8,8nr -k 7,7n > ${CIMS_PREFIX}.sub.CIMS.sig.txt
-cut -f 1-6 ${CIMS_PREFIX}.sub.CIMS.sig.txt > ${CIMS_PREFIX}.sub.CIMS.sig.bed
+awk '{if($9<=0.05) {print $0}}' ${POOL_PREFIX}.sub.CIMS.txt | \
+  sort -k 9,9n -k 8,8nr -k 7,7n > ${POOL_PREFIX}.sub.CIMS.sig.txt
+cut -f 1-6 ${POOL_PREFIX}.sub.CIMS.sig.txt > ${POOL_PREFIX}.sub.CIMS.sig.bed
 
 ##significant: get C->T mutations
-ctk_C2T_mutation_filter.sh "${CIMS_PREFIX}.sub.CIMS.sig.bed" \
+ctk_C2T_mutation_filter.sh "${POOL_PREFIX}.sub.CIMS.sig.bed" \
   "${POOL_PREFIX}.pool.tag.uniq.mutation.txt" \
-  "${CIMS_PREFIX}.sub.CIMS.sig.CT.bed"
+  "${POOL_PREFIX}.sub.CIMS.sig.CT.bed"
 
 ##significant: get m6A sites with RRACH motif
-bedtools shift -i ${CIMS_PREFIX}.sub.CIMS.sig.CT.bed \
+bedtools shift -i ${POOL_PREFIX}.sub.CIMS.sig.CT.bed \
   -g ${GENOME_SIZE} -m 1 -p -1 | \
   bedtools slop -i stdin -b 2 -g ${GENOME_SIZE} \
-  > ${CIMS_PREFIX}.temp.bed
+  > ${POOL_PREFIX}.temp.bed
 
-scanMotif.py -input ${CIMS_PREFIX}.temp.bed -format bed6 \
+scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
   -fasta ${FASTA} -motif RRACH -tag 3 \
-  -output ${CIMS_PREFIX}.sub.CIMS.sig.CT.RRACH.bed
+  -output ${POOL_PREFIX}.sub.CIMS.sig.CT.RRACH.bed
 
-rm ${CIMS_PREFIX}.temp.bed
+rm ${POOL_PREFIX}.temp.bed
 
 # CITS calling
 if [[ ! -d $CITS_DIR  ]]; then
@@ -416,7 +414,7 @@ fi
 cd $CITS_DIR
 
 ln -sf $MAP_DIR/${POOL_PREFIX}.pool.tag.uniq.rgb.bed
-ln -sf $CIMS_DIR/${CIMS_PREFIX}.del.bed
+ln -sf $CIMS_DIR/${POOL_PREFIX}.del.bed
 
 if $SKIP_CALLING; then
   echo "Skip CITS calling."
@@ -425,34 +423,82 @@ else
   echo "CITS calling..."
   CITS.pl -big -p 0.999 --gap 25 -v \
     ${POOL_PREFIX}.pool.tag.uniq.rgb.bed \
-    ${CIMS_PREFIX}.del.bed \
-    ${CITS_PREFIX}.CITS.bed \
-    > ${CITS_PREFIX}.CITS.log 2>&1
+    ${POOL_PREFIX}.del.bed \
+    ${POOL_PREFIX}.CITS.bed \
+    > ${POOL_PREFIX}.CITS.log 2>&1
   ## significant CITS
   CITS.pl -big -p 0.05 --gap 25 -v \
     ${POOL_PREFIX}.pool.tag.uniq.rgb.bed \
-    ${CIMS_PREFIX}.del.bed \
-    ${CITS_PREFIX}.CITS.sig.bed \
-    > ${CITS_PREFIX}.CITS.sig.log 2>&1
+    ${POOL_PREFIX}.del.bed \
+    ${POOL_PREFIX}.CITS.sig.bed \
+    > ${POOL_PREFIX}.CITS.sig.log 2>&1
 fi
 
-bedtools shift -i ${CITS_PREFIX}.CITS.bed \
+bedtools shift -i ${POOL_PREFIX}.CITS.bed \
   -g ${GENOME_SIZE} -m 1 -p -1 | \
   bedtools slop -i stdin -b 2 -g ${GENOME_SIZE} \
-  > ${CITS_PREFIX}.temp.bed
+  > ${POOL_PREFIX}.temp.bed
 
-scanMotif.py -input ${CITS_PREFIX}.temp.bed -format bed6 \
+scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
   -fasta ${FASTA} -motif RRACH -tag 3 \
-  -output ${CITS_PREFIX}.CITS.RRACH.bed
+  -output ${POOL_PREFIX}.CITS.RRACH.bed
 
 ## get m6A sites with RRACH motif
-bedtools shift -i ${CITS_PREFIX}.CITS.sig.bed \
+bedtools shift -i ${POOL_PREFIX}.CITS.sig.bed \
   -g ${GENOME_SIZE} -m 1 -p -1 | \
   bedtools slop -i stdin -b 2 -g ${GENOME_SIZE} \
-  > ${CITS_PREFIX}.temp.bed
+  > ${POOL_PREFIX}.temp.bed
 
-scanMotif.py -input ${CITS_PREFIX}.temp.bed -format bed6 \
+scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
   -fasta ${FASTA} -motif RRACH -tag 3 \
-  -output ${CITS_PREFIX}.CITS.sig.RRACH.bed
+  -output ${POOL_PREFIX}.CITS.sig.RRACH.bed
 
-rm ${CITS_PREFIX}.temp.bed
+rm ${POOL_PREFIX}.temp.bed
+
+# generating the final results
+if [[ ! -d $FINAL_DIR  ]]; then
+    mkdir $FINAL_DIR
+fi
+cd $FINAL_DIR
+
+cp $CIMS_DIR/${POOL_PREFIX}.sub.CIMS.CT.RRACH.bed ./
+cp $CIMS_DIR/${POOL_PREFIX}.sub.CIMS.sig.CT.RRACH.bed ./
+cp $CITS_DIR/${POOL_PREFIX}.CITS.RRACH.bed ./
+cp $CITS_DIR/${POOL_PREFIX}.CITS.sig.RRACH.bed ./
+
+cat ${POOL_PREFIX}.sub.CIMS.CT.RRACH.bed ${POOL_PREFIX}.CITS.RRACH.bed | \
+  sort -t $'\t' -k1,1 -k2,2n > ${POOL_PREFIX}.combine.RRACH.bed
+cat ${POOL_PREFIX}.sub.CIMS.sig.CT.RRACH.bed ${POOL_PREFIX}.CITS.sig.RRACH.bed | \
+  sort -t $'\t' -k1,1 -k2,2n > ${POOL_PREFIX}.combine.sig.RRACH.bed
+
+if [ ! -z $LONGEST_BED ]; then
+  for i in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
+  do
+    PREFIX=${i%%.bed}
+    bedBinDistribution.pl -input $i -bed12 $LONGEST_BED \
+      -o ${PREFIX}.percentage.bin
+    bedBinDistribution.pl -input $i -bed12 $LONGEST_BED \
+      --type count -o ${PREFIX}.count.bin
+  done
+fi
+
+if [ ! -z $FULL_BED ]; then
+  ## get mRNA annotation bed12
+  cat $FULL_BED | awk '/protein_coding.+protein_coding\t/' > mRNA.annotation.bed12.tmp
+  for i in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
+  do
+    PREFIX=${i%%.bed}
+    ### gene type
+    geneDistribution.pl -strand --input $i \
+      -bed12 $FULL_BED -o ${PREFIX}.gene
+    sed -i '1i geneType\tpeakNumber' ${PREFIX}.gene
+    ### gene region
+    regionDistribution.pl -strand -size 200 -f '5utr,cds,stopCodon,3utr' \
+      --input $i \
+      -bed12 mRNA.annotation.bed12.tmp -o ${PREFIX}.region
+    sed -i '1i region\tpeakNumber\tenrichment' ${PREFIX}.region
+  done
+  rm -f mRNA.annotation.bed12.tmp
+fi
+
+rm -f *.tmp

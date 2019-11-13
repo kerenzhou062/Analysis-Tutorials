@@ -29,7 +29,6 @@ function showHelp {
     --full-bed: all transcripts annotation in bed12 <str>
     --longest-bed: mRNA longest annotation in bed12 <str>
     --repeat-bed: repeat bed used for filtering (eg.t/rRNA) <str>
-    --PCR: rbsSeeker in PCR-duplication-remove mode <bool>
     --skip-mapping: skip reads mapping step <bool>
     --skip-calling: skip m6A sites calling step <bool>
     --bowtie: map reads with bowtie aligner <bool>
@@ -45,7 +44,7 @@ if [[ $# == 0 ]]; then
 fi
 
 TEMP=`getopt -o hb:e:g:i:o:p:t: --long help,skip-mapping,skip-calling \
-  --long bowtie,STAR,PCR \
+  --long bowtie,STAR \
   --long input:,thread:,output:,exp-prefix:,pool-prefix:,index: \
   --long longest-bed:,full-bed:,gtf:,repeat-bed:,barcode-length:,fasta: \
   -- "$@"`
@@ -69,7 +68,6 @@ GENOME_SIZE=
 LONGEST_BED=
 FULL_BED=
 REPEAT_BED=
-PCR_DUP_FLAG=false
 BOWTIE_FLAG=false
 STAR_FLAG=false
 SKIP_MAPPING=false
@@ -90,7 +88,6 @@ while true; do
     --index ) GENOME_INDEX="$2"; shift 2 ;;
     --longest-bed ) LONGEST_BED="$2"; shift 2 ;;
     --repeat-bed ) REPEAT_BED="$2"; shift 2 ;;
-    --PCR ) PCR_DUP_FLAG=true; shift ;;
     --skip-mapping ) SKIP_MAPPING=true; shift ;;
     --skip-calling ) SKIP_CALLING=true; shift ;;
     --bowtie ) BOWTIE_FLAG=true; shift ;;
@@ -265,9 +262,13 @@ else
   exec 9>&-
   exec 9<&-
   # parallel end
-  ### pooling reads
   echo "Reads mapping done."
   cd $MAP_DIR
+  #delete tmp fastqs
+  echo "Deleting tmp fastqs..."
+  find ./ -maxdepth 1 -type f -name "*.fastq" | xargs -I {} rm -f {}
+  find ./ -maxdepth 1 -type f -name "*.fastq.gz" | xargs -I {} rm -f {}
+  ### pooling reads
   echo "Polling reads..."
   DUPLRM_BAMS=""
   for i in `find ./ -maxdepth 1 -type f -name "*.aligned.bam" | sort`;
@@ -311,89 +312,94 @@ else
   
   # rbsSeeker m6A sites calling
   echo "rbsSeeker m6A sites calling..."
-  if $PCR_DUP_FLAG; then
-    rbsSeeker -T CT -L 20 -t 129600000 -n 1 -H 3 -d 1 \
-      -p 1 -q 1 -o ./ -P $POOL_PREFIX --PCR \
-      --fa $FASTA --fai ${FASTA}.fai \
-      --bam $INPUT_BAM \
-      > ${POOL_PREFIX}.pooled.rbsSeeker.log 2>&1
-  else
-    rbsSeeker -T CT -L 20 -t 129600000 -n 1 -H 3 -d 1 \
-      -p 1 -q 1 -o ./ -P $POOL_PREFIX \
-      --fa $FASTA --fai ${FASTA}.fai \
-      --bam $INPUT_BAM \
-      > ${POOL_PREFIX}.pooled.rbsSeeker.log 2>&1
-  fi
+  # runing with PCR duplication removing mode
+  echo "rbsSeeker with --PCR:"
+  rbsSeeker -T CT -L 20 -t 129600000 -n 1 -H 3 -d 1 \
+    -p 1 -q 1 -o "$RESULT_DIR" -P "${POOL_PREFIX}_PCR" --PCR \
+    --fa "${FASTA}" --fai "${FASTA}.fai" \
+    --bam "$INPUT_BAM" \
+    > ${POOL_PREFIX}.pooled.rbsSeeker.PCR.log 2>&1
+  
+  echo "rbsSeeker without --PCR:"
+  rbsSeeker -T CT -L 20 -t 129600000 -n 1 -H 3 -d 1 \
+    -p 1 -q 1 -o "$RESULT_DIR" -P "$POOL_PREFIX" \
+    --fa "${FASTA}" --fai "${FASTA}.fai" \
+    --bam "$INPUT_BAM" \
+    > ${POOL_PREFIX}.pooled.rbsSeeker.log 2>&1
+  
   echo "rbsSeeker calling m6A sites done."
 fi
 
 ## Pooling CT and Truncation m6A sites
 if [[ ! -d $FILT_DIR  ]]; then
-    mkdir -p $FILT_DIR
+  mkdir -p $FILT_DIR
 fi
 cd $FILT_DIR
+### link CT and Truncation beds
 ln -sf ${RESULT_DIR}/${POOL_PREFIX}_rbsSeeker_CT.bed ./
 ln -sf ${RESULT_DIR}/${POOL_PREFIX}_rbsSeeker_Truncation.bed ./
-
+ln -sf ${RESULT_DIR}/${POOL_PREFIX}_PCR_rbsSeeker_CT.bed ./
+ln -sf ${RESULT_DIR}/${POOL_PREFIX}_PCR_rbsSeeker_Truncation.bed ./
 
 echo "Pooling CT and Truncation m6A sites..."
 
-awk 'BEGIN{OFS="\t";FS="\t";}
-{
-  if(FNR>1){
-    if($8 == 7){
-      print $1,$2,$3,$4,int($12),$6;
-    }
-  }
-}' ${POOL_PREFIX}_rbsSeeker_Truncation.bed | sort -k1,1 -k2,2n | \
-  bedtools shift -i stdin -g ${GENOME_SIZE} -m 1 -p -1 > ${POOL_PREFIX}.m6ASite.Trunc.bed
-
-awk 'BEGIN{OFS="\t";FS="\t";}
-{
-  if(FNR>1){
-    if($8 == 7){
-      print $1,$2,$3,$4,int($12),$6;
-    }
-  }
-}' ${POOL_PREFIX}_rbsSeeker_CT.bed | sort -k1,1 -k2,2n | \
-  bedtools shift -i stdin -g ${GENOME_SIZE} -m 1 -p -1 > ${POOL_PREFIX}.m6ASite.CT.bed
-
-cat ${POOL_PREFIX}.m6ASite.Trunc.bed ${POOL_PREFIX}.m6ASite.CT.bed | \
+for i in `find ./ -type l -name "${POOL_PREFIX}*.bed" | grep -E "rbsSeeker_(CT|Truncation)"`;
+do
+  outputName="${i//_rbsSeeker_/.m6ASite.}"
+  outputName="${outputName//_PCR/.PCR}"
   awk 'BEGIN{OFS="\t";FS="\t";}
   {
-    key = $1"\t"$2"\t"$3":"$6;
-    if (key in arrayA) {
-      arrayA[key] = arrayA[key]"|"$4
-      arrayB[key] = arrayB[key] + int($5)
-    }else{
-      arrayA[key] = $4
-      arrayB[key] = int($5)
+    if(FNR>1){
+      if($8 == 7){
+        seq = substr($7, 8, 5);
+        print $1,$2,$3,$4,int($12),$6,$10,$14,seq;
+      }
     }
-  }
-  END{
-    for (key in arrayA) {
-      split(key,splitArr,":");
-      pos = splitArr[1];
-      strand = splitArr[2];
-      print pos, arrayA[key], arrayB[key], strand;
+  }' $i | sort -k1,1 -k2,2n | \
+  bedtools shift -i stdin -g ${GENOME_SIZE} -m 1 -p -1 > $outputName
+
+prefixArr=( "${POOL_PREFIX}" "${POOL_PREFIX}.PCR" )
+for i in "${prefixArr[@]}"
+do
+  cat ${i}.m6ASite.Truncation.bed ${i}.m6ASite.CT.bed | \
+    awk 'BEGIN{OFS="\t";FS="\t";}
+    {
+      key = $1"\t"$2"\t"$3":"$6;
+      if (key in arrayA) {
+        arrayA[key] = arrayA[key]"|"$4
+        arrayB[key] = arrayB[key] + int($5)
+      }else{
+        arrayA[key] = $4
+        arrayB[key] = int($5)
+      }
     }
-  }' | sort -k1,1 -k2,2n > ${POOL_PREFIX}.m6ASite.bed
+    END{
+      for (key in arrayA) {
+        split(key,splitArr,":");
+        pos = splitArr[1];
+        strand = splitArr[2];
+        print pos, arrayA[key], arrayB[key], strand;
+      }
+    }' | sort -k1,1 -k2,2n > ${i}.m6ASite.combine.bed
+done
 
 echo "Pooling CT and Truncation m6A sites done."
 
 if [ ! -z $LONGEST_BED ]; then
-  for i in `find ./ -type f -name "*.bed"`;
+  for i in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
   do
     PREFIX=${i%%.bed}
     bedBinDistribution.pl -input $i -bed12 $LONGEST_BED \
-      -o ${PREFIX}.bin
+      -o ${PREFIX}.percentage.bin
+    bedBinDistribution.pl -input $i -bed12 $LONGEST_BED \
+      --type count -o ${PREFIX}.count.bin
   done
 fi
 
 if [ ! -z $FULL_BED ]; then
   ## get mRNA annotation bed12
   cat $FULL_BED | awk '/protein_coding.+protein_coding\t/' > mRNA.annotation.bed12.tmp
-  for i in `find ./ -type f -name "*.bed"`;
+  for i in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
   do
     PREFIX=${i%%.bed}
     ### gene type
@@ -408,3 +414,4 @@ if [ ! -z $FULL_BED ]; then
   done
   rm -f mRNA.annotation.bed12.tmp
 fi
+rm -f *.tmp

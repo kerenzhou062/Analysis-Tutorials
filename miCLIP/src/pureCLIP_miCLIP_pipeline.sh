@@ -259,15 +259,15 @@ do
   DUPLRM_BAMS=`echo "${DUPLRM_BAMS}"" ""${i}"`
 done
 
-samtools merge -@ ${MAP_THREAD} -f ${MERGE_PREFIX}.bam ${DUPLRM_BAMS}
-samtools index -@ ${MAP_THREAD} ${MERGE_PREFIX}.bam
+#samtools merge -@ ${MAP_THREAD} -f ${MERGE_PREFIX}.bam ${DUPLRM_BAMS}
+#samtools index -@ ${MAP_THREAD} ${MERGE_PREFIX}.bam ${MERGE_PREFIX}.bam.bai
 
 ## Quality control
 if [[ ! -d $FASTQC_DIR ]]; then
     mkdir $FASTQC_DIR
 fi
-fastqc -o $FASTQC_DIR ${MERGE_PREFIX}.bam \
-  > ${MERGE_PREFIX}.fastqc.log 2>&1
+#fastqc -o $FASTQC_DIR ${MERGE_PREFIX}.bam \
+#  > ${MERGE_PREFIX}.fastqc.log 2>&1
 
 ## calling crosslink sites
 if [[ ! -d $CROSSLINK_DIR  ]]; then
@@ -275,8 +275,8 @@ if [[ ! -d $CROSSLINK_DIR  ]]; then
 fi
 cd $CROSSLINK_DIR
 
-ln -s ${MAP_DIR}/${MERGE_PREFIX}.bam.bai ./
-ln -s ${MAP_DIR}/${MERGE_PREFIX}.bam ./
+ln -sf ${MAP_DIR}/${MERGE_PREFIX}.bam.bai ./
+ln -sf ${MAP_DIR}/${MERGE_PREFIX}.bam ./
 
 # pureCLIP crosslink sites calling
 if $SKIP_CALLING; then
@@ -293,14 +293,66 @@ else
   
   echo "pureCLIP crosslink sites done."
 fi
+## hidden state(4.state):
+## 1->0->non-enriched + non-crosslink
+## 2->1->non-enriched + crosslink
+## 3->2->enriched + non-crosslink
+## 4->3->enriched + crosslink (green, get)
 # get mutation information using CTK
 
-samtools fillmd -@ ${THREAD} ${MERGE_PREFIX}.bam \
-  ${FASTA} | gzip -c > ${MERGE_PREFIX}.sam.gz
+#samtools fillmd -@ ${THREAD} ${MERGE_PREFIX}.bam \
+#  ${FASTA} | gzip -c > ${MERGE_PREFIX}.sam.gz
+#
+#parseAlignment.pl -v --map-qual 1 --min-len 18 --mutation-file \
+#  ${POOL_PREFIX}.pooled.mutation.txt ${MERGE_PREFIX}.sam.gz ${POOL_PREFIX}.tag.bed
 
-parseAlignment.pl -v --map-qual 1 --min-len 18 --mutation-file \
-  ${POOL_PREFIX}.pooled.mutation.txt ${MERGE_PREFIX}.sam.gz ${POOL_PREFIX}.tag.bed
+bedtools slop -i ${POOL_PREFIX}.PureCLIP.crosslink.bed \
+  -b 5 -g ${GENOME_SIZE} | bedtools getfasta -fi ${FASTA} \
+  -bed stdin -s -name+ > ${POOL_PREFIX}.PureCLIP.postive.fa
 
-ctkC2TMutationFilter.sh "${POOL_PREFIX}.PureCLIP.crosslink.bed" \
-  "${POOL_PREFIX}.pooled.mutation.txt" \
-  "${POOL_PREFIX}.PureCLIP.crosslink.CT.bed"
+#bedtools slop -i ${POOL_PREFIX}.PureCLIP.crosslink.bed \
+#  -b 10 -g ${GENOME_SIZE} | bedtools shuffle -i stdin \
+#    -g ${GENOME_SIZE} -noOverlapping -seed 1000 -chrom | \
+#      bedtools getfasta -fi ${FASTA} -bed stdin -s \
+#        -name+ > ${POOL_PREFIX}.PureCLIP.negative.fa
+
+module load MEME/5.1.0-OpenMPI.3.0.0
+#dreme -p ${POOL_PREFIX}.PureCLIP.postive.fa \
+#  -norc -k 6 -m 10 -s 1000 -png -oc ${POOL_PREFIX}_DREME -e 0.1 \
+#  > ${POOL_PREFIX}.dreme.log 2>&1
+#
+#export WINEXTRACT=`which winextract`
+#compute_CLmotif_scores.sh ${FASTA} ${MERGE_PREFIX}.bam \
+#  ${POOL_PREFIX}_DREME/dreme.xml ${POOL_PREFIX}_DREME/dreme.txt \
+#  ${MERGE_PREFIX}.fimo_clmotif_occurences.bed
+
+pureclip -i ${MERGE_PREFIX}.bam \
+  -bai ${MERGE_PREFIX}.bam.bai \
+  -g ${FASTA} -iv 'chr1;chr2;chr3;' -nt ${THREAD} \
+  -o ${POOL_PREFIX}.PureCLIP.crosslink.cov_CLmotifs.bed \
+  -or ${POOL_PREFIX}.PureCLIP.bind.cov_CLmotifs.bed \
+  -p ${POOL_PREFIX}.PureCLIP.parameter.cov_CLmotifs.txt \
+  -nim 4 -fis ${MERGE_PREFIX}.fimo_clmotif_occurences.bed \
+  > ${MERGE_PREFIX}.pureCLIP.cov_CLmotifs.log 2>&1
+
+#
+#bedtools slop -i ${POOL_PREFIX}.PureCLIP.crosslink.bed \
+#  -b 5 -g ${GENOME_SIZE} > ${POOL_PREFIX}.temp.bed
+#
+#scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
+#  -fasta ${FASTA} -motif RRACH -tag 3 \
+#  -output ${POOL_PREFIX}.PureCLIP.crosslink.RRACH.all.bed
+#
+#bedtools shift -i ${POOL_PREFIX}.PureCLIP.crosslink.RRACH.all.bed \
+#  -g ${GENOME_SIZE} -p 1 -m -1 > ${POOL_PREFIX}.temp.bed
+#
+#ctk_C2T_mutation_filter.sh "${POOL_PREFIX}.temp.bed" \
+#  "${POOL_PREFIX}.pooled.mutation.txt" \
+#  "${POOL_PREFIX}.PureCLIP.crosslink.RRACH.CT.bed"
+#
+#bedtools shift -i ${POOL_PREFIX}.PureCLIP.crosslink.RRACH.CT.bed \
+#  -g ${GENOME_SIZE} -m 1 -p -1 > ${POOL_PREFIX}.PureCLIP.crosslink.RRACH.bed
+#
+#rm -f ${POOL_PREFIX}.temp.bed \
+#  ${POOL_PREFIX}.PureCLIP.crosslink.RRACH.CT.bed \
+#  ${POOL_PREFIX}.PureCLIP.crosslink.RRACH.all.bed
