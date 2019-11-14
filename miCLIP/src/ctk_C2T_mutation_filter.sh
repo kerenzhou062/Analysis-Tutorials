@@ -24,7 +24,7 @@ function c2tMutation {
           arrB[key] += 1;
         }
       }else{
-        if ($8=="G" && $10=="T") {
+        if ($8=="G" && $10=="A") {
           arrB[key] += 1;
         }
       }

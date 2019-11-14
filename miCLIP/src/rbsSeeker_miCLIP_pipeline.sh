@@ -32,6 +32,8 @@ function showHelp {
     --skip-mapping: skip reads mapping step <bool>
     --skip-calling: skip m6A sites calling step <bool>
     --bowtie: map reads with bowtie aligner <bool>
+    --PCR: Collapse reads before mapping (CTK:fastq2collapse.pl) <bool>
+    --keep-tmp-fastq: keep temporary fastqs <bool>
     --STAR: map reads with STAR aligner <bool>
     --index: genome index <str>"
   exit 2;
@@ -44,7 +46,7 @@ if [[ $# == 0 ]]; then
 fi
 
 TEMP=`getopt -o hb:e:g:i:o:p:t: --long help,skip-mapping,skip-calling \
-  --long bowtie,STAR \
+  --long bowtie,STAR,PCR,keep-tmp-fastq \
   --long input:,thread:,output:,exp-prefix:,pool-prefix:,index: \
   --long longest-bed:,full-bed:,gtf:,repeat-bed:,barcode-length:,fasta: \
   -- "$@"`
@@ -69,6 +71,8 @@ LONGEST_BED=
 FULL_BED=
 REPEAT_BED=
 BOWTIE_FLAG=false
+PCR_FLAG=false
+KEEP_TMP_FASTQ=false
 STAR_FLAG=false
 SKIP_MAPPING=false
 SKIP_CALLING=false
@@ -88,9 +92,11 @@ while true; do
     --index ) GENOME_INDEX="$2"; shift 2 ;;
     --longest-bed ) LONGEST_BED="$2"; shift 2 ;;
     --repeat-bed ) REPEAT_BED="$2"; shift 2 ;;
+    --keep-tmp-fastq ) KEEP_TMP_FASTQ=true; shift ;;
     --skip-mapping ) SKIP_MAPPING=true; shift ;;
     --skip-calling ) SKIP_CALLING=true; shift ;;
     --bowtie ) BOWTIE_FLAG=true; shift ;;
+    --PCR ) PCR_FLAG=true; shift ;;
     --STAR ) STAR_FLAG=true; shift ;;
     -- ) shift; break ;;
     * ) break ;;
@@ -139,6 +145,10 @@ FILT_DIR="$OUTPUT_DIR/filter"
 
 REP_NUM=`find $INPUT_DIR -type f -name "${EXP_PREFIX}*.trim.fastq" | wc -l`
 MAP_THREAD=$((THREAD / REP_NUM))
+
+if (( $MAP_THREAD == 0 )); then
+  MAP_THREAD=1
+fi
 
 if [[ ! -d $OUTPUT_DIR ]]; then
   mkdir -p $OUTPUT_DIR
@@ -220,40 +230,74 @@ else
       PREFIX=${PREFIX##*/} # *.trim
       MAP_PREFIX=${i%%.trim.fastq}
       MAP_PREFIX=${MAP_PREFIX##*/}
-      ## Preparing read IDs for UMI
-      ## where l=$BARCODE_LEN denotes the used barcode length
+
       if $STAR_FLAG; then
-        ## strip barcode
-        stripBarcode.pl -format fastq -len ${BARCODE_LEN} $i - | gzip -c > ${PREFIX}.bc.fastq.gz
+        if $PCR_FLAG; then
+          echo "${MAP_PREFIX}: Activate --PCR! PCR duplicates removing..."
+          ## remove PCR duplicates
+          fastq2collapse.pl $i - | gzip -c > ${PREFIX}.c.fastq.gz
+          input=${PREFIX}.c.fastq.gz
+        else
+          input=$i
+        fi
+        if (( $BARCODE_LEN > 0 )); then
+          ## strip barcode
+          stripBarcode.pl -format fastq -len ${BARCODE_LEN} ${input} - | \
+            gzip -c > ${PREFIX}.bc.fastq.gz
+          input=${PREFIX}.bc.fastq.gz
+        fi
+        echo "${MAP_PREFIX}: Mapping reads with STAR..."
         ## mapping, reduce mismatch rates
         STAR --outSAMtype BAM SortedByCoordinate --runThreadN ${MAP_THREAD} \
-          --genomeDir ${GENOME_INDEX} --readFilesIn ${PREFIX}.bc.fastq.gz \
-          --readFilesCommand  zcat --outFilterType BySJout \
+          --genomeDir ${GENOME_INDEX} --readFilesIn ${input} \
+          --genomeLoad NoSharedMemory --limitBAMsortRAM 0 --alignEndsType EndToEnd \
+          --outFilterType Normal --outFilterMultimapScoreRange 0 \
           --outFilterMultimapNmax 20 --alignSJoverhangMin 8 \
           --alignSJDBoverhangMin 1 --outFilterMismatchNmax 999 \
-          --outFilterMismatchNoverLmax 0.1 --scoreDelOpen -1 \
-          --alignIntronMin 20 --alignIntronMax 1000000 \
-          --outFileNamePrefix ${MAP_PREFIX}. --outTmpDir ${MAP_PREFIX}_STARtmp \
-          --alignEndsType EndToEnd
+          --outFilterMismatchNoverLmax 0.1  --outFilterScoreMin 0 \
+          --outFilterScoreMinOverLread 0 --outFilterMatchNmin 15  \
+          --outFilterMatchNminOverLread 0 --alignIntronMin 1 --alignIntronMax 1 \
+          --alignMatesGapMax 1500  --seedSearchStartLmax 15 \
+          --seedSearchStartLmaxOverLread 1 --seedSearchLmax 0 --seedMultimapNmax 20000 \
+          --seedPerReadNmax 1000 --seedPerWindowNmax 100 --seedNoneLociPerWindow 20 \
+          --outSAMmode Full --outSAMattributes All --outSAMunmapped None \
+          --outSAMorder Paired --outSAMprimaryFlag AllBestScore \
+          --outSAMreadID Standard --outReadsUnmapped None --readFilesCommand zcat \
+          --outFileNamePrefix ${MAP_PREFIX}. --outTmpDir ${MAP_PREFIX}_STARtmp
         rm -rf ${MAP_PREFIX}_STARtmp
-        # Filtering
-        ## We filter the aligned reads to obtain only reads
-        ## mapping against the main chromosomes:
-        samtools index -@ ${MAP_THREAD} ${MAP_PREFIX}.Aligned.sortedByCoord.out.bam
+        # index
+        #mv ${MAP_PREFIX}.Aligned.sortedByCoord.out.bam ${MAP_PREFIX}.aligned.bam
+        #samtools index -@ ${MAP_THREAD} ${MAP_PREFIX}.aligned.bam
         samtools view -@ ${MAP_THREAD} -hb ${MAP_PREFIX}.Aligned.sortedByCoord.out.bam \
           -o ${MAP_PREFIX}.aligned.bam
         samtools index -@ ${MAP_THREAD} ${MAP_PREFIX}.aligned.bam
         rm -f ${MAP_PREFIX}.Aligned.sortedByCoord.out.bam ${MAP_PREFIX}.Aligned.sortedByCoord.out.bam.sai
       else
-        stripBarcode.pl -format fastq -len ${BARCODE_LEN} $i ${PREFIX}.bc.fastq
+        if $PCR_FLAG; then
+          echo "${MAP_PREFIX}: Activate --PCR! PCR duplicates removing..."
+          ## remove PCR duplicates
+          fastq2collapse.pl $i - | gzip -c > ${PREFIX}.c.fastq
+          input=${PREFIX}.c.fastq
+        else
+          input=$i
+        fi
+        if (( $BARCODE_LEN > 0 )); then
+          ## strip barcode
+          stripBarcode.pl -format fastq -len ${BARCODE_LEN} ${input} - | \
+            gzip -c > ${PREFIX}.bc.fastq
+          input=${PREFIX}.bc.fastq
+        fi
+        ## bowtie alignment
+        echo "${MAP_PREFIX}: Mapping reads with bowtie..."
         bowtie -p ${MAP_THREAD} -t -v 2 -m 20 --best --strata --sam $GENOME_INDEX \
-          ${PREFIX}.bc.fastq ${MAP_PREFIX}.aligned.sam > ${MAP_PREFIX}.aligned.log 2>&1
+          ${input} ${MAP_PREFIX}.aligned.sam > ${MAP_PREFIX}.aligned.log 2>&1
         samtools view -@ ${MAP_THREAD} -h -bS -F 4 \
           ${MAP_PREFIX}.aligned.sam -o ${MAP_PREFIX}.aligned.unsort.bam
         samtools sort -@ ${MAP_THREAD} -m 2G -O bam \
           -o ${MAP_PREFIX}.aligned.bam ${MAP_PREFIX}.aligned.unsort.bam
         rm -f ${MAP_PREFIX}.aligned.sam ${MAP_PREFIX}.aligned.unsort.bam
         samtools index -@ ${MAP_THREAD} ${MAP_PREFIX}.aligned.bam
+        echo "${MAP_PREFIX}: Reads mapping done."
       fi
       echo >&9
     } &
@@ -262,12 +306,16 @@ else
   exec 9>&-
   exec 9<&-
   # parallel end
-  echo "Reads mapping done."
+  echo "Reads mapping of all replicates are done."
   cd $MAP_DIR
   #delete tmp fastqs
-  echo "Deleting tmp fastqs..."
-  find ./ -maxdepth 1 -type f -name "*.fastq" | xargs -I {} rm -f {}
-  find ./ -maxdepth 1 -type f -name "*.fastq.gz" | xargs -I {} rm -f {}
+  if $KEEP_TMP_FASTQ; then
+    echo "Keep tmp fastqs."
+  else
+    echo "Deleting tmp fastqs..."
+    find ./ -maxdepth 1 -type f -name "${EXP_PREFIX}*.fastq" | xargs -I {} rm -f {}
+    find ./ -maxdepth 1 -type f -name "${EXP_PREFIX}*.fastq.gz" | xargs -I {} rm -f {}
+  fi
   ### pooling reads
   echo "Polling reads..."
   DUPLRM_BAMS=""
@@ -302,25 +350,8 @@ else
   
   INPUT_BAM="${POOL_PREFIX}.aligned.pooled.bam"
   
-  if $STAR_FLAG; then
-    echo "And MD tag to bam..."
-    samtools fillmd -@ ${THREAD} ${POOL_PREFIX}.aligned.pooled.bam \
-      ${FASTA} | samtools view -S -b > ${POOL_PREFIX}.aligned.pooled.md.bam
-    samtools index -@ ${THREAD} ${POOL_PREFIX}.aligned.pooled.md.bam
-    INPUT_BAM="${POOL_PREFIX}.aligned.pooled.md.bam"
-  fi
-  
   # rbsSeeker m6A sites calling
   echo "rbsSeeker m6A sites calling..."
-  # runing with PCR duplication removing mode
-  echo "rbsSeeker with --PCR:"
-  rbsSeeker -T CT -L 20 -t 129600000 -n 1 -H 3 -d 1 \
-    -p 1 -q 1 -o "$RESULT_DIR" -P "${POOL_PREFIX}_PCR" --PCR \
-    --fa "${FASTA}" --fai "${FASTA}.fai" \
-    --bam "$INPUT_BAM" \
-    > ${POOL_PREFIX}.pooled.rbsSeeker.PCR.log 2>&1
-  
-  echo "rbsSeeker without --PCR:"
   rbsSeeker -T CT -L 20 -t 129600000 -n 1 -H 3 -d 1 \
     -p 1 -q 1 -o "$RESULT_DIR" -P "$POOL_PREFIX" \
     --fa "${FASTA}" --fai "${FASTA}.fai" \
@@ -338,15 +369,12 @@ cd $FILT_DIR
 ### link CT and Truncation beds
 ln -sf ${RESULT_DIR}/${POOL_PREFIX}_rbsSeeker_CT.bed ./
 ln -sf ${RESULT_DIR}/${POOL_PREFIX}_rbsSeeker_Truncation.bed ./
-ln -sf ${RESULT_DIR}/${POOL_PREFIX}_PCR_rbsSeeker_CT.bed ./
-ln -sf ${RESULT_DIR}/${POOL_PREFIX}_PCR_rbsSeeker_Truncation.bed ./
 
 echo "Pooling CT and Truncation m6A sites..."
 
 for i in `find ./ -type l -name "${POOL_PREFIX}*.bed" | grep -E "rbsSeeker_(CT|Truncation)"`;
 do
   outputName="${i//_rbsSeeker_/.m6ASite.}"
-  outputName="${outputName//_PCR/.PCR}"
   awk 'BEGIN{OFS="\t";FS="\t";}
   {
     if(FNR>1){
@@ -357,8 +385,9 @@ do
     }
   }' $i | sort -k1,1 -k2,2n | \
   bedtools shift -i stdin -g ${GENOME_SIZE} -m 1 -p -1 > $outputName
+done
 
-prefixArr=( "${POOL_PREFIX}" "${POOL_PREFIX}.PCR" )
+prefixArr=( "${POOL_PREFIX}" )
 for i in "${prefixArr[@]}"
 do
   cat ${i}.m6ASite.Truncation.bed ${i}.m6ASite.CT.bed | \

@@ -32,6 +32,7 @@ function showHelp {
     --index: genome index <str>
     --longest-bed: mRNA longest annotation in bed12 <str>
     --repeat-bed: repeat bed used for filtering (eg.t/rRNA) <str>
+    --keep-tmp-fastq: keep temporary fastqs <bool>
     --skip-mapping: skip reads mapping step <bool>
     --skip-pooling: skip pooling step <bool>
     --skip-calling: skip m6A sites calling step <bool>"
@@ -45,7 +46,7 @@ then
   exit 2
 fi
 
-TEMP=`getopt -o hb:e:g:i:m:o:p:q:t: --long help,skip-mapping,skip-pooling,skip-calling \
+TEMP=`getopt -o hb:e:g:i:m:o:p:q:t: --long help,skip-mapping,skip-pooling,skip-calling,keep-tmp-fastq \
   --long input:,thread:,output:,exp-prefix:,pool-prefix:,index:,min-length:,dbkey: \
   --long longest-bed:,full-bed:,repeat-bed:,barcode-length:,fasta:,quality: \
   -- "$@"`
@@ -72,6 +73,7 @@ GENOME_SIZE=
 LONGEST_BED=
 FULL_BED=
 REPEAT_BED=
+KEEP_TMP_FASTQ=false
 SKIP_MAPPING=false
 SKIP_POOLING=false
 SKIP_CALLING=false
@@ -93,6 +95,7 @@ while true; do
     --index ) BWA_INDEX="$2"; shift 2 ;;
     --longest-bed ) LONGEST_BED="$2"; shift 2 ;;
     --repeat-bed ) REPEAT_BED="$2"; shift 2 ;;
+    --keep-tmp-fastq ) KEEP_TMP_FASTQ=true; shift ;;
     --skip-mapping ) SKIP_MAPPING=true; shift ;;
     --skip-pooling ) SKIP_POOLING=true; shift ;;
     --skip-calling ) SKIP_CALLING=true; shift ;;
@@ -140,7 +143,6 @@ CLUSTER_DIR="$OUTPUT_DIR/cluster"
 CIMS_DIR="$OUTPUT_DIR/CIMS"
 CITS_DIR="$OUTPUT_DIR/CITS"
 FINAL_DIR="$OUTPUT_DIR/final"
-POOL_PREFIX="HepG2_m6A_WT_IP"
 MAX_DIFF=3
 
 if [[ ! -d $OUTPUT_DIR ]]; then
@@ -205,31 +207,36 @@ else
   for i in $INPUT_DIR/${EXP_PREFIX}*.trim.fastq;
   do
     read -u9
-    ## Collapse exact duplicates
     {
       cd $FILT_DIR
       PREFIX=${i%%.fastq}
       PREFIX=${PREFIX##*/} # *.trim
       MAP_PREFIX=${i%%.trim.fastq}
       MAP_PREFIX=${MAP_PREFIX##*/}
+
+      ## Collapse exact duplicates
       fastq2collapse.pl $i - | gzip -c > ${PREFIX}.c.fastq.gz
       
-      ## Strip random barcode (UMI)
-      stripBarcode.pl -format fastq -len ${BARCODE_LEN} ${PREFIX}.c.fastq.gz - | \
-        gzip -c > ${PREFIX}.c.tag.fastq.gz
-      
-      zcat -f ${PREFIX}.c.tag.fastq.gz | awk '{if(NR%4==2) {print length($0)}}' | \
-        sort -n | uniq -c | awk '{print $2"\t"$1}' \
-        > ${PREFIX}.c.tag.seqlen.stat.txt
+      if (( $BARCODE_LEN > 0 )); then
+        ## Strip random barcode (UMI)
+        stripBarcode.pl -format fastq -len ${BARCODE_LEN} ${PREFIX}.c.fastq.gz - | \
+          gzip -c > ${PREFIX}.c.tag.fastq.gz
+        zcat -f ${PREFIX}.c.tag.fastq.gz | awk '{if(NR%4==2) {print length($0)}}' | \
+          sort -n | uniq -c | awk '{print $2"\t"$1}' \
+          > ${PREFIX}.c.tag.seqlen.stat.txt
+        input=${PREFIX}.c.tag.fastq.gz
+      else
+        input=${PREFIX}.c.fastq.gz
+      fi
       
       ## Read mapping & parsing
       cd $MAP_DIR
       
       ## Read $MAP_DIR
       bwa aln -t ${MAP_THREAD} -n ${MAX_DIFF} -q ${QUALITY} \
-        ${BWA_INDEX} $FILT_DIR/${PREFIX}.c.tag.fastq.gz \
+        ${BWA_INDEX} $FILT_DIR/${input} \
         > ${PREFIX}.sai 2> ${PREFIX}.bwa.log
-      bwa samse $BWA_INDEX ${PREFIX}.sai $FILT_DIR/${PREFIX}.c.tag.fastq.gz | \
+      bwa samse $BWA_INDEX ${PREFIX}.sai $FILT_DIR/${input} | \
         gzip -c > ${MAP_PREFIX}.sam.gz
       
       ## Parsing SAM file
@@ -242,10 +249,15 @@ else
         -r --keep-tag-name --keep-score -v ${MAP_PREFIX}.tag.bed \
         ${MAP_PREFIX}.tag.norRNA.bed > ${MAP_PREFIX}.tagoverlap.log 2>&1
       # Collapse PCR duplicates
-      tag2collapse.pl -big -v --random-barcode -EM 30 \
-        --seq-error-model alignment -weight --weight-in-name \
-        --keep-max-score --keep-tag-name ${MAP_PREFIX}.tag.norRNA.bed \
-        ${MAP_PREFIX}.tag.uniq.bed
+      if (( $BARCODE_LEN > 0 )); then
+        tag2collapse.pl -big -v --random-barcode -EM 30 \
+          --seq-error-model alignment -weight --weight-in-name \
+          --keep-max-score --keep-tag-name ${MAP_PREFIX}.tag.norRNA.bed \
+          ${MAP_PREFIX}.tag.uniq.bed
+      else
+        mv ${MAP_PREFIX}.tag.norRNA.bed ${MAP_PREFIX}.tag.uniq.bed
+      fi
+      
       awk '{print $3-$2}' ${MAP_PREFIX}.tag.uniq.bed | sort -n | uniq -c | \
         awk '{print $2"\t"$1}' > ${MAP_PREFIX}.tag.uniq.len.dist.txt
       
@@ -261,6 +273,14 @@ else
   exec 9>&-
   exec 9<&-
   ## parallel end
+  #delete tmp fastqs
+  if $KEEP_TMP_FASTQ; then
+    echo "Keep tmp fastqs."
+  else
+    echo "Deleting tmp fastqs..."
+    find $FILT_DIR -maxdepth 1 -type f -name "${EXP_PREFIX}*.fastq" | xargs -I {} rm -f {}
+    find $FILT_DIR -maxdepth 1 -type f -name "${EXP_PREFIX}*.fastq.gz" | xargs -I {} rm -f {}
+  fi
 fi
 
 ## Merging biological replicates
@@ -358,52 +378,51 @@ else
   getMutationType.pl -t del ${POOL_PREFIX}.pool.tag.uniq.mutation.txt ${POOL_PREFIX}.del.bed
   getMutationType.pl -t ins ${POOL_PREFIX}.pool.tag.uniq.mutation.txt ${POOL_PREFIX}.ins.bed
   getMutationType.pl -t sub ${POOL_PREFIX}.pool.tag.uniq.mutation.txt ${POOL_PREFIX}.sub.bed
-  
-  CIMS.pl -big -n 10 -p -outp ${POOL_PREFIX}.sub.posStat.txt \
-    -v ${POOL_PREFIX}.pool.tag.uniq.rgb.bed \
-    ${POOL_PREFIX}.sub.bed \
-    ${POOL_PREFIX}.sub.CIMS.txt \
-    > ${POOL_PREFIX}.sub.CIMS.log 2>&1
-fi
-sort -k 9,9n -k 8,8nr -k 7,7n ${POOL_PREFIX}.sub.CIMS.txt | \
-  cut -f 1-6 > ${POOL_PREFIX}.sub.CIMS.bed
+  getMutationType.pl -t c2t ${POOL_PREFIX}.pool.tag.uniq.mutation.txt ${POOL_PREFIX}.c2t.bed
 
-## get C->T mutations
-ctk_C2T_mutation_filter.sh "${POOL_PREFIX}.sub.CIMS.bed" \
-  "${POOL_PREFIX}.pool.tag.uniq.mutation.txt" \
-  "${POOL_PREFIX}.sub.CIMS.CT.bed"
+  CIMS.pl -big -n 10 -p -outp ${POOL_PREFIX}.c2t.posStat.txt \
+    -v ${POOL_PREFIX}.pool.tag.uniq.rgb.bed \
+    ${POOL_PREFIX}.c2t.bed \
+    ${POOL_PREFIX}.c2t.CIMS.txt \
+    > ${POOL_PREFIX}.c2t.CIMS.log 2>&1
+fi
+
+awk 'BEGIN{FS="\t";OFS="\t";}{if(FNR==1){$5=$5"(m/k)"; print $0}else{$5=$8/$7;print $0}}' \
+  ${POOL_PREFIX}.c2t.CIMS.txt > ${POOL_PREFIX}.c2t.CIMS.mk.txt
+
+awk 'BEGIN{FS="\t";OFS="\t";}{if(FNR>1){print $1,$2,$3,$4,$5,$6,$7,$8,$9}}' \
+  ${POOL_PREFIX}.c2t.CIMS.mk.txt | sort -k 10,10nr -k 8,8nr -k 7,7n \
+  > ${POOL_PREFIX}.c2t.CIMS.bed
 
 ## get m6A sites with RRACH motif
-bedtools shift -i ${POOL_PREFIX}.sub.CIMS.CT.bed \
+bedtools shift -i ${POOL_PREFIX}.c2t.CIMS.bed \
   -g ${GENOME_SIZE} -m 1 -p -1 | \
   bedtools slop -i stdin -b 2 -g ${GENOME_SIZE} \
   > ${POOL_PREFIX}.temp.bed
 
 scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
   -fasta ${FASTA} -motif RRACH -tag 3 \
-  -output ${POOL_PREFIX}.sub.CIMS.CT.RRACH.bed
+  -output ${POOL_PREFIX}.c2t.CIMS.RRACH.bed
 
 rm ${POOL_PREFIX}.temp.bed
 
 ##significant: get CIMS
-awk '{if($9<=0.05) {print $0}}' ${POOL_PREFIX}.sub.CIMS.txt | \
-  sort -k 9,9n -k 8,8nr -k 7,7n > ${POOL_PREFIX}.sub.CIMS.sig.txt
-cut -f 1-6 ${POOL_PREFIX}.sub.CIMS.sig.txt > ${POOL_PREFIX}.sub.CIMS.sig.bed
+awk 'BEGIN{FS="\t";OFS="\t";}{if(FNR==1){print $0}else{if($9<=0.05) {print $0}}}' \
+  ${POOL_PREFIX}.c2t.CIMS.mk.txt > ${POOL_PREFIX}.c2t.CIMS.sig.txt
 
-##significant: get C->T mutations
-ctk_C2T_mutation_filter.sh "${POOL_PREFIX}.sub.CIMS.sig.bed" \
-  "${POOL_PREFIX}.pool.tag.uniq.mutation.txt" \
-  "${POOL_PREFIX}.sub.CIMS.sig.CT.bed"
+awk 'BEGIN{FS="\t";OFS="\t";}{if(FNR>1){print $1,$2,$3,$4,$5,$6,$7,$8,$9}}' \
+  ${POOL_PREFIX}.c2t.CIMS.sig.txt | sort -k 10,10nr -k 8,8nr -k 7,7n \
+  > ${POOL_PREFIX}.c2t.CIMS.sig.bed
 
 ##significant: get m6A sites with RRACH motif
-bedtools shift -i ${POOL_PREFIX}.sub.CIMS.sig.CT.bed \
+bedtools shift -i ${POOL_PREFIX}.c2t.CIMS.sig.bed \
   -g ${GENOME_SIZE} -m 1 -p -1 | \
   bedtools slop -i stdin -b 2 -g ${GENOME_SIZE} \
   > ${POOL_PREFIX}.temp.bed
 
 scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
   -fasta ${FASTA} -motif RRACH -tag 3 \
-  -output ${POOL_PREFIX}.sub.CIMS.sig.CT.RRACH.bed
+  -output ${POOL_PREFIX}.c2t.CIMS.sig.RRACH.bed
 
 rm ${POOL_PREFIX}.temp.bed
 
@@ -461,14 +480,14 @@ if [[ ! -d $FINAL_DIR  ]]; then
 fi
 cd $FINAL_DIR
 
-cp $CIMS_DIR/${POOL_PREFIX}.sub.CIMS.CT.RRACH.bed ./
-cp $CIMS_DIR/${POOL_PREFIX}.sub.CIMS.sig.CT.RRACH.bed ./
+cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.RRACH.bed ./
+cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.sig.RRACH.bed ./
 cp $CITS_DIR/${POOL_PREFIX}.CITS.RRACH.bed ./
 cp $CITS_DIR/${POOL_PREFIX}.CITS.sig.RRACH.bed ./
 
-cat ${POOL_PREFIX}.sub.CIMS.CT.RRACH.bed ${POOL_PREFIX}.CITS.RRACH.bed | \
+cat ${POOL_PREFIX}.c2t.CIMS.RRACH.bed ${POOL_PREFIX}.CITS.RRACH.bed | \
   sort -t $'\t' -k1,1 -k2,2n > ${POOL_PREFIX}.combine.RRACH.bed
-cat ${POOL_PREFIX}.sub.CIMS.sig.CT.RRACH.bed ${POOL_PREFIX}.CITS.sig.RRACH.bed | \
+cat ${POOL_PREFIX}.c2t.CIMS.sig.RRACH.bed ${POOL_PREFIX}.CITS.sig.RRACH.bed | \
   sort -t $'\t' -k1,1 -k2,2n > ${POOL_PREFIX}.combine.sig.RRACH.bed
 
 if [ ! -z $LONGEST_BED ]; then
