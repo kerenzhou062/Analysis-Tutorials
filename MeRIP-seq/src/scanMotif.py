@@ -26,6 +26,8 @@ parser.add_argument('-motif', action='store', type=str, required=True,
                     help='Motif for scan (eg. RRACH)')
 parser.add_argument('-output', action='store', type=str, required=True,
                     help='the outut result')
+parser.add_argument('-keep', action='store_true',
+                    default=False, help='keep duplicate output records')
 parser.add_argument('-tag', action='store', type=int, required=True,
                     help='tagged position in motif \
                     (eg. 3 for tagging A in RRACH)')
@@ -141,6 +143,7 @@ getfastaCommand = 'bedtools getfasta -fi {fasta} \
 bedFasta = bytes.decode(subprocess.check_output(
     getfastaCommand, shell=True)).split('\n')
 
+recordDict = defaultdict(dict)
 with open(args.output, 'w') as out:
     row = ['#chrom', 'tagStart', 'tagEnd', 'motif-id', '1-based position',
            'strand', 'motifChrom', 'motifStart', 'motifEnd', 'motifSeq',
@@ -177,6 +180,13 @@ with open(args.output, 'w') as out:
                 else:
                     tagStart = motifStart + motifLength - args.tag
                 tagEnd = tagStart + 1
+                ## record coordinates
+                record = '\t'.join([chrom, str(tagStart), str(tagEnd), strand])
+                if record not in recordDict:
+                    recordDict[record] = 1
+                else:
+                    if args.keep is False:
+                        continue
                 tagName = '|'.join(
                     [name, chrom, start, end, strand, str(i + 1)])
                 row = [chrom, tagStart, tagEnd, tagName, tagEnd,
