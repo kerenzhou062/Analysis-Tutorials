@@ -28,6 +28,7 @@ function showHelp {
     --gtf: genome annotation gtf <str>
     --full-bed: all transcripts annotation in bed12 <str>
     --longest-bed: mRNA longest annotation in bed12 <str>
+    --max-mismatch: --outFilterMismatchNoverLmax in STAR <float>
     --repeat-bed: repeat bed used for filtering (eg.t/rRNA) <str>
     --skip-mapping: skip reads mapping step <bool>
     --skip-calling: skip m6A sites calling step <bool>
@@ -70,6 +71,7 @@ GENOME_SIZE=
 LONGEST_BED=
 FULL_BED=
 REPEAT_BED=
+MAX_MISMATCH=0.1
 BOWTIE_FLAG=false
 PCR_FLAG=false
 KEEP_TMP_FASTQ=false
@@ -91,6 +93,7 @@ while true; do
     --full-bed ) FULL_BED="$2"; shift 2 ;;
     --index ) GENOME_INDEX="$2"; shift 2 ;;
     --longest-bed ) LONGEST_BED="$2"; shift 2 ;;
+    --max-mismatch ) MAX_MISMATCH="$2"; shift 2 ;;
     --repeat-bed ) REPEAT_BED="$2"; shift 2 ;;
     --keep-tmp-fastq ) KEEP_TMP_FASTQ=true; shift ;;
     --skip-mapping ) SKIP_MAPPING=true; shift ;;
@@ -254,7 +257,7 @@ else
           --outFilterType Normal --outFilterMultimapScoreRange 0 \
           --outFilterMultimapNmax 20 --alignSJoverhangMin 8 \
           --alignSJDBoverhangMin 1 --outFilterMismatchNmax 999 \
-          --outFilterMismatchNoverLmax 0.1  --outFilterScoreMin 0 \
+          --outFilterMismatchNoverLmax ${MAX_MISMATCH}  --outFilterScoreMin 0 \
           --outFilterScoreMinOverLread 0 --outFilterMatchNmin 15  \
           --outFilterMatchNminOverLread 0 --alignIntronMin 1 --alignIntronMax 1 \
           --alignMatesGapMax 1500  --seedSearchStartLmax 15 \
@@ -276,15 +279,14 @@ else
         if $PCR_FLAG; then
           echo "${MAP_PREFIX}: Activate --PCR! PCR duplicates removing..."
           ## remove PCR duplicates
-          fastq2collapse.pl $i - | gzip -c > ${PREFIX}.c.fastq
+          fastq2collapse.pl $i ${PREFIX}.c.fastq
           input=${PREFIX}.c.fastq
         else
           input=$i
         fi
         if (( $BARCODE_LEN > 0 )); then
           ## strip barcode
-          stripBarcode.pl -format fastq -len ${BARCODE_LEN} ${input} - | \
-            gzip -c > ${PREFIX}.bc.fastq
+          stripBarcode.pl -format fastq -len ${BARCODE_LEN} ${input} ${PREFIX}.bc.fastq
           input=${PREFIX}.bc.fastq
         fi
         ## bowtie alignment
@@ -400,6 +402,7 @@ do
       }else{
         arrayA[key] = $4
         arrayB[key] = int($5)
+        arrayB[key] = $9
       }
     }
     END{
@@ -407,7 +410,7 @@ do
         split(key,splitArr,":");
         pos = splitArr[1];
         strand = splitArr[2];
-        print pos, arrayA[key], arrayB[key], strand;
+        print pos, arrayA[key], arrayB[key], strand, $9;
       }
     }' | sort -k1,1 -k2,2n > ${i}.m6ASite.combine.bed
 done

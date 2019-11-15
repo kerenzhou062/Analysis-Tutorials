@@ -27,10 +27,13 @@ function showHelp {
     -p | --pool-prefix: pooled experiment prefix <str>
     -q | --quality: quality cutoff of mapped reads to parse (parseAlignment) <str>
     -t | --thread: # of cpus <int>
+    --mfreq: # of mutation tags (defined enriched sites) <int>
+    --mkr: m/k ratio for enriched mutation sites <str>
     --dbkey: CTK dbkey (hg38|hg19|mm10) <str>
     --full-bed: all transcripts annotation in bed12 <str>
     --index: genome index <str>
     --longest-bed: mRNA longest annotation in bed12 <str>
+    --motif: MOTIF sequence used to search (RRACH) <str>
     --repeat-bed: repeat bed used for filtering (eg.t/rRNA) <str>
     --keep-tmp-fastq: keep temporary fastqs <bool>
     --skip-mapping: skip reads mapping step <bool>
@@ -48,7 +51,7 @@ fi
 
 TEMP=`getopt -o hb:e:g:i:m:o:p:q:t: --long help,skip-mapping,skip-pooling,skip-calling,keep-tmp-fastq \
   --long input:,thread:,output:,exp-prefix:,pool-prefix:,index:,min-length:,dbkey: \
-  --long longest-bed:,full-bed:,repeat-bed:,barcode-length:,fasta:,quality: \
+  --long longest-bed:,full-bed:,repeat-bed:,barcode-length:,fasta:,quality:,mkr:,motif: \
   -- "$@"`
 
 
@@ -73,6 +76,9 @@ GENOME_SIZE=
 LONGEST_BED=
 FULL_BED=
 REPEAT_BED=
+MUTATE_FREQ=1
+MKR_RATIO=0.5
+MOTIF="RRACH"
 KEEP_TMP_FASTQ=false
 SKIP_MAPPING=false
 SKIP_POOLING=false
@@ -90,10 +96,13 @@ while true; do
     -p | --pool-prefix ) POOL_PREFIX="$2"; shift 2 ;;
     -q | --quality ) QUALITY="$2"; shift 2 ;;
     -t | --thread ) THREAD="$2"; shift 2 ;;
+    --mfreq ) MUTATE_FREQ="$2"; shift 2 ;;
+    --mkr ) MKR_RATIO="$2"; shift 2 ;;
     --dbkey ) DB_KEY="$2"; shift 2 ;;
     --full-bed ) FULL_BED="$2"; shift 2 ;;
     --index ) BWA_INDEX="$2"; shift 2 ;;
     --longest-bed ) LONGEST_BED="$2"; shift 2 ;;
+    --motif ) MOTIF="$2"; shift 2 ;;
     --repeat-bed ) REPEAT_BED="$2"; shift 2 ;;
     --keep-tmp-fastq ) KEEP_TMP_FASTQ=true; shift ;;
     --skip-mapping ) SKIP_MAPPING=true; shift ;;
@@ -144,17 +153,18 @@ CIMS_DIR="$OUTPUT_DIR/CIMS"
 CITS_DIR="$OUTPUT_DIR/CITS"
 FINAL_DIR="$OUTPUT_DIR/final"
 MAX_DIFF=3
+SLOP_B=$((${#MOTIF}/2))
 
 if [[ ! -d $OUTPUT_DIR ]]; then
   mkdir -p $OUTPUT_DIR
 fi
 
 if [[ ! -d $FILT_DIR  ]]; then
-    mkdir -p $FILT_DIR
+  mkdir -p $FILT_DIR
 fi
 
 if [[ ! -d $MAP_DIR  ]]; then
-    mkdir -p $MAP_DIR
+  mkdir -p $MAP_DIR
 fi
 
 if $SKIP_MAPPING; then
@@ -318,7 +328,7 @@ fi
 
 # Peak calling, cluster
 if [[ ! -d $CLUSTER_DIR  ]]; then
-    mkdir $CLUSTER_DIR
+  mkdir $CLUSTER_DIR
 fi
 
 cd $CLUSTER_DIR
@@ -344,7 +354,7 @@ else
   ### scan RRACH motif
   scanMotif.py -input ${PEAK_PREFIX}.bed -format bed6 \
     -fasta ${FASTA} -motif RRACH -tag 3 \
-    -output ${PEAK_PREFIX}.RRACH.bed
+    -output ${PEAK_PREFIX}.${MOTIF}.bed
   
   ## Mode 2: Peak calling with statistical significance
   PEAK_PREFIX="${POOL_PREFIX}.peak.sig"
@@ -358,12 +368,12 @@ else
   ### scan RRACH motif
   scanMotif.py -input ${PEAK_PREFIX}.bed -format bed6 \
     -fasta ${FASTA} -motif RRACH -tag 3 \
-    -output ${PEAK_PREFIX}.RRACH.bed
+    -output ${PEAK_PREFIX}.${MOTIF}.bed
 fi
 
 # CIMS calling
 if [[ ! -d $CIMS_DIR  ]]; then
-    mkdir $CIMS_DIR
+  mkdir $CIMS_DIR
 fi
 cd $CIMS_DIR
 ln -sf $MAP_DIR/${POOL_PREFIX}.pool.tag.uniq.rgb.bed $CIMS_DIR
@@ -387,48 +397,43 @@ else
     > ${POOL_PREFIX}.c2t.CIMS.log 2>&1
 fi
 
+## calculating m/k ratio: mutationFreq(m)/tagNumber(k)
 awk 'BEGIN{FS="\t";OFS="\t";}{if(FNR==1){$5=$5"(m/k)"; print $0}else{$5=$8/$7;print $0}}' \
   ${POOL_PREFIX}.c2t.CIMS.txt > ${POOL_PREFIX}.c2t.CIMS.mk.txt
 
 awk 'BEGIN{FS="\t";OFS="\t";}{if(FNR>1){print $1,$2,$3,$4,$5,$6,$7,$8,$9}}' \
-  ${POOL_PREFIX}.c2t.CIMS.mk.txt | sort -k 10,10nr -k 8,8nr -k 7,7n \
+  ${POOL_PREFIX}.c2t.CIMS.mk.txt | sort -k 5,5nr -k 8,8nr -k 7,7n \
   > ${POOL_PREFIX}.c2t.CIMS.bed
 
-## get m6A sites with RRACH motif
-bedtools shift -i ${POOL_PREFIX}.c2t.CIMS.bed \
-  -g ${GENOME_SIZE} -m 1 -p -1 | \
-  bedtools slop -i stdin -b 2 -g ${GENOME_SIZE} \
-  > ${POOL_PREFIX}.temp.bed
-
-scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
-  -fasta ${FASTA} -motif RRACH -tag 3 \
-  -output ${POOL_PREFIX}.c2t.CIMS.RRACH.bed
-
-rm ${POOL_PREFIX}.temp.bed
+##enriched: get CIMS, m/k>=0.5
+awk -v mkr="${MKR_RATIO}" -v mfreq=${MUTATE_FREQ} \
+  'BEGIN{FS="\t";OFS="\t";}{if(FNR==1){print $0}else{if($5>=mkr && $8>=mfreq) {print $0}}}' \
+  ${POOL_PREFIX}.c2t.CIMS.mk.txt > ${POOL_PREFIX}.c2t.CIMS.enrich.bed
 
 ##significant: get CIMS
 awk 'BEGIN{FS="\t";OFS="\t";}{if(FNR==1){print $0}else{if($9<=0.05) {print $0}}}' \
   ${POOL_PREFIX}.c2t.CIMS.mk.txt > ${POOL_PREFIX}.c2t.CIMS.sig.txt
 
 awk 'BEGIN{FS="\t";OFS="\t";}{if(FNR>1){print $1,$2,$3,$4,$5,$6,$7,$8,$9}}' \
-  ${POOL_PREFIX}.c2t.CIMS.sig.txt | sort -k 10,10nr -k 8,8nr -k 7,7n \
+  ${POOL_PREFIX}.c2t.CIMS.sig.txt | sort -k 5,5nr -k 8,8nr -k 7,7n \
   > ${POOL_PREFIX}.c2t.CIMS.sig.bed
 
-##significant: get m6A sites with RRACH motif
-bedtools shift -i ${POOL_PREFIX}.c2t.CIMS.sig.bed \
-  -g ${GENOME_SIZE} -m 1 -p -1 | \
-  bedtools slop -i stdin -b 2 -g ${GENOME_SIZE} \
-  > ${POOL_PREFIX}.temp.bed
-
-scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
-  -fasta ${FASTA} -motif RRACH -tag 3 \
-  -output ${POOL_PREFIX}.c2t.CIMS.sig.RRACH.bed
+##get m6A sites with ${MOTIF} motif
+for i in `find ./ -type f -name "${POOL_PREFIX}*.bed" | grep "CIMS" | grep -v "${MOTIF}"`;
+do
+  prefix=${i%%.bed}
+  sort -t $'\t' -k1,1n -k2,2n ${i} | bedtools shift -i stdin -g ${GENOME_SIZE} -p -1 -m 1 | \
+    bedtools slop -i stdin -b $SLOP_B -s -g ${GENOME_SIZE} > ${POOL_PREFIX}.temp.bed
+  scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
+    -fasta ${FASTA} -motif ${MOTIF} -tag 3 \
+    -output ${prefix}.${MOTIF}.bed
+done
 
 rm ${POOL_PREFIX}.temp.bed
 
 # CITS calling
 if [[ ! -d $CITS_DIR  ]]; then
-    mkdir $CITS_DIR
+  mkdir $CITS_DIR
 fi
 cd $CITS_DIR
 
@@ -453,42 +458,35 @@ else
     > ${POOL_PREFIX}.CITS.sig.log 2>&1
 fi
 
-bedtools shift -i ${POOL_PREFIX}.CITS.bed \
-  -g ${GENOME_SIZE} -m 1 -p -1 | \
-  bedtools slop -i stdin -b 2 -g ${GENOME_SIZE} \
-  > ${POOL_PREFIX}.temp.bed
-
-scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
-  -fasta ${FASTA} -motif RRACH -tag 3 \
-  -output ${POOL_PREFIX}.CITS.RRACH.bed
-
-## get m6A sites with RRACH motif
-bedtools shift -i ${POOL_PREFIX}.CITS.sig.bed \
-  -g ${GENOME_SIZE} -m 1 -p -1 | \
-  bedtools slop -i stdin -b 2 -g ${GENOME_SIZE} \
-  > ${POOL_PREFIX}.temp.bed
-
-scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
-  -fasta ${FASTA} -motif RRACH -tag 3 \
-  -output ${POOL_PREFIX}.CITS.sig.RRACH.bed
+##get m6A sites with ${MOTIF} motif
+for i in `find ./ -type f -name "${POOL_PREFIX}*.bed" | grep "CITS" | grep -v "${MOTIF}"`;
+do
+  prefix=${i%%.bed}
+  sort -t $'\t' -k1,1n -k2,2n ${i} | bedtools shift -i stdin -g ${GENOME_SIZE} -p -1 -m 1 | \
+    bedtools slop -i stdin -b $SLOP_B -s -g ${GENOME_SIZE} > ${POOL_PREFIX}.temp.bed
+  scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
+    -fasta ${FASTA} -motif ${MOTIF} -tag 3 \
+    -output ${prefix}.${MOTIF}.bed
+done
 
 rm ${POOL_PREFIX}.temp.bed
 
 # generating the final results
 if [[ ! -d $FINAL_DIR  ]]; then
-    mkdir $FINAL_DIR
+  mkdir $FINAL_DIR
 fi
 cd $FINAL_DIR
 
-cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.RRACH.bed ./
-cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.sig.RRACH.bed ./
-cp $CITS_DIR/${POOL_PREFIX}.CITS.RRACH.bed ./
-cp $CITS_DIR/${POOL_PREFIX}.CITS.sig.RRACH.bed ./
+cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.${MOTIF}.bed ./
+cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.enrich.${MOTIF}.bed ./
+cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.sig.${MOTIF}.bed ./
+cp $CITS_DIR/${POOL_PREFIX}.CITS.${MOTIF}.bed ./
+cp $CITS_DIR/${POOL_PREFIX}.CITS.sig.${MOTIF}.bed ./
 
-cat ${POOL_PREFIX}.c2t.CIMS.RRACH.bed ${POOL_PREFIX}.CITS.RRACH.bed | \
-  sort -t $'\t' -k1,1 -k2,2n > ${POOL_PREFIX}.combine.RRACH.bed
-cat ${POOL_PREFIX}.c2t.CIMS.sig.RRACH.bed ${POOL_PREFIX}.CITS.sig.RRACH.bed | \
-  sort -t $'\t' -k1,1 -k2,2n > ${POOL_PREFIX}.combine.sig.RRACH.bed
+cat ${POOL_PREFIX}.c2t.CIMS.${MOTIF}.bed ${POOL_PREFIX}.CITS.${MOTIF}.bed | \
+  sort -t $'\t' -k1,1 -k2,2n > ${POOL_PREFIX}.combine.${MOTIF}.bed
+cat ${POOL_PREFIX}.c2t.CIMS.sig.${MOTIF}.bed ${POOL_PREFIX}.CITS.sig.${MOTIF}.bed | \
+  sort -t $'\t' -k1,1 -k2,2n > ${POOL_PREFIX}.combine.sig.${MOTIF}.bed
 
 if [ ! -z $LONGEST_BED ]; then
   for i in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
