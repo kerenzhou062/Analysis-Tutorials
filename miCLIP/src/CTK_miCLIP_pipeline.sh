@@ -34,6 +34,7 @@ function showHelp {
     --index: genome index <str>
     --longest-bed: mRNA longest annotation in bed12 <str>
     --motif: MOTIF sequence used to search (RRACH) <str>
+    --mtag: -tag parameter in scanMotif.py <str>
     --repeat-bed: repeat bed used for filtering (eg.t/rRNA) <str>
     --keep-tmp-fastq: keep temporary fastqs <bool>
     --skip-mapping: skip reads mapping step <bool>
@@ -51,7 +52,7 @@ fi
 
 TEMP=`getopt -o hb:e:g:i:m:o:p:q:t: --long help,skip-mapping,skip-pooling,skip-calling,keep-tmp-fastq \
   --long input:,thread:,output:,exp-prefix:,pool-prefix:,index:,min-length:,dbkey: \
-  --long longest-bed:,full-bed:,repeat-bed:,barcode-length:,fasta:,quality:,mkr:,motif: \
+  --long longest-bed:,full-bed:,repeat-bed:,barcode-length:,fasta:,quality:,mkr:,motif:,mtag: \
   -- "$@"`
 
 
@@ -79,6 +80,7 @@ REPEAT_BED=
 MUTATE_FREQ=1
 MKR_RATIO=0.5
 MOTIF="RRACH"
+MOTIF_TAG=3
 KEEP_TMP_FASTQ=false
 SKIP_MAPPING=false
 SKIP_POOLING=false
@@ -103,6 +105,7 @@ while true; do
     --index ) BWA_INDEX="$2"; shift 2 ;;
     --longest-bed ) LONGEST_BED="$2"; shift 2 ;;
     --motif ) MOTIF="$2"; shift 2 ;;
+    --mtag ) MOTIF_TAG="$2"; shift 2 ;;
     --repeat-bed ) REPEAT_BED="$2"; shift 2 ;;
     --keep-tmp-fastq ) KEEP_TMP_FASTQ=true; shift ;;
     --skip-mapping ) SKIP_MAPPING=true; shift ;;
@@ -121,7 +124,7 @@ if [ -z $INPUT_DIR ]; then
 fi
 
 if [ -z $OUTPUT_DIR ]; then
-  echo "-o|--output: Wrong! Ouput directory NOT found!"
+  echo "-o|--output: Wrong! Output directory NOT found!"
   exit 2
 fi
 
@@ -353,7 +356,7 @@ else
     > ${PEAK_PREFIX}.annot.log 2>&1
   ### scan RRACH motif
   scanMotif.py -input ${PEAK_PREFIX}.bed -format bed6 \
-    -fasta ${FASTA} -motif RRACH -tag 3 \
+    -fasta ${FASTA} -motif RRACH -tag ${MOTIF_TAG} \
     -output ${PEAK_PREFIX}.${MOTIF}.bed
   
   ## Mode 2: Peak calling with statistical significance
@@ -367,7 +370,7 @@ else
   
   ### scan RRACH motif
   scanMotif.py -input ${PEAK_PREFIX}.bed -format bed6 \
-    -fasta ${FASTA} -motif RRACH -tag 3 \
+    -fasta ${FASTA} -motif RRACH -tag ${MOTIF_TAG} \
     -output ${PEAK_PREFIX}.${MOTIF}.bed
 fi
 
@@ -425,7 +428,7 @@ do
   sort -t $'\t' -k1,1n -k2,2n ${i} | bedtools shift -i stdin -g ${GENOME_SIZE} -p -1 -m 1 | \
     bedtools slop -i stdin -b $SLOP_B -s -g ${GENOME_SIZE} > ${POOL_PREFIX}.temp.bed
   scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
-    -fasta ${FASTA} -motif ${MOTIF} -tag 3 \
+    -fasta ${FASTA} -motif ${MOTIF} -tag ${MOTIF_TAG} \
     -output ${prefix}.${MOTIF}.bed
 done
 
@@ -465,7 +468,7 @@ do
   sort -t $'\t' -k1,1n -k2,2n ${i} | bedtools shift -i stdin -g ${GENOME_SIZE} -p -1 -m 1 | \
     bedtools slop -i stdin -b $SLOP_B -s -g ${GENOME_SIZE} > ${POOL_PREFIX}.temp.bed
   scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
-    -fasta ${FASTA} -motif ${MOTIF} -tag 3 \
+    -fasta ${FASTA} -motif ${MOTIF} -tag ${MOTIF_TAG} \
     -output ${prefix}.${MOTIF}.bed
 done
 

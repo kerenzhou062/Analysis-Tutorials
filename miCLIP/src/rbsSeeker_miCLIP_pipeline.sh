@@ -14,7 +14,7 @@
 
 function showHelp {
   echo -ne "usage: sbatch rbsSeeker_miCLIP_pipeline.sh -n <thread_num> -o <log> --mem <200G> "
-  echo -ne "rbsSeeker_pipeline.sh <options>\n"
+  echo -ne "rbsSeeker_miCLIP_pipeline.sh <options>\n"
   echo -e "options:
     -h | --help: show help infomation <bool>
     -b | --barcode-length: barcode length <int>
@@ -115,7 +115,7 @@ if [ -z $INPUT_DIR ]; then
 fi
 
 if [ -z $OUTPUT_DIR ]; then
-  echo "-o|--output: Wrong! Ouput directory NOT found!"
+  echo "-o|--output: Wrong! Output directory NOT found!"
   exit 2
 fi
 
