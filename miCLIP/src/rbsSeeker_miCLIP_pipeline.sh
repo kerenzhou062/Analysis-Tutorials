@@ -140,11 +140,34 @@ if [ -z $STAR_INDEX ]; then
   fi
 fi
 
+echo "Running pipleline with following parameters:"
+echo "THREAD=$THREAD"
+echo "BARCODE_LEN=$BARCODE_LEN"
+echo "OUTPUT_DIR=$OUTPUT_DIR"
+echo "INPUT_DIR=$INPUT_DIR"
+echo "EXP_PREFIX=$EXP_PREFIX"
+echo "POOL_PREFIX=$POOL_PREFIX"
+echo "GENOME_INDEX=$GENOME_INDEX"
+echo "FASTA=$FASTA"
+echo "GTF=$GTF"
+echo "GENOME_SIZE=$GENOME_SIZE"
+echo "LONGEST_BED=$LONGEST_BED"
+echo "FULL_BED=$FULL_BED"
+echo "REPEAT_BED=$REPEAT_BED"
+echo "MAX_MISMATCH=$MAX_MISMATCH"
+echo "BOWTIE_FLAG=$BOWTIE_FLAG"
+echo "PCR_FLAG=$PCR_FLAG"
+echo "KEEP_TMP_FASTQ=$KEEP_TMP_FASTQ"
+echo "STAR_FLAG=$STAR_FLAG"
+echo "SKIP_MAPPING=$SKIP_MAPPING"
+echo "SKIP_CALLING=$SKIP_CALLING"
+echo ""
+
 # basic variables
 MAP_DIR="$OUTPUT_DIR/mapping"
 FASTQC_DIR="$OUTPUT_DIR/mapping/fastQC"
 RESULT_DIR="$OUTPUT_DIR/result"
-FILT_DIR="$OUTPUT_DIR/filter"
+FINAL_DIR="$OUTPUT_DIR/final"
 
 REP_NUM=`find $INPUT_DIR -type f -name "${EXP_PREFIX}*.trim.fastq" | wc -l`
 MAP_THREAD=$((THREAD / REP_NUM))
@@ -321,7 +344,7 @@ else
   ### pooling reads
   echo "Polling reads..."
   DUPLRM_BAMS=""
-  for i in `find ./ -maxdepth 1 -type f -name "*.aligned.bam" | sort`;
+  for i in `find ./ -maxdepth 1 -type f -name "${EXP_PREFIX}*.aligned.bam" | sort`;
   do
     DUPLRM_BAMS=`echo "${DUPLRM_BAMS}"" ""${i}"`
   done
@@ -364,10 +387,10 @@ else
 fi
 
 ## Pooling CT and Truncation m6A sites
-if [[ ! -d $FILT_DIR  ]]; then
-  mkdir -p $FILT_DIR
+if [[ ! -d $FINAL_DIR  ]]; then
+  mkdir -p $FINAL_DIR
 fi
-cd $FILT_DIR
+cd $FINAL_DIR
 ### link CT and Truncation beds
 ln -sf ${RESULT_DIR}/${POOL_PREFIX}_rbsSeeker_CT.bed ./
 ln -sf ${RESULT_DIR}/${POOL_PREFIX}_rbsSeeker_Truncation.bed ./
@@ -417,14 +440,21 @@ done
 
 echo "Pooling CT and Truncation m6A sites done."
 
+## annotate beds
+echo "Annotating beds..."
 if [ ! -z $LONGEST_BED ]; then
   for i in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
   do
+    temp="${POOL_PREFIX}.tmp"
+    cut -f 1-6 $i > $temp
     PREFIX=${i%%.bed}
-    bedBinDistribution.pl -input $i -bed12 $LONGEST_BED \
-      -o ${PREFIX}.percentage.bin
-    bedBinDistribution.pl -input $i -bed12 $LONGEST_BED \
+    bedBinDistribution.pl -input $temp -bed12 $LONGEST_BED \
       --type count -o ${PREFIX}.count.bin
+    bedBinDistribution.pl -input $temp -bed12 $LONGEST_BED \
+      -o ${PREFIX}.percentage.bin
+    paste ${PREFIX}.count.bin ${PREFIX}.percentage.bin | cut -f 1,2,3,6 > ${PREFIX}.bin
+    sed -i '1i region\tbin\tCount\tPercentage' ${PREFIX}.bin
+    rm -f ${PREFIX}.count.bin ${PREFIX}.percentage.bin
   done
 fi
 
@@ -433,17 +463,21 @@ if [ ! -z $FULL_BED ]; then
   cat $FULL_BED | awk '/protein_coding.+protein_coding\t/' > mRNA.annotation.bed12.tmp
   for i in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
   do
+    temp="${POOL_PREFIX}.tmp"
+    cut -f 1-6 $i > $temp
     PREFIX=${i%%.bed}
     ### gene type
-    geneDistribution.pl -strand --input $i \
+    geneDistribution.pl -strand --input $temp \
       -bed12 $FULL_BED -o ${PREFIX}.gene
     sed -i '1i geneType\tpeakNumber' ${PREFIX}.gene
     ### gene region
     regionDistribution.pl -strand -size 200 -f '5utr,cds,stopCodon,3utr' \
-      --input $i \
+      --input $temp \
       -bed12 mRNA.annotation.bed12.tmp -o ${PREFIX}.region
     sed -i '1i region\tpeakNumber\tenrichment' ${PREFIX}.region
   done
   rm -f mRNA.annotation.bed12.tmp
 fi
 rm -f *.tmp
+
+echo "beds annotation done."

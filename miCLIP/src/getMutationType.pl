@@ -15,11 +15,14 @@ my $cmdDir=dirname($0);
 my $selectType = "";
 my $t2c = 0;
 my $c2t = 0;
-
+my $nfrom;
+my $nto;
 my $summaryFile = "";
 my $verbose = 0;
 
 GetOptions ('t|mutationType=s'=>\$selectType,
+            'nfrom:s'=>\$nfrom,
+            'nto:s'=>\$nto,
 			'summary:s'=>\$summaryFile,
 			'v'=>\$verbose);
 
@@ -29,11 +32,12 @@ if (@ARGV != 2)
 	print "Get specific types of mutations\n";
 	print "usage: $prog [options] <tag.mutation.txt> <tag.mutation.type.bed>\n";
 	print " -t [string]        : the type of mutations (del|ins|sub|t2c|c2t)\n";
+    print " --nfrom [nucleotide]   : mutated nucleotide (a|t|c|g)\n";
+    print " --nto [nucleotide]   : converted nucleotide (a|t|c|g)\n";
 	print " --summary  [string]: print summary statistics to file\n";
 	print " -v                 : verbose\n";
 	exit (1);
 }
-
 
 my ($mutationFile, $outBedFile) = @ARGV;
 my %summaryHash;
@@ -56,6 +60,13 @@ if ($selectType eq 'c2t')
     $selectType = 'sub';
 }
 
+if (defined($nfrom) && defined($nto))
+{
+    if ($nfrom =~ m[ATCG] && $nto =~ m[ATCG]) {
+        $nfrom = uc ($nfrom);
+        $nto = uc ($nto);
+    }
+}
 my ($fin, $fout);
 
 open ($fin, "<$mutationFile") || Carp::croak "cannot open $mutationFile to read\n";
@@ -102,10 +113,14 @@ while (my $line = <$fin>)
 			if ($t2c == 1)
 			{
 				next unless $from eq 'T' && $to eq 'C';
-			}
-            if ($c2t == 1)
+			}elsif ($c2t == 1)
             {
                 next unless $from eq 'C' && $to eq 'T';
+            }elsif (defined($nfrom) && defined($nto))
+            {
+                if ($nfrom =~ m[ATCG] && $nto =~ m[ATCG]) {
+                    next unless $from eq $nfrom && $to eq $nto;
+                }
             }
 			print $fout join ("\t", @cols[0..5]), "\n";
 		}
