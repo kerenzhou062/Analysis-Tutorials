@@ -431,7 +431,7 @@ if [[ -z $MOTIF ]]; then
       if(($3-$2)<span){
         $2 = int(($3+$2)/2);
         $3 = start + 1;
-        print $0;
+        print $1,$2,$3,$4,$5,$6;
       }
     }' $i | bedtools slop -i ${i} -l ${UPSTREAM} \
       -r ${DOWNSTREAM} -s -g ${GENOME_SIZE} > $i.extend.tmp

@@ -91,8 +91,8 @@ CE_COUNT=1
 R_COUNT=1
 N_FROM="T"
 N_TO="C"
-MOTIF="RRACH"
-MOTIF_TAG=3
+MOTIF=
+MOTIF_TAG=
 DOWNSTREAM=10
 UPSTREAM=10
 BOWTIE_FLAG=false
@@ -223,6 +223,7 @@ MAP_DIR="$OUTPUT_DIR/mapping"
 FASTQC_DIR="$OUTPUT_DIR/mapping/fastQC"
 RESULT_DIR="$OUTPUT_DIR/cluster"
 FINAL_DIR="$OUTPUT_DIR/final"
+SPAN_WIDTH="$(($UPSTREAM+$DOWNSTREAM))"
 
 REP_NUM=`find $INPUT_DIR -type f -name "${EXP_PREFIX}*.trim.fastq" | wc -l`
 MAP_THREAD=$((THREAD / REP_NUM))
@@ -538,14 +539,14 @@ awk -v clc="$CL_COUNT" -v cec="$CE_COUNT" -v rc="$R_COUNT" \
     if(FNR>1 && $13=="NA") {
       if ( $10>=clc && $11>=cec && $7>=rc ) {
         $3=$3-1; if($3<0){$3=0};
-        print $1,$3,$4,$5,$7,$2,$6,$8,$9,$10,$11,$12;
+        print $1,$3,$4,$5,$7,$2,$6,$8,$9,$11,$12;
       }
     }
   }else{
     if (FNR>1) {
       if ( $10>=clc && $11>=cec && $7>=rc ) {
         $3=$3-1; if($3<0){$3=0};
-        print $1,$3,$4,$5,$7,$2,$6,$8,$9,$10,$11,$12;
+        print $1,$3,$4,$5,$7,$2,$8,$9,$10,$11,$12;
       }
     }
   }
@@ -559,14 +560,14 @@ awk -v clc="$CL_COUNT" -v cec="$CE_COUNT" -v rc="$R_COUNT" \
     if(FNR>1 && $13=="NA") {
       if ( $8>=clc && $9>=cec && $7>=rc ) {
         $3=$3-1; if($3<0){$3=0};
-        print $1,$3,$4,$5,$7,$2,$6,$8,$9;
+        print $1,$3,$4,$5,$7,$2,$8,$9;
       }
     }
   }else{
     if (FNR>1) {
       if ( $8>=clc && $9>=cec && $7>=rc ) {
         $3=$3-1; if($3<0){$3=0};
-        print $1,$3,$4,$5,$7,$2,$6,$8,$9;
+        print $1,$3,$4,$5,$7,$2,$8,$9;
       }
     }
   }
@@ -575,7 +576,7 @@ awk -v clc="$CL_COUNT" -v cec="$CE_COUNT" -v rc="$R_COUNT" \
 
 echo "csv conversion done."
 
-if [[ -z $MOTIF ]]; then
+if [ ! -z $MOTIF ]; then
   ## scan ${MOTIF} motif in peaks
   echo "Scanning ${MOTIF} motif in peaks..."
   peaks=( ${POOL_PREFIX}.cluster.bed ${POOL_PREFIX}.groups.bed)
@@ -589,12 +590,11 @@ if [[ -z $MOTIF ]]; then
       if(($3-$2)<span){
         $2 = int(($3+$2)/2);
         $3 = start + 1;
-        print $0;
+        print $1,$2,$3,$4,$5,$6;
       }
     }' $i | bedtools slop -i ${i} -l ${UPSTREAM} \
       -r ${DOWNSTREAM} -s -g ${GENOME_SIZE} > $i.extend.tmp
-    cat $i.keep.tmp $i.extend.tmp | sort -k1,1 -k2,2n \
-      > $i.tmp
+    cat $i.keep.tmp $i.extend.tmp | sort -k1,1 -k2,2n > $i.tmp
   
     scanMotif.py -input $i.tmp -format bed6 \
       -fasta ${FASTA} -motif ${MOTIF} -tag ${MOTIF_TAG} \
@@ -641,6 +641,8 @@ if [ ! -z $FULL_BED ]; then
   done
   rm -f mRNA.annotation.bed12.tmp
 fi
+
 rm -f *.tmp
+find ./ -type f | grep "temp" | xargs -I {} rm {}
 
 echo "beds annotation done."
