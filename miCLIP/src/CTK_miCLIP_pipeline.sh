@@ -16,7 +16,7 @@ function showHelp {
   echo -ne "usage: sbatch CTK_miCLIP_pipeline.sh -n <thread_num> -o <log> --mem <200G> "
   echo -ne "CTK_miCLIP_pipeline.sh <options>\n"
   echo -e "options:
-    -h | --help: show help infomation <bool>
+    -h | --help: show help information <bool>
     -b | --barcode-length: barcode length <int>
     -e | --exp-prefix: experiment prefix string <str>
     -f | --fasta: genome fasta file <str>
