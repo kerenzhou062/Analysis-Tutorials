@@ -17,7 +17,7 @@ function showHelp {
   echo -ne "usage: sbatch PARalyzer_PARCLIP_pipeline.sh -n <thread_num> -o <log> --mem <200G> "
   echo -ne "PARalyzer_PARCLIP_pipeline.sh <options>\n"
   echo -e "options:
-    -h | --help: show help infomation <bool>
+    -h | --help: show help information <bool>
     -b | --barcode-length: barcode length <int>
     -e | --exp-prefix: experiment prefix string <str>
     -f | --fasta: genome fasta file <str>
@@ -35,8 +35,8 @@ function showHelp {
     --CLcount: # of ConversionLocationCount (1) <int>
     --CEcount: # of ConversionEventCount (1) <int>
     --Rcount: # of ReadCount (1) <int>
-    --nfrom: modified ribonucleotide (a|t|c|g) (t) <str>
-    --nto: converted ribonucleotide (a|t|c|g) (c) <str>
+    --nfrom: modified ribonucleotide (A|T|C|T) (T) <str>
+    --nto: converted ribonucleotide (A|T|C|T) (C) <str>
     --repeat-bed: repeat bed used for filtering (eg.t/rRNA) <str>
     --downstream: search MOTIF at #bp downstream of transition site <str>
     --upstream: search MOTIF at #bp upstream of transition site <str>
@@ -89,8 +89,8 @@ MAX_MISMATCH=0.1
 CL_COUNT=1
 CE_COUNT=1
 R_COUNT=1
-N_FROM="t"
-N_TO="c"
+N_FROM="T"
+N_TO="C"
 MOTIF="RRACH"
 MOTIF_TAG=3
 DOWNSTREAM=10
@@ -241,7 +241,7 @@ if ! $SKIP_MAPPING; then
   if $STAR_FLAG; then
     echo "Mapping with STAR."
     if [ -z $GENOME_INDEX ]; then
-      GENOME_INDEX="$OUTPUT_DIR/STAR_index"
+      GENOME_INDEX="$OUTPUT_DIR/STAR_index/${POOL_PREFIX}"
       if [[ ! -d $GENOME_INDEX ]]; then
       mkdir -p $GENOME_INDEX
       fi
@@ -452,7 +452,7 @@ function setupini () {
   INI+="MINIMUM_READ_COUNT_PER_GROUP=10\n"
   INI+="MINIMUM_READ_COUNT_PER_CLUSTER=5\n"
   INI+="MINIMUM_READ_COUNT_FOR_KDE=5\n"
-  INI+="MINIMUM_CLUSTER_SIZE=1\n"
+  INI+="MINIMUM_CLUSTER_SIZE=8\n"
   INI+="MINIMUM_CONVERSION_LOCATIONS_FOR_CLUSTER=1\n"
   INI+="MINIMUM_CONVERSION_COUNT_FOR_CLUSTER=1\n"
   INI+="MINIMUM_READ_COUNT_FOR_CLUSTER_INCLUSION=1\n"
@@ -463,7 +463,7 @@ function setupini () {
   INI+="\n"
   INI+="${INPUT_ALIGNMENTS}"
   INI+="\n"
-  INI+="GENOME_2BIT=${GENOME_2BIT}\n"
+  INI+="GENOME_2BIT_FILE=${GENOME_2BIT}\n"
   INI+="\n"
   INI+="${FILTER}"
   INI+="OUTPUT_CLUSTERS_FILE=${POOL_PREFIX}.cluster.csv\n"
@@ -489,9 +489,11 @@ else
   done
   
   ### setting INI file
-  INI_FILE="${POOL_PREFIX}.PARalyzer.INI"
+  INI_FILE="${POOL_PREFIX}.PARalyzer.ini"
   if [[ ! -z $REPEAT_BED ]]; then
-    FILTER="FILTER_FILE=${REPEAT_BED}\n"
+    flag=${REPEAT_BED##*/}
+    flag=${flag%%.*}
+    FILTER="FILTER_FILE=${REPEAT_BED}=${flag}\n"
   else
     FILTER=""
   fi
@@ -532,60 +534,74 @@ fi
 awk -v clc="$CL_COUNT" -v cec="$CE_COUNT" -v rc="$R_COUNT" \
   -v rp="$repeat" 'BEGIN { FS=","; OFS="\t";}
 {
-  if (FNR==1) {
-    printf "#";
-    for(i=1;i<=12;i++) printf "%s ", $i;
-    printf "\n";
-  }
   if (rp==1) {
     if(FNR>1 && $13=="NA") {
       if ( $10>=clc && $11>=cec && $7>=rc ) {
         $3=$3-1; if($3<0){$3=0};
-        for(i=1;i<=12;i++) printf "%s ", $i;
-        printf "\n";
+        print $1,$3,$4,$5,$7,$2,$6,$8,$9,$10,$11,$12;
       }
     }
   }else{
     if (FNR>1) {
       if ( $10>=clc && $11>=cec && $7>=rc ) {
         $3=$3-1; if($3<0){$3=0};
-        for(i=1;i<=12;i++) printf "%s ", $i;
-        printf "\n";
+        print $1,$3,$4,$5,$7,$2,$6,$8,$9,$10,$11,$12;
       }
     }
   }
 }' ${POOL_PREFIX}.cluster.csv | \
-sort -t $'\t' -k 1,1 -k 2,2n ${POOL_PREFIX}.cluster.bed
+  sort -t $'\t' -k 1,1 -k 2,2n > ${POOL_PREFIX}.cluster.bed
 
 awk -v clc="$CL_COUNT" -v cec="$CE_COUNT" -v rc="$R_COUNT" \
   -v rp="$repeat" 'BEGIN { FS=","; OFS="\t";}
 {
-  if (FNR==1) {
-    printf "#";
-    for(i=1;i<=12;i++) printf "%s ", $i;
-    printf "\n";
-  }
   if (rp==1) {
     if(FNR>1 && $13=="NA") {
       if ( $8>=clc && $9>=cec && $7>=rc ) {
         $3=$3-1; if($3<0){$3=0};
-        for(i=1;i<=12;i++) printf "%s ", $i;
-        printf "\n";
+        print $1,$3,$4,$5,$7,$2,$6,$8,$9;
       }
     }
   }else{
     if (FNR>1) {
       if ( $8>=clc && $9>=cec && $7>=rc ) {
         $3=$3-1; if($3<0){$3=0};
-        for(i=1;i<=12;i++) printf "%s ", $i;
-        printf "\n";
+        print $1,$3,$4,$5,$7,$2,$6,$8,$9;
       }
     }
   }
 }' ${POOL_PREFIX}.groups.csv | \
-sort -t $'\t' -k 1,1 -k 2,2n ${POOL_PREFIX}.groups.bed
+  sort -t $'\t' -k 1,1 -k 2,2n > ${POOL_PREFIX}.groups.bed
 
 echo "csv conversion done."
+
+if [[ -z $MOTIF ]]; then
+  ## scan ${MOTIF} motif in peaks
+  echo "Scanning ${MOTIF} motif in peaks..."
+  peaks=( ${POOL_PREFIX}.cluster.bed ${POOL_PREFIX}.groups.bed)
+  for i in "${peaks[@]}";
+  do
+    prefix=${i%%.bed}
+    ## keep peaks with length >= ${SPAN_WIDTH}
+    awk -v span="$SPAN_WIDTH" 'BEGIN{FS="\t";OFS="\t";}{
+      if(($3-$2)>=span){print}}' $i > $i.keep.tmp
+    awk -v span="$SPAN_WIDTH" 'BEGIN{FS="\t";OFS="\t";}{
+      if(($3-$2)<span){
+        $2 = int(($3+$2)/2);
+        $3 = start + 1;
+        print $0;
+      }
+    }' $i | bedtools slop -i ${i} -l ${UPSTREAM} \
+      -r ${DOWNSTREAM} -s -g ${GENOME_SIZE} > $i.extend.tmp
+    cat $i.keep.tmp $i.extend.tmp | sort -k1,1 -k2,2n \
+      > $i.tmp
+  
+    scanMotif.py -input $i.tmp -format bed6 \
+      -fasta ${FASTA} -motif ${MOTIF} -tag ${MOTIF_TAG} \
+      -output ${prefix}.${MOTIF}.bed
+  done
+  rm -f *.tmp
+fi
 
 ## annotate beds
 echo "Annotating beds..."

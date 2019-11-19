@@ -16,7 +16,7 @@ function showHelp {
   echo -ne "usage: sbatch CTK_PARCLIP_pipeline.sh -n <thread_num> -o <log> --mem <200G> "
   echo -ne "CTK_PARCLIP_pipeline.sh <options>\n"
   echo -e "options:
-    -h | --help: show help infomation <bool>
+    -h | --help: show help information <bool>
     -b | --barcode-length: barcode length <int>
     -e | --exp-prefix: experiment prefix string <str>
     -f | --fasta: genome fasta file <str>
@@ -417,30 +417,33 @@ else
     > ${PEAK_PREFIX}.mode2.log 2>&1
 fi
 
-## scan ${MOTIF} motif in peaks
-peaks=( ${POOL_PREFIX}.peak.nostats.bed ${POOL_PREFIX}.peak.sig.bed )
-for i in "${peaks[@]}";
-do
-  prefix=${i%%.bed}
-  ## keep peaks with length >= ${SPAN_WIDTH}
-  awk -v span="$SPAN_WIDTH" 'BEGIN{FS="\t";OFS="\t";}{
-    if(($3-$2)>=span){print}}' $i > $i.keep.tmp
-  awk -v span="$SPAN_WIDTH" 'BEGIN{FS="\t";OFS="\t";}{
-    if(($3-$2)<span){
-      $2 = int(($3+$2)/2);
-      $3 = start + 1;
-      print $0;
-    }
-  }' $i | bedtools slop -i ${i} -l ${UPSTREAM} \
-    -r ${DOWNSTREAM} -s -g ${GENOME_SIZE} > $i.extend.tmp
-  cat $i.keep.tmp $i.extend.tmp | sort -k1,1 -k2,2n \
-    > $i.tmp
-
-  scanMotif.py -input $i.tmp -format bed6 \
-    -fasta ${FASTA} -motif ${MOTIF} -tag ${MOTIF_TAG} \
-    -output ${prefix}.${MOTIF}.bed
-done
-rm -f *.tmp
+if [[ -z $MOTIF ]]; then
+  ## scan ${MOTIF} motif in peaks
+  echo "Scanning ${MOTIF} motif in peaks..."
+  peaks=( ${POOL_PREFIX}.peak.nostats.bed ${POOL_PREFIX}.peak.sig.bed )
+  for i in "${peaks[@]}";
+  do
+    prefix=${i%%.bed}
+    ## keep peaks with length >= ${SPAN_WIDTH}
+    awk -v span="$SPAN_WIDTH" 'BEGIN{FS="\t";OFS="\t";}{
+      if(($3-$2)>=span){print}}' $i > $i.keep.tmp
+    awk -v span="$SPAN_WIDTH" 'BEGIN{FS="\t";OFS="\t";}{
+      if(($3-$2)<span){
+        $2 = int(($3+$2)/2);
+        $3 = start + 1;
+        print $0;
+      }
+    }' $i | bedtools slop -i ${i} -l ${UPSTREAM} \
+      -r ${DOWNSTREAM} -s -g ${GENOME_SIZE} > $i.extend.tmp
+    cat $i.keep.tmp $i.extend.tmp | sort -k1,1 -k2,2n \
+      > $i.tmp
+  
+    scanMotif.py -input $i.tmp -format bed6 \
+      -fasta ${FASTA} -motif ${MOTIF} -tag ${MOTIF_TAG} \
+      -output ${prefix}.${MOTIF}.bed
+  done
+  rm -f *.tmp
+fi
 
 # CIMS calling
 if [[ ! -d $CIMS_DIR  ]]; then
@@ -491,18 +494,21 @@ awk 'BEGIN{FS="\t";OFS="\t";}{if(FNR>1){print $1,$2,$3,$4,$5,$6,$7,$8,$9}}' \
   ${POOL_PREFIX}.${MUTATE}.CIMS.sig.txt | sort -k 5,5nr -k 8,8nr -k 7,7n \
   > ${POOL_PREFIX}.${MUTATE}.CIMS.sig.bed
 
-##get sites with ${MOTIF} motif
-for i in `find ./ -type f -name "${POOL_PREFIX}*.bed" | grep "CIMS" | grep -v "${MOTIF}"`;
-do
-  prefix=${i%%.bed}
-  bedtools slop -i ${i} -l ${UPSTREAM} \
-    -r ${DOWNSTREAM} -s -g ${GENOME_SIZE} > ${POOL_PREFIX}.temp.bed
-  scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
-    -fasta ${FASTA} -motif ${MOTIF} -tag ${MOTIF_TAG} \
-    -output ${prefix}.${MOTIF}.bed
-done
-
-rm ${POOL_PREFIX}.temp.bed
+if [[ -z $MOTIF ]]; then
+  ##Scan sites with ${MOTIF} motif
+  echo "Scanning sites with ${MOTIF} motif..."
+  for i in `find ./ -type f -name "${POOL_PREFIX}*.bed" | grep "CIMS" | grep -v "${MOTIF}"`;
+  do
+    prefix=${i%%.bed}
+    bedtools slop -i ${i} -l ${UPSTREAM} \
+      -r ${DOWNSTREAM} -s -g ${GENOME_SIZE} > ${POOL_PREFIX}.temp.bed
+    scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
+      -fasta ${FASTA} -motif ${MOTIF} -tag ${MOTIF_TAG} \
+      -output ${prefix}.${MOTIF}.bed
+  done
+  
+  rm ${POOL_PREFIX}.temp.bed
+fi
 
 ## generating the final results
 if [[ ! -d $FINAL_DIR  ]]; then
