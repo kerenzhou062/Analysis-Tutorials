@@ -142,11 +142,11 @@ else:
 priFeatureNum = len(priFeatureList)
 
 if bool(args.priG):
-    priGenetList = args.priG
+    priGeneClassList = args.priG
 else:
-    priGenetList = ['protein_coding', "lncRNA", "TR_gene", 'IG_gene', 'miRNA',\
+    priGeneClassList = ['protein_coding', "lncRNA", "TR_gene", 'IG_gene', 'miRNA',\
         'snoRNA', 'rRNA', 'sncRNA', 'pseudogene', 'other']
-priGenetNum = len(priGenetList)
+priGenetNum = len(priGeneClassList)
 
 # annotate peak in DNA|RNA mode
 def annoPeak(mode, peakBed, annoBed, bf, bF, br, be, bs, annoType):
@@ -190,8 +190,15 @@ def rnaFeatureDecode (bed12Row, peakLocus, distBool=False):
     ## other-RNA:[[exonL], [intronL]]
     ## mRNA:[[exonL], [intronL], [[thickUpL], [thickInL], [thickDownL]]]
     strand = bed12Row[5]
+    txStart = int(bed12Row[1])
+    txEnd = int(bed12Row[2])
+    thickStart = int(bed12Row[6])
+    thickEnd = int(bed12Row[7])
     decodeList = BedMan.decodeBed12(bed12Row)
     annoFeatureDict = defaultdict(list)
+    ## record overlap length
+    overlapLength = BedMan.overlap([txStart, txEnd], peakLocus)
+    annoFeatureDict['overlapLength'] = overlapLength
     priorityIndexList = list()
     if len(decodeList) == 2:
         exonL, intronL = decodeList
@@ -224,11 +231,11 @@ def rnaFeatureDecode (bed12Row, peakLocus, distBool=False):
         ### if args.codon, defined start&stop codon feature
         if bool(codonExtList):
             if strand == '+':
-                startCodonL = [[int(bed12Row[6]) - codonExtList[0], int(bed12Row[6]) + codonExtList[1]]]
-                stopCodonL = [[int(bed12Row[7]) - codonExtList[0], int(bed12Row[7]) + codonExtList[1]]]
+                startCodonL = [[thickStart - codonExtList[0], thickStart + codonExtList[1]]]
+                stopCodonL = [[thickEnd - codonExtList[0], thickEnd + codonExtList[1]]]
             else:
-                stopCodonL = [[int(bed12Row[6]) - codonExtList[0], int(bed12Row[6]) + codonExtList[1]]]
-                startCodonL = [[int(bed12Row[7]) - codonExtList[0], int(bed12Row[7]) + codonExtList[1]]]
+                stopCodonL = [[thickStart - codonExtList[0], thickStart + codonExtList[1]]]
+                startCodonL = [[thickEnd - codonExtList[0], thickEnd + codonExtList[1]]]
             featureDict['start_codon'] = list(map(lambda x:BedMan.overlap(peakLocus, x), startCodonL))
             featureDict['stop_codon'] = list(map(lambda x:BedMan.overlap(peakLocus, x), stopCodonL))
     ## index priority
@@ -250,10 +257,9 @@ def rnaFeatureDecode (bed12Row, peakLocus, distBool=False):
         annoFeatureDict['detail'].extend(list(map(lambda x:minor+'-'+str(x), orderList)))
     ## calculate distance to TSS for DNA mode
     if distBool:
-        tss = bed12Row[1]
+        tss = txStart
         if strand == '-':
-            tss = bed12Row[2]
-        tss = int(tss)
+            tss = txEnd
         peakCoor = peakLocus[0]
         if args.method == 'center':
             peakCoor = int(sum(peakLocus) / 2)
@@ -269,15 +275,16 @@ def dnaFeatureDecode (bedAnnoRow, peakLocus, annoType):
     annoFeatureDict = defaultdict(dict)
     strand = bedAnnoRow[5]
     txInfo = bedAnnoRow[3].split(':')
+    annoStart = int(bedAnnoRow[1])
+    annoEnd = int(bedAnnoRow[2])
+    annoLocus = [annoStart, annoEnd]
+    overlapLength = BedMan.overlap(annoLocus, peakLocus)
     if annoType == 'element':
-        annoFeatureDict['main'] = txInfo[-1]
-        annoStart = int(bedAnnoRow[1])
-        annoEnd = int(bedAnnoRow[2])
+        mainFeature = txInfo[-1]
         if strand == '.':
             ## calcualte distance, return min(overlap, length-overlap)
             annoLength = annoEnd - annoStart
-            overlapLength = BedMan.overlap([annoStart, annoEnd], peakLocus)
-            distance = min(overlapLength, (annoLength - overlapLength))
+            distance = 0
         else:
             featureCoor = annoStart
             if strand == '-':
@@ -298,7 +305,6 @@ def dnaFeatureDecode (bedAnnoRow, peakLocus, annoType):
                 distance = centerPeakCoor - featureCoor
             if strand == '-':
                 distance = - distance
-        annoFeatureDict['distance'] = distance
     else:
         ## TSS or TTS
         featureCoor = int(txInfo[-1])
@@ -332,10 +338,13 @@ def dnaFeatureDecode (bedAnnoRow, peakLocus, annoType):
                     else:
                         feature = '{0} ({1}-{2}kb)'.format(mainFeature, mainKbList[i], mainKbList[i+1])
                     break
-            annoFeatureDict['main'] = feature
+            mainFeature = feature
         else:
-            annoFeatureDict['main'] = 'intergenic'
-        annoFeatureDict['distance'] = distance
+            mainFeature = 'intergenic'
+    annoFeatureDict['main'] = mainFeature
+    annoFeatureDict['distance'] = distance
+    annoFeatureDict['overlapLength'] = overlapLength
+    annoFeatureDict['extraType'] = annoType
     return annoFeatureDict
 
 # running main annotation
@@ -462,6 +471,7 @@ for peakId in mainAnnoPeakDict.keys():
     geneFeatureDict = defaultdict(dict)
     for geneId in mainAnnoPeakDict[peakId].keys():
         ## determin feature for peak-gene (multiple tx)
+        ## oder by priFeature, max(overlapLength)|(distance)
         annoFeatureDictList = mainAnnoPeakDict[peakId][geneId]['feature']
         txList = mainAnnoPeakDict[peakId][geneId]['tx']
         mainFeatureList = list(map(lambda x:x['main'], annoFeatureDictList))
@@ -475,16 +485,16 @@ for peakId in mainAnnoPeakDict.keys():
                 featureLabelList.append(i)
         label = featureLabelList[0]
         if len(featureLabelList) > 1:
-            ## if multiple first priority, return the maximun length of tx
+            ## RNA mode: if multiple first priority, return the tx with max overlapLength
             if args.mode == 'RNA':
-                txLengthList = list(map(lambda x: txDict[x]['txEnd'] - txDict[x]['txStart'], txList))
-                txMaxLen = 0
+                overlapLengthList = list(map(lambda x: x['overlapLength'], annoFeatureDictList))
+                overlapMaxLen = 0
                 for i in featureLabelList:
-                    if txLengthList[i] > txMaxLen:
-                        txMaxLen = txLengthList[i]
+                    if overlapLengthList[i] > overlapMaxLen:
+                        overlapMaxLen = overlapLengthList[i]
                         label = i
             else:
-                ## if multiple first priority, return the closest tx
+                ## DNA mode: if multiple first priority, return the closest tx
                 distList = list(map(lambda x: x['distance'], annoFeatureDictList))
                 minDist = 10**8
                 for i in featureLabelList:
@@ -505,6 +515,7 @@ for peakId in mainAnnoPeakDict.keys():
             geneFeatureDict[geneId]['geneClass'] = 'other'
         ## get final feature
         geneFeatureDict[geneId]['main'] = annoFeatureDictList[label]['main']
+        geneFeatureDict[geneId]['overlapLength'] = annoFeatureDictList[label]['overlapLength']
         if args.mode == 'RNA':
             geneFeatureDict[geneId]['minor'] = annoFeatureDictList[label]['minor']
             geneFeatureDict[geneId]['detail'] = annoFeatureDictList[label]['detail']
@@ -512,28 +523,28 @@ for peakId in mainAnnoPeakDict.keys():
             geneFeatureDict[geneId]['distance'] = annoFeatureDictList[label]['distance']
     ## store final annotation as dict
     if args.disablePeakUniq:
-        annoPeakDict[peakId]['main'] = geneFeatureDict
+        annoPeakDict[peakId]['mainAnno'] = geneFeatureDict
     else:
         ## make meta-gene unique
+        ## oder by priGeneClass, max(overlapLength)|(distance)
         geneIdList = sorted(geneFeatureDict.keys())
         geneClassList = list(map(lambda x:geneFeatureDict[x]['geneClass'], geneIdList))
-        geneClassIndexList = list(map(lambda x:priGenetList.index(x), geneClassList))
+        geneClassIndexList = list(map(lambda x:priGeneClassList.index(x), geneClassList))
         if args.mode == 'RNA':
-            ## if multiple first priority, return the maximun length of tx
+            ## if multiple first priority, return the tx with max overlapLength
             geneLabelList = list()
-            ## get first priority index in priGenetList
+            ## get first priority index in priGeneClassList
             minIndex = min(geneClassIndexList)
             for i in range(len(geneClassIndexList)):
                 if geneClassIndexList[i] == minIndex:
                     geneLabelList.append(i)
             label = geneLabelList[0]
             if len(geneLabelList) > 1:
-                txList = list(map(lambda x:geneFeatureDict[x]['txId'], geneIdList))
-                txLengthList = list(map(lambda x: txDict[x]['txEnd'] - txDict[x]['txStart'], txList))
-                txMaxLen = 0
-                for i in geneLabelList:
-                    if txLengthList[i] > txMaxLen:
-                        txMaxLen = txLengthList[i]
+                overlapLengthList = list(map(lambda x: geneFeatureDict[x]['feature']['overlapLength'], geneIdList))
+                overlapMaxLen = 0
+                for i in featureLabelList:
+                    if overlapLengthList[i] > overlapMaxLen:
+                        overlapMaxLen = overlapLengthList[i]
                         label = i
         else:
             ## if multiple first priority, return the closest tx
@@ -544,19 +555,19 @@ for peakId in mainAnnoPeakDict.keys():
                 if abs(distList[i]) == minIndex:
                     distLabelList.append(i)
             label = distLabelList[0]
-            priGenetypeIndex = 100
+            priGeneClassIndex = 100
             if len(distLabelList) > 1:
                 for i in distLabelList:
-                    if geneClassIndexList[i] < priGenetypeIndex:
-                        priGenetypeIndex = geneClassIndexList[i]
+                    if geneClassIndexList[i] < priGeneClassIndex:
+                        priGeneClassIndex = geneClassIndexList[i]
                         label = i
         ## get final main annotation
         labelGeneId = geneIdList[label]
         labelDict = defaultdict(dict)
         labelDict[labelGeneId] = geneFeatureDict[labelGeneId]
-        annoPeakDict[peakId]['main'] = labelDict
+        annoPeakDict[peakId]['mainAnno'] = labelDict
 
-## run extra annotation, if -extraition
+## run extra annotation, if -extraAnno
 if bool(args.extraAnno):
     extraAnnoList = args.extraAnno
     extraTypeList = args.extraType
@@ -614,16 +625,16 @@ if bool(args.extraAnno):
                 annoFeatureDict = dnaFeatureDecode(bedAnnoRow, peakLocus, extraType)
             extraAnnoPeakDict[peakId][identifier] = defaultdict(dict)
             extraAnnoPeakDict[peakId][identifier]['feature'] = annoFeatureDict
-            extraAnnoPeakDict[peakId][identifier]['length'] = int(bedAnnoRow[2]) - int(bedAnnoRow[1])
-            extraAnnoPeakDict[peakId][identifier]['extraType'] = extraAnnoType
-    ## collapse feature and gene type
+            extraAnnoPeakDict[peakId][identifier]['extraAnnoType'] = extraAnnoType
+    ## make peak-gene uniq
+    ## order by extraAnnoType, max(overlapLength)|(distance)
     for peakId in extraAnnoPeakDict.keys():
         if args.disablePeakUniq:
-            annoPeakDict[peakId]['extra'] = extraAnnoPeakDict[peakId]
+            annoPeakDict[peakId]['extraAnno'] = extraAnnoPeakDict[peakId]
         else:
             tempDict = extraAnnoPeakDict[peakId]
             identifierList = sorted(tempDict.keys())
-            typeList = list(map(lambda x:tempDict[x]['extraType'], identifierList))
+            typeList = list(map(lambda x:tempDict[x]['extraAnnoType'], identifierList))
             typeIndexList = list(map(lambda x:extraPriTypeList.index(x), typeList))
             if args.mode == 'RNA':
                 ## get first priority index in extraPriTypeList
@@ -633,8 +644,9 @@ if bool(args.extraAnno):
                     if typeIndexList[i] == minIndex:
                         typeLabelList.append(i)
                 label = typeLabelList[0]
+                ## if multiple first priority, return the tx with max overlapLength
                 if len(typeLabelList) > 1:
-                    lengthList = list(map(lambda x: tempDict[x]['length'], identifierList))
+                    lengthList = list(map(lambda x: tempDict[x]['feature']['overlapLength'], identifierList))
                     maxLen = 0
                     for i in typeLabelList:
                         if lengthList[i] > maxLen:
@@ -658,48 +670,61 @@ if bool(args.extraAnno):
             labelId = identifierList[label]
             labelDict = defaultdict(dict)
             labelDict[labelId] = tempDict[labelId]
-            annoPeakDict[peakId]['extra'] = labelDict
+            annoPeakDict[peakId]['extraAnno'] = labelDict
 
 # ready for output
 ## construct header
 headerRow = list()
 if len(peakHeaderRow) != peakColNum:
     peakHeaderRow = ['peakCol'+str(i+1) for i in range(peakColNum)]
+peakHeaderRow.append('peakLength')
 headerRow.extend(peakHeaderRow)
 mainHeaderRow = ["GeneId", "GeneName", "GeneType", "GeneClass", "TxId", "TxName", "TxType", "Feature"]
-extraHeaderRow = ['ExtraName-1', 'ExtraName-2', 'ExtraName-3', 'ExtraFeature', 'ExtraType']
+extraHeaderRow = ['ExtraType', 'ExtraName-1', 'ExtraName-2', 'ExtraName-3', 'ExtraFeature', 'ExtraAnnoType']
 if args.mode == 'RNA':
     mainHeaderRow.append('MinorFeature')
     mainHeaderRow.append('DetailFeature')
+    mainHeaderRow.append('OverlapLength')
+    extraHeaderRow.append('ExtraOverlapLength')
 else:
     mainHeaderRow.append('Distance')
+    mainHeaderRow.append('OverlapLength')
     extraHeaderRow.append('ExtraDistance')
+    extraHeaderRow.append('ExtraOverlapLength')
+
 headerRow.extend(mainHeaderRow)
 headerRow.extend(extraHeaderRow)
 ## construct output contents
 outputRowList = [headerRow]
 for peakId in peakIdList:
     peakRow = peakInfoDict[peakId]['row']
+    peakLength = int(peakRow[2])-int(peakRow[1])
+    peakRow.append(str(peakLength))
     if args.keepName is False:
         peakRow[3] = peakId
     if peakId in annoPeakDict:
         extraAnnoRow = list()
-        if 'extra' in annoPeakDict[peakId]:
-            extraAnnoPeakDict = annoPeakDict[peakId]['extra']
+        if 'extraAnno' in annoPeakDict[peakId]:
+            extraAnnoPeakDict = annoPeakDict[peakId]['extraAnno']
             identifierList = sorted(extraAnnoPeakDict.keys())
+            extraTypeRow = list()
             identifierRow = [[], [], []]
             featureRow = list()
             extraAnnoTypeRow = list()
+            overlapLengthRow = list()
             distanceRow = list()
             for identifier in sorted(extraAnnoPeakDict.keys()):
+                extraTypeRow.append(extraAnnoPeakDict[identifier]['feature']['extraType'])
                 identifier1, identifier2, identifier3 = identifier.split(':')[0:3]
                 identifierRow[0].append(identifier1)
                 identifierRow[1].append(identifier2)
                 identifierRow[2].append(identifier3)
                 featureRow.append(extraAnnoPeakDict[identifier]['feature']['main'])
-                extraAnnoTypeRow.append(extraAnnoPeakDict[identifier]['extraType'])
+                extraAnnoTypeRow.append(extraAnnoPeakDict[identifier]['extraAnnoType'])
+                overlapLengthRow.append(extraAnnoPeakDict[identifier]['feature']['overlapLength'])
                 if args.mode == 'DNA':
                     distanceRow.append(extraAnnoPeakDict[identifier]['feature']['distance'])
+            extraTypeCol = ','.join(extraTypeRow)
             for i in range(len(identifierRow)):
                 identifierRow[i] = ','.join(identifierRow[i])
             identifier1Col = identifierRow[0]
@@ -711,19 +736,21 @@ for peakId in peakIdList:
                 print(featureRow)
             featureCol = ','.join(featureRow)
             extraAnnoTypeCol = ','.join(extraAnnoTypeRow)
+            overlapLengthCol = ','.join(map(str, overlapLengthRow))
             ## 5 or 6 elements
-            extraAnnoRow = [identifier1Col, identifier2Col, identifier3Col, featureCol, extraAnnoTypeCol]
+            extraAnnoRow = [extraTypeCol, identifier1Col, identifier2Col, identifier3Col, featureCol, extraAnnoTypeCol]
             if args.mode == 'DNA':
                 distanceCol = ','.join(map(str,distanceRow))
                 extraAnnoRow.append(distanceCol)
+            extraAnnoRow.append(overlapLengthCol)
         else:
             if args.mode == 'RNA':
                 extraAnnoRow = ['na' for i in range(5)]
             else:
                 extraAnnoRow = ['na' for i in range(6)]
         mainAnnoRow = list()
-        if 'main' in annoPeakDict[peakId]:
-            mainAnnoPeakDict = annoPeakDict[peakId]['main']
+        if 'mainAnno' in annoPeakDict[peakId]:
+            mainAnnoPeakDict = annoPeakDict[peakId]['mainAnno']
             for geneId in sorted(mainAnnoPeakDict.keys()):
                 geneName = mainAnnoPeakDict[geneId]['geneName']
                 geneType = mainAnnoPeakDict[geneId]['geneType']
@@ -741,18 +768,20 @@ for peakId in peakIdList:
                 else:
                     distance = mainAnnoPeakDict[geneId]['distance']
                     mainAnnoRow.append(str(distance))
+                overlapLength = mainAnnoPeakDict[geneId]['overlapLength']
+                mainAnnoRow.append(str(overlapLength))
                 outputRow = peakRow + mainAnnoRow + extraAnnoRow
                 outputRowList.append(outputRow)
         else:
             if args.mode == 'RNA':
-                mainAnnoRow = ['na' for i in range(10)]
+                mainAnnoRow = ['na' for i in range(11)]
             else:
-                mainAnnoRow = ['na' for i in range(9)]
+                mainAnnoRow = ['na' for i in range(10)]
             outputRow = peakRow + mainAnnoRow + extraAnnoRow
             outputRowList.append(outputRow)
     else:
         appendRow = ['intergenic', 'intergenic' 'intergenic', 'intergenic']
-        appendRow.extend(['na' for i in range(11)])
+        appendRow.extend(['na' for i in range(14)])
         appendRow[7] = 'intergenic'
         outputRow = peakRow + appendRow
         outputRowList.append(outputRow)
