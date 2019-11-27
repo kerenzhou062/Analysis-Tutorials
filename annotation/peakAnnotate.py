@@ -49,10 +49,12 @@ parser.add_argument('--disablePeakUniq', action='store_true',
 parser.add_argument('--keepName', action='store_true',
                     default=False,
                     help='keep original 4th column in output')
-parser.add_argument('-addition', nargs='*', type=str,
-                    help='Individual additional annotations in bed6 format \
+parser.add_argument('-extraAnno', nargs='*', type=str,
+                    help='individual extraitional annotations in bed6 format \
                     (4th column:identifier1:identifier2:identifier3:type) \
                     (the order represents type priority)')
+parser.add_argument('-extraType', nargs='*', type=str, choices=['gene', 'element'],
+                    help='type of extraitional annotations (gene|element, same length with -extraAnno)')
 parser.add_argument('-gsize', action='store', type=str,
                     help='genome size file (required for DNA mode)')
 parser.add_argument('-priF', action='store', type=str,
@@ -90,7 +92,7 @@ if bool(args.codon):
         sys.exit()
 
 try:
-    kbTssList = list(map(lambda x: [int(y)*1000 for y in x], 
+    kbTssList = list(map(lambda x: [int(y) for y in x], 
         [z.split(',') for z in args.kbTSS.split(':')]))
     if len(kbTssList) != 2:
         sys.stderr.write('Incorrect -kbTSS!')
@@ -100,7 +102,7 @@ except ValueError as e:
     sys.exit()
 
 try:
-    kbTtsList = list(map(lambda x: [int(y)*1000 for y in x], 
+    kbTtsList = list(map(lambda x: [int(y) for y in x], 
         [z.split(',') for z in args.kbTTS.split(':')]))
     if len(kbTtsList) != 2:
         sys.stderr.write('Incorrect -kbTTS!')
@@ -135,6 +137,7 @@ else:
                 feature = 'TTS ({0}-{1}kb)'.format(mainKbTtsList[i], mainKbTtsList[i+1])
             priTtsList.append(feature)
         priFeatureList = priTssList + priFeatureList + priTtsList
+        priFeatureList.append('intergenic')
 
 priFeatureNum = len(priFeatureList)
 
@@ -146,33 +149,24 @@ else:
 priGenetNum = len(priGenetList)
 
 # annotate peak in DNA|RNA mode
-def annoPeak(mode, peakBed, annoBed, bf, bF, br, be, bs):
+def annoPeak(mode, peakBed, annoBed, bf, bF, br, be, bs, annoType):
     if mode == 'RNA':
         command = 'bedtools intersect -a {peakBed} -b {annoBed} \
             -wa -wb {bf} {bF} {br} {be} {bs}'.format(**vars())
         annoResList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
     else:
-        ## if don't have strand in annoBed
-        with open(annoBed, 'r') as f:
-            for line in f:
-                if bool(re.match(r'^#', line)):
-                    continue
-                row = line.strip().split('\t')
-                strand = row[5]
-                break
-        if strand == '.':
+        if annoType == 'element':
             command = 'bedtools intersect -a {peakBed} -b {annoBed} \
                 -wa -wb {bf} {bF} {br} {be}'.format(**vars())
             annoResList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
         else:
-            annoDisList = [kbTssList, 'gene', kbTtsList]
             annoExtBedTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
             ## extract TSS
             awkCommand = 'awk \'BEGIN{OFS="\t";FS="\t"}{if($6=="+"){\
                 print($1,$2,$2+1,$4":TSS:"$2,$5,$6)}else{print($1,$3-1,$3,$4":TSS:"$3-1,$5,$6)}}\' ' + annoBed
             ## slop TSS
-            farmostUpTss = kbTssList[0][-1]
-            farmostDownTss = kbTssList[1][-1]
+            farmostUpTss = kbTssList[0][-1]*1000
+            farmostDownTss = kbTssList[1][-1]*1000
             slopCommand = 'bedtools slop -i stdin -l {farmostUpTss} -r {farmostDownTss} -s -g '.format(**vars()) + args.gsize
             intersectComand = 'bedtools intersect -a {peakBed} -b stdin -wa -wb {bf} {bF} {br} {be}'.format(**vars())
             dnaTssAnnoCommand = "{awkCommand} | {slopCommand} | {intersectComand}".format(**vars())
@@ -271,22 +265,44 @@ def rnaFeatureDecode (bed12Row, peakLocus, distBool=False):
     return annoFeatureDict
 
 # decode DNA fetures
-def dnaFeatureDecode (bedAnnoRow, peakLocus):
-    annoFeatureDict = defaultdict(list)
+def dnaFeatureDecode (bedAnnoRow, peakLocus, annoType):
+    annoFeatureDict = defaultdict(dict)
     strand = bedAnnoRow[5]
     txInfo = bedAnnoRow[3].split(':')
-    if txInfo[-2] not in ['TSS', 'TTS']:
+    if annoType == 'element':
         annoFeatureDict['main'] = txInfo[-1]
-        ## calcualte distance, return min(overlap, length-overlap)
         annoStart = int(bedAnnoRow[1])
         annoEnd = int(bedAnnoRow[2])
-        annoLength = annoEnd - annoStart
-        overlapLength = BedMan.overlap([annoStart, annoEnd], peakLocus)
-        distance = min(overlapLength, (annoLength - overlapLength))
+        if strand == '.':
+            ## calcualte distance, return min(overlap, length-overlap)
+            annoLength = annoEnd - annoStart
+            overlapLength = BedMan.overlap([annoStart, annoEnd], peakLocus)
+            distance = min(overlapLength, (annoLength - overlapLength))
+        else:
+            featureCoor = annoStart
+            if strand == '-':
+                featureCoor = annoEnd
+            ## calulating distance
+            if args.method == 'border':
+                if featureCoor >= peakLocus[1]:
+                    distance = peakLocus[1] - 1 - featureCoor
+                elif featureCoor <= peakLocus[0]:
+                    distance = peakLocus[0] - featureCoor
+                else:
+                    if abs(peakLocus[0] - featureCoor) >= (peakLocus[1] - 1 - featureCoor):
+                        distance = peakLocus[0] - featureCoor
+                    else:
+                        distance = peakLocus[1] - 1 - featureCoor
+            else:
+                centerPeakCoor = int(sum(peakLocus) / 2)
+                distance = centerPeakCoor - featureCoor
+            if strand == '-':
+                distance = - distance
+        annoFeatureDict['distance'] = distance
     else:
         ## TSS or TTS
-        mainFeature = txInfo[-2]
         featureCoor = int(txInfo[-1])
+        mainFeature = txInfo[-2]
         ## calulating distance
         if args.method == 'border':
             if featureCoor >= peakLocus[1]:
@@ -308,18 +324,18 @@ def dnaFeatureDecode (bedAnnoRow, peakLocus):
             mainKbList = [0] + sorted(set(kbTssList[0] + kbTssList[1]))
         else:
             mainKbList = [0] + sorted(set(kbTtsList[0] + kbTtsList[1]))
-        if abs(distance) <= mainKbList[-1]:
+        if abs(distance) <= mainKbList[-1]*1000:
             for i in range(len(mainKbList)-1):
-                if abs(distance) >= mainKbList[i] and abs(distance) <= mainKbList[i+1]:
+                if abs(distance) >= mainKbList[i]*1000 and abs(distance) <= mainKbList[i+1]*1000:
                     if i == 0:
                         feature = '{0} (<={1}kb)'.format(mainFeature, mainKbList[1])
                     else:
                         feature = '{0} ({1}-{2}kb)'.format(mainFeature, mainKbList[i], mainKbList[i+1])
-                        annoFeatureDict['main'] = feature
                     break
+            annoFeatureDict['main'] = feature
         else:
             annoFeatureDict['main'] = 'intergenic'
-    annoFeatureDict['distance'] = distance
+        annoFeatureDict['distance'] = distance
     return annoFeatureDict
 
 # running main annotation
@@ -365,14 +381,15 @@ with open(args.input, 'r') as f, open(peakBed6Tmp.name, 'w') as temp:
 peakBed6Tmp.seek(0)
 
 # running main annotation
-mainAnnoResList = annoPeak('RNA', peakBed6Tmp.name, mainAnno, bf, bF, br, be, bs)
+mainAnnoResList = annoPeak('RNA', peakBed6Tmp.name, mainAnno, bf, bF, br, be, bs, 'gene')
 
 # DNA mode: generate promoter and enhancer feature
 if args.mode == 'DNA':
     if bool(args.gsize) is False:
         sys.stderr.write('No -gsize!')
         sys.exit()
-    dnaAnnoResList = annoPeak('DNA', peakBed6Tmp.name, mainAnno, bf, bF, br, be, bs)
+    dnaAnnoResList = annoPeak('DNA', peakBed6Tmp.name, mainAnno, bf, bF, br, be, bs, 'gene')
+    mainAnnoResList = mainAnnoResList + dnaAnnoResList
 
 # built up gene-type pairwise relationships
 geneClassDict = defaultdict(dict)
@@ -400,7 +417,6 @@ with open(args.anno) as f:
 
 # decode peak-anno pairwise relationships
 mainAnnoPeakDict = defaultdict(dict)
-
 for line in mainAnnoResList:
     if bool(line) is False:
         continue
@@ -422,7 +438,7 @@ for line in mainAnnoResList:
         annoFeatureDict = rnaFeatureDecode(bedAnnoRow, peakLocus, distBool=False)
     else:
         if len(row) == 12:
-            annoFeatureDict = dnaFeatureDecode(bedAnnoRow, peakLocus)
+            annoFeatureDict = dnaFeatureDecode(bedAnnoRow, peakLocus, 'gene')
         else:
             annoFeatureDict = rnaFeatureDecode(bedAnnoRow, peakLocus, distBool=True)
     if peakId in mainAnnoPeakDict:
@@ -540,32 +556,41 @@ for peakId in mainAnnoPeakDict.keys():
         labelDict[labelGeneId] = geneFeatureDict[labelGeneId]
         annoPeakDict[peakId]['main'] = labelDict
 
-## run additional annotation, if -addition
-if bool(args.addition):
-    addAnnoList = args.addition
+## run extra annotation, if -extraition
+if bool(args.extraAnno):
+    extraAnnoList = args.extraAnno
+    extraTypeList = args.extraType
     ## determin type by oder
     ## store annoPeak results
-    addPriTypeList = list()
+    extraPriTypeList = list()
     annoResList = list()
-    for addAnno in addAnnoList:
-        with open(addAnno, 'r') as f:
+    for i in range(len(extraAnnoList)):
+        extraAnno = extraAnnoList[i]
+        extraType = extraTypeList[i]
+        with open(extraAnno, 'r') as f:
             for line in f:
                 if bool(re.match(r'^#', line)):
                     continue
                 else:
                     row = line.strip().split('\t')
                     inforList = row[3].split(':')
-                    addType = inforList[3]
-                    addPriTypeList.append(addType)
+                    extraAnnoType = inforList[3]
+                    extraPriTypeList.append(extraAnnoType)
                     break
-        eachAnnoResList = annoPeak(args.mode, peakBed6Tmp.name, addAnno, bf, bF, br, be, bs)
+        eachAnnoResList = annoPeak(args.mode, peakBed6Tmp.name, extraAnno, bf, bF, br, be, bs, extraType)
         annoResList.append(eachAnnoResList)
-    #addAnnoPeakDict
-    addAnnoPeakDict = defaultdict(dict)
-    for eachAnnoResList in annoResList:
+    #extraAnnoPeakDict
+    extraAnnoPeakDict = defaultdict(dict)
+    for i in range(len(extraAnnoList)):
+        eachAnnoResList = annoResList[i]
+        extraType = extraTypeList[i]
         for line in eachAnnoResList:
             if bool(line) is False:
                 continue
+            try:
+                row = line.strip().split('\t')
+            except AttributeError as e:
+                print(line)
             row = line.strip().split('\t')
             peakRow = row[0:6]
             bedAnnoRow = row[6:]
@@ -580,28 +605,28 @@ if bool(args.addition):
             identifier2 = infoList[1]
             identifier3 = infoList[2]
             identifier = ':'.join([identifier1, identifier2, identifier3])
-            addType = infoList[3]
+            extraAnnoType = infoList[3]
             ## decode feature
             if args.mode == 'RNA':
                 annoFeatureDict = defaultdict(dict)
                 annoFeatureDict['main'] = 'Exon'
             else:
-                annoFeatureDict = dnaFeatureDecode(bedAnnoRow, peakLocus)
-            addAnnoPeakDict[peakId][identifier] = defaultdict(dict)
-            addAnnoPeakDict[peakId][identifier]['feature'] = annoFeatureDict
-            addAnnoPeakDict[peakId][identifier]['length'] = int(bedAnnoRow[2]) - int(bedAnnoRow[1])
-            addAnnoPeakDict[peakId][identifier]['addType'] = addType
+                annoFeatureDict = dnaFeatureDecode(bedAnnoRow, peakLocus, extraType)
+            extraAnnoPeakDict[peakId][identifier] = defaultdict(dict)
+            extraAnnoPeakDict[peakId][identifier]['feature'] = annoFeatureDict
+            extraAnnoPeakDict[peakId][identifier]['length'] = int(bedAnnoRow[2]) - int(bedAnnoRow[1])
+            extraAnnoPeakDict[peakId][identifier]['extraType'] = extraAnnoType
     ## collapse feature and gene type
-    for peakId in addAnnoPeakDict.keys():
+    for peakId in extraAnnoPeakDict.keys():
         if args.disablePeakUniq:
-            annoPeakDict[peakId]['add'] = addAnnoPeakDict[peakId]
+            annoPeakDict[peakId]['extra'] = extraAnnoPeakDict[peakId]
         else:
-            tempDict = addAnnoPeakDict[peakId]
+            tempDict = extraAnnoPeakDict[peakId]
             identifierList = sorted(tempDict.keys())
-            typeList = list(map(lambda x:tempDict[x]['addType'], identifierList))
-            typeIndexList = list(map(lambda x:addPriTypeList.index(x), typeList))
+            typeList = list(map(lambda x:tempDict[x]['extraType'], identifierList))
+            typeIndexList = list(map(lambda x:extraPriTypeList.index(x), typeList))
             if args.mode == 'RNA':
-                ## get first priority index in addPriTypeList
+                ## get first priority index in extraPriTypeList
                 typeLabelList = list()
                 minIndex = min(typeIndexList)
                 for i in range(len(typeIndexList)):
@@ -621,19 +646,19 @@ if bool(args.addition):
                 minIndex = min(list(map(abs, distList)))
                 distLabelList = list()
                 for i in range(len(distList)):
-                    if distList[i] == minIndex:
+                    if abs(distList[i]) == minIndex:
                         distLabelList.append(i)
                 label = distLabelList[0]
-                priAddtypeIndex = 100
+                priExtraAnnoTypeIndex = 100
                 if len(distLabelList) > 1:
                     for i in distLabelList:
-                        if typeIndexList[i] < priAddtypeIndex:
-                            priAddtypeIndex = typeIndexList[i]
+                        if typeIndexList[i] < priExtraAnnoTypeIndex:
+                            priExtraAnnoTypeIndex = typeIndexList[i]
                             label = i
             labelId = identifierList[label]
             labelDict = defaultdict(dict)
             labelDict[labelId] = tempDict[labelId]
-            annoPeakDict[peakId]['add'] = labelDict
+            annoPeakDict[peakId]['extra'] = labelDict
 
 # ready for output
 ## construct header
@@ -642,15 +667,15 @@ if len(peakHeaderRow) != peakColNum:
     peakHeaderRow = ['peakCol'+str(i+1) for i in range(peakColNum)]
 headerRow.extend(peakHeaderRow)
 mainHeaderRow = ["GeneId", "GeneName", "GeneType", "GeneClass", "TxId", "TxName", "TxType", "Feature"]
-addHeaderRow = ['ExtraName-1', 'ExtraName-2', 'ExtraName-3', 'ExtraFeature', 'ExtraType']
+extraHeaderRow = ['ExtraName-1', 'ExtraName-2', 'ExtraName-3', 'ExtraFeature', 'ExtraType']
 if args.mode == 'RNA':
     mainHeaderRow.append('MinorFeature')
     mainHeaderRow.append('DetailFeature')
 else:
     mainHeaderRow.append('Distance')
-    addHeaderRow,append('ExtraDistance')
+    extraHeaderRow.append('ExtraDistance')
 headerRow.extend(mainHeaderRow)
-headerRow.extend(addHeaderRow)
+headerRow.extend(extraHeaderRow)
 ## construct output contents
 outputRowList = [headerRow]
 for peakId in peakIdList:
@@ -658,40 +683,44 @@ for peakId in peakIdList:
     if args.keepName is False:
         peakRow[3] = peakId
     if peakId in annoPeakDict:
-        addAnnoRow = list()
-        if 'add' in annoPeakDict[peakId]:
-            addAnnoPeakDict = annoPeakDict[peakId]['add']
-            identifierList = sorted(addAnnoPeakDict.keys())
+        extraAnnoRow = list()
+        if 'extra' in annoPeakDict[peakId]:
+            extraAnnoPeakDict = annoPeakDict[peakId]['extra']
+            identifierList = sorted(extraAnnoPeakDict.keys())
             identifierRow = [[], [], []]
             featureRow = list()
-            addTypeRow = list()
+            extraAnnoTypeRow = list()
             distanceRow = list()
-            for identifier in sorted(addAnnoPeakDict.keys()):
-                identifier1, identifier2, identifier3 = identifier.split(':')
+            for identifier in sorted(extraAnnoPeakDict.keys()):
+                identifier1, identifier2, identifier3 = identifier.split(':')[0:3]
                 identifierRow[0].append(identifier1)
                 identifierRow[1].append(identifier2)
                 identifierRow[2].append(identifier3)
-                featureRow.append(addAnnoPeakDict[identifier]['feature']['main'])
-                addTypeRow.append(addAnnoPeakDict[identifier]['addType'])
+                featureRow.append(extraAnnoPeakDict[identifier]['feature']['main'])
+                extraAnnoTypeRow.append(extraAnnoPeakDict[identifier]['extraType'])
                 if args.mode == 'DNA':
-                    distanceRow.append(addAnnoPeakDict[identifier]['feature']['distance'])
+                    distanceRow.append(extraAnnoPeakDict[identifier]['feature']['distance'])
             for i in range(len(identifierRow)):
                 identifierRow[i] = ','.join(identifierRow[i])
             identifier1Col = identifierRow[0]
             identifier2Col = identifierRow[1]
             identifier3Col = identifierRow[2]
+            try:
+                featureCol = ','.join(extraAnnoPeakDict)
+            except TypeError as e:
+                print(featureRow)
             featureCol = ','.join(featureRow)
-            addTypeCol = ','.join(addTypeRow)
+            extraAnnoTypeCol = ','.join(extraAnnoTypeRow)
             ## 5 or 6 elements
-            addAnnoRow = [identifier1Col, identifier2Col, identifier3Col, featureCol, addTypeCol]
+            extraAnnoRow = [identifier1Col, identifier2Col, identifier3Col, featureCol, extraAnnoTypeCol]
             if args.mode == 'DNA':
-                distanceCol = ','.join(distanceRow)
-                addAnnoRow.append(distanceCol)
+                distanceCol = ','.join(map(str,distanceRow))
+                extraAnnoRow.append(distanceCol)
         else:
             if args.mode == 'RNA':
-                addAnnoRow = ['na' for i in range(5)]
+                extraAnnoRow = ['na' for i in range(5)]
             else:
-                addAnnoRow = ['na' for i in range(6)]
+                extraAnnoRow = ['na' for i in range(6)]
         mainAnnoRow = list()
         if 'main' in annoPeakDict[peakId]:
             mainAnnoPeakDict = annoPeakDict[peakId]['main']
@@ -711,19 +740,20 @@ for peakId in peakIdList:
                     mainAnnoRow.append(detailFeature)
                 else:
                     distance = mainAnnoPeakDict[geneId]['distance']
-                    mainAnnoRow.append(distance)
-                outputRow = peakRow + mainAnnoRow + addAnnoRow
+                    mainAnnoRow.append(str(distance))
+                outputRow = peakRow + mainAnnoRow + extraAnnoRow
                 outputRowList.append(outputRow)
         else:
             if args.mode == 'RNA':
                 mainAnnoRow = ['na' for i in range(10)]
             else:
                 mainAnnoRow = ['na' for i in range(9)]
-            outputRow = peakRow + mainAnnoRow + addAnnoRow
+            outputRow = peakRow + mainAnnoRow + extraAnnoRow
             outputRowList.append(outputRow)
     else:
         appendRow = ['intergenic', 'intergenic' 'intergenic', 'intergenic']
         appendRow.extend(['na' for i in range(11)])
+        appendRow[7] = 'intergenic'
         outputRow = peakRow + appendRow
         outputRowList.append(outputRow)
 
