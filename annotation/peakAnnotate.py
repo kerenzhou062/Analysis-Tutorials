@@ -26,6 +26,8 @@ parser.add_argument('-be', action='store', type=str,
 parser.add_argument('-method', action='store', type=str, choices=['center', 'border'],
                     default='border',
                     help='use peak center|border to calcualte distance to TSS|TTS')
+parser.add_argument('-ncbiGeneInfo', action='store', type=str,
+                    help='*.gene_info file downloaded from NCBI')
 parser.add_argument('-name', action='store', type=str,
                     default='peak=',
                     help='prefix for each peak name')
@@ -109,6 +111,10 @@ try:
         sys.exit()
 except ValueError as e:
     sys.stderr.write('Incorrect -kbTTS!')
+    sys.exit()
+
+if len(args.extraAnno) != len(args.extraType):
+    sys.stderr.write('Incorrect -extraAnno and -extraType!')
     sys.exit()
 
 # defined priority of features
@@ -408,6 +414,26 @@ with open(args.geneClassFile) as f:
         mainType = row[0]
         geneType = row[1]
         geneClassDict[geneType] = mainType
+
+# built up gene-info pairwise relationships, if args.ncbiGeneInfo
+ncbiGeneInfoDict = defaultdict(dict)
+if bool(args.ncbiGeneInfo):
+    with open(args.ncbiGeneInfo, 'r') as f:
+        __ = f.readline()
+        for line in f:
+            row = line.strip().split('\t')
+            dbXrefsDict = defaultdict(dict)
+            ## MIM:138670|HGNC:HGNC:5|Ensembl:ENSG00000121410
+            for dbXrefs in row[5].split('|'):
+                db = dbXrefs.split(':')[0]
+                geneId = dbXrefs.split(':')[-1]
+                dbXrefsDict[db] = geneId
+            if 'Ensembl' in dbXrefsDict:
+                geneId = dbXrefsDict['Ensembl']
+                synonyms = row[4]
+                description = row[8]
+                ncbiGeneInfoDict[geneId] = [synonyms, description]
+
 # built up tx-infor pairwise relationships
 txDict = defaultdict(dict)
 with open(args.anno) as f:
@@ -690,8 +716,10 @@ if len(peakHeaderRow) != peakColNum:
     peakHeaderRow = ['peakCol'+str(i+1) for i in range(peakColNum)]
 peakHeaderRow.append('peakLength')
 headerRow.extend(peakHeaderRow)
-mainHeaderRow = ["GeneId", "GeneName", "GeneType", "GeneClass", "TxId", "TxName", "TxType", "Feature"]
-extraHeaderRow = ['ExtraType', 'ExtraName-1', 'ExtraName-2', 'ExtraName-3', 'ExtraFeature', 'ExtraAnnoType']
+mainHeaderRow = ["GeneId", "GeneName",  "Synonyms", "Description", "GeneType", \
+    "GeneClass", "TxId", "TxName", "TxType", "Feature"]
+extraHeaderRow = ['ExtraType', 'ExtraName-1', 'ExtraName-2', \
+    'ExtraName-3', 'ExtraFeature', 'ExtraAnnoType']
 if args.mode == 'RNA':
     mainHeaderRow.append('MinorFeature')
     mainHeaderRow.append('DetailFeature')
@@ -763,6 +791,14 @@ for peakId in peakIdList:
         if 'mainAnno' in annoPeakDict[peakId]:
             mainAnnoPeakDict = annoPeakDict[peakId]['mainAnno']
             for geneId in sorted(mainAnnoPeakDict.keys()):
+                ## ensemblId, remove ENSG00000121410.1 -> ENSG00000121410
+                ensemblId = geneId.split('.')[0]
+                if ensemblId in ncbiGeneInfoDict:
+                    synonyms = ncbiGeneInfoDict[ensemblId][0]
+                    description = ncbiGeneInfoDict[ensemblId][1]
+                else:
+                    synonyms = 'na'
+                    description = 'na'
                 geneName = mainAnnoPeakDict[geneId]['geneName']
                 geneType = mainAnnoPeakDict[geneId]['geneType']
                 geneClass = mainAnnoPeakDict[geneId]['geneClass']
@@ -770,7 +806,8 @@ for peakId in peakIdList:
                 txName = mainAnnoPeakDict[geneId]['txName']
                 txType = mainAnnoPeakDict[geneId]['txType']
                 mainFeature = mainAnnoPeakDict[geneId]['main']
-                mainAnnoRow = [geneId, geneName, geneType, geneClass, txId, txName, txType, mainFeature]
+                mainAnnoRow = [geneId, geneName, synonyms, description, geneType, \
+                    geneClass, txId, txName, txType, mainFeature]
                 if args.mode == 'RNA':
                     minorFeature = mainAnnoPeakDict[geneId]['minor']
                     detailFeature = ','.join(mainAnnoPeakDict[geneId]['detail'])
@@ -785,15 +822,15 @@ for peakId in peakIdList:
                 outputRowList.append(outputRow)
         else:
             if args.mode == 'RNA':
-                mainAnnoRow = ['na' for i in range(11)]
+                mainAnnoRow = ['na' for i in range(13)]
             else:
-                mainAnnoRow = ['na' for i in range(10)]
+                mainAnnoRow = ['na' for i in range(12)]
             outputRow = peakRow + mainAnnoRow + extraAnnoRow
             outputRowList.append(outputRow)
     else:
         appendRow = ['intergenic', 'intergenic', 'intergenic', 'intergenic']
-        appendRow.extend(['na' for i in range(14)])
-        appendRow[7] = 'intergenic'
+        appendRow.extend(['na' for i in range(16)])
+        appendRow[9] = 'intergenic'
         outputRow = peakRow + appendRow
         outputRowList.append(outputRow)
 
