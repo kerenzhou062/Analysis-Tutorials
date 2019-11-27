@@ -430,8 +430,8 @@ if bool(args.ncbiGeneInfo):
                 dbXrefsDict[db] = geneId
             if 'Ensembl' in dbXrefsDict:
                 geneId = dbXrefsDict['Ensembl']
-                synonyms = row[4]
-                description = row[8]
+                synonyms = row[4] if row[4] != '-' else 'na'
+                description = row[8] if row[8] != '-' else 'na'
                 ncbiGeneInfoDict[geneId] = [synonyms, description]
 
 # built up tx-infor pairwise relationships
