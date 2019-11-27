@@ -51,7 +51,7 @@ parser.add_argument('--keepName', action='store_true',
                     help='keep original 4th column in output')
 parser.add_argument('-extraAnno', nargs='*', type=str,
                     help='individual extraitional annotations in bed6 format \
-                    (4th column:identifier1:identifier2:identifier3:type) \
+                    (4th column:extraName1:extraName2:extraName3:type) \
                     (the order represents type priority)')
 parser.add_argument('-extraType', nargs='*', type=str, choices=['gene', 'element'],
                     help='type of extraitional annotations (gene|element, same length with -extraAnno)')
@@ -612,10 +612,10 @@ if bool(args.extraAnno):
             peakLocus = [peakRow[1], peakRow[2]]
         
             infoList = bedAnnoRow[3].split(':')
-            identifier1 = infoList[0]
-            identifier2 = infoList[1]
-            identifier3 = infoList[2]
-            identifier = ':'.join([identifier1, identifier2, identifier3])
+            extraName1 = infoList[0]
+            extraName2 = infoList[1]
+            extraName3 = infoList[2]
+            extraName = ':'.join([extraName1, extraName2, extraName3])
             extraAnnoType = infoList[3]
             ## decode feature
             if args.mode == 'RNA':
@@ -626,9 +626,9 @@ if bool(args.extraAnno):
                 annoFeatureDict['overlapLength'] = BedMan.overlap(bedLocus, peakLocus)
             else:
                 annoFeatureDict = dnaFeatureDecode(bedAnnoRow, peakLocus, extraType)
-            extraAnnoPeakDict[peakId][identifier] = defaultdict(dict)
-            extraAnnoPeakDict[peakId][identifier]['feature'] = annoFeatureDict
-            extraAnnoPeakDict[peakId][identifier]['extraAnnoType'] = extraAnnoType
+            extraAnnoPeakDict[peakId][extraName] = defaultdict(dict)
+            extraAnnoPeakDict[peakId][extraName]['feature'] = annoFeatureDict
+            extraAnnoPeakDict[peakId][extraName]['extraAnnoType'] = extraAnnoType
     ## make peak-gene uniq
     ## order by extraAnnoType, max(overlapLength)|(distance)
     for peakId in extraAnnoPeakDict.keys():
@@ -636,8 +636,8 @@ if bool(args.extraAnno):
             annoPeakDict[peakId]['extraAnno'] = extraAnnoPeakDict[peakId]
         else:
             tempDict = extraAnnoPeakDict[peakId]
-            identifierList = sorted(tempDict.keys())
-            typeList = list(map(lambda x:tempDict[x]['extraAnnoType'], identifierList))
+            extraNameList = sorted(tempDict.keys())
+            typeList = list(map(lambda x:tempDict[x]['extraAnnoType'], extraNameList))
             typeIndexList = list(map(lambda x:extraPriTypeList.index(x), typeList))
             if args.mode == 'RNA':
                 ## get first priority index in extraPriTypeList
@@ -649,7 +649,7 @@ if bool(args.extraAnno):
                 label = typeLabelList[0]
                 ## if multiple first priority, return the tx with max overlapLength
                 if len(typeLabelList) > 1:
-                    overlapLengthList = list(map(lambda x: tempDict[x]['feature']['overlapLength'], identifierList))
+                    overlapLengthList = list(map(lambda x: tempDict[x]['feature']['overlapLength'], extraNameList))
                     maxLen = 0
                     for i in typeLabelList:
                         try:
@@ -665,7 +665,7 @@ if bool(args.extraAnno):
                             label = i
             else:
                 ## if multiple first priority, return the closest tx
-                distList = list(map(lambda x: tempDict[x]['feature']['distance'], identifierList))
+                distList = list(map(lambda x: tempDict[x]['feature']['distance'], extraNameList))
                 minIndex = min(list(map(abs, distList)))
                 distLabelList = list()
                 for i in range(len(distList)):
@@ -678,7 +678,7 @@ if bool(args.extraAnno):
                         if typeIndexList[i] < priExtraAnnoTypeIndex:
                             priExtraAnnoTypeIndex = typeIndexList[i]
                             label = i
-            labelId = identifierList[label]
+            labelId = extraNameList[label]
             labelDict = defaultdict(dict)
             labelDict[labelId] = tempDict[labelId]
             annoPeakDict[peakId]['extraAnno'] = labelDict
@@ -717,30 +717,30 @@ for peakId in peakIdList:
         extraAnnoRow = list()
         if 'extraAnno' in annoPeakDict[peakId]:
             extraAnnoPeakDict = annoPeakDict[peakId]['extraAnno']
-            identifierList = sorted(extraAnnoPeakDict.keys())
+            extraNameList = sorted(extraAnnoPeakDict.keys())
             extraTypeRow = list()
-            identifierRow = [[], [], []]
+            extraNameRow = [[], [], []]
             featureRow = list()
             extraAnnoTypeRow = list()
             overlapLengthRow = list()
             distanceRow = list()
-            for identifier in sorted(extraAnnoPeakDict.keys()):
-                extraTypeRow.append(extraAnnoPeakDict[identifier]['feature']['extraType'])
-                identifier1, identifier2, identifier3 = identifier.split(':')[0:3]
-                identifierRow[0].append(identifier1)
-                identifierRow[1].append(identifier2)
-                identifierRow[2].append(identifier3)
-                featureRow.append(extraAnnoPeakDict[identifier]['feature']['main'])
-                extraAnnoTypeRow.append(extraAnnoPeakDict[identifier]['extraAnnoType'])
-                overlapLengthRow.append(extraAnnoPeakDict[identifier]['feature']['overlapLength'])
+            for extraName in sorted(extraAnnoPeakDict.keys()):
+                extraTypeRow.append(extraAnnoPeakDict[extraName]['feature']['extraType'])
+                extraName1, extraName2, extraName3 = extraName.split(':')[0:3]
+                extraNameRow[0].append(extraName1)
+                extraNameRow[1].append(extraName2)
+                extraNameRow[2].append(extraName3)
+                featureRow.append(extraAnnoPeakDict[extraName]['feature']['main'])
+                extraAnnoTypeRow.append(extraAnnoPeakDict[extraName]['extraAnnoType'])
+                overlapLengthRow.append(extraAnnoPeakDict[extraName]['feature']['overlapLength'])
                 if args.mode == 'DNA':
-                    distanceRow.append(extraAnnoPeakDict[identifier]['feature']['distance'])
+                    distanceRow.append(extraAnnoPeakDict[extraName]['feature']['distance'])
             extraTypeCol = ','.join(extraTypeRow)
-            for i in range(len(identifierRow)):
-                identifierRow[i] = ','.join(identifierRow[i])
-            identifier1Col = identifierRow[0]
-            identifier2Col = identifierRow[1]
-            identifier3Col = identifierRow[2]
+            for i in range(len(extraNameRow)):
+                extraNameRow[i] = ','.join(extraNameRow[i])
+            extraName1Col = extraNameRow[0]
+            extraName2Col = extraNameRow[1]
+            extraName3Col = extraNameRow[2]
             try:
                 featureCol = ','.join(extraAnnoPeakDict)
             except TypeError as e:
@@ -749,7 +749,7 @@ for peakId in peakIdList:
             extraAnnoTypeCol = ','.join(extraAnnoTypeRow)
             overlapLengthCol = ','.join(map(str, overlapLengthRow))
             ## 5 or 6 elements
-            extraAnnoRow = [extraTypeCol, identifier1Col, identifier2Col, identifier3Col, featureCol, extraAnnoTypeCol]
+            extraAnnoRow = [extraTypeCol, extraName1Col, extraName2Col, extraName3Col, featureCol, extraAnnoTypeCol]
             if args.mode == 'DNA':
                 distanceCol = ','.join(map(str,distanceRow))
                 extraAnnoRow.append(distanceCol)
