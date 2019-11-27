@@ -13,8 +13,6 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 parser.add_argument('-anno', action='store', type=str, required=True,
                     help='Gene annotation file in bed12 format (main annotation) \
                     (4th column [gene_id:gene_name:gene_type:tx_id:tx_name:tx_type])')
-parser.add_argument('-input', action='store', type=str, required=True,
-                    help='input peak file (bed6 or bed6+)')
 parser.add_argument('-bf', action='store', type=str,
                     help='bedtools: -f')
 parser.add_argument('-bF', action='store', type=str,
@@ -23,50 +21,52 @@ parser.add_argument('-br', action='store', type=str,
                     help='bedtools: -r')
 parser.add_argument('-be', action='store', type=str,
                     help='bedtools: -e')
-parser.add_argument('-method', action='store', type=str, choices=['center', 'border'],
-                    default='border',
-                    help='use peak center|border to calcualte distance to TSS|TTS')
-parser.add_argument('-ncbiGeneInfo', action='store', type=str,
-                    help='*.gene_info file downloaded from NCBI')
-parser.add_argument('-name', action='store', type=str,
-                    default='peak=',
-                    help='prefix for each peak name')
-parser.add_argument('-kbTSS', action='store', type=str,
-                    default='1,2,3,5:1,2',
-                    help='<int,int,...:int,int,...> record (up:down) distance to TSS in kb')
-parser.add_argument('-kbTTS', action='store', type=str,
-                    default='1:1,2',
-                    help='<int,int,...:int,int,...> record (up:down) distance to TSS in kb')
 parser.add_argument('-codon', action='store', type=str,
                     help='<int#1,int#2>#1 bp upstream and #2 bp downstream start/stop codon as their feature')
-parser.add_argument('-mode', action='store', type=str, choices=['DNA', 'RNA'],
-                    default='RNA',
-                    help='Annotation mode')
-parser.add_argument('-strand', action='store_true',
-                    default=False,
-                    help='bedtools: -s (strand)')
 parser.add_argument('--disablePeakUniq', action='store_true',
                     default=False,
                     help='output multiple records for same peak')
-parser.add_argument('--keepName', action='store_true',
-                    default=False,
-                    help='keep original 4th column in output')
 parser.add_argument('-extraAnno', nargs='*', type=str,
                     help='individual extraitional annotations in bed6 format \
                     (4th column[extraName1:extraName2:extraName3:type]) \
                     (the order represents type priority)')
 parser.add_argument('-extraType', nargs='*', type=str, choices=['gene', 'element'],
                     help='type of extraitional annotations (gene|element, same length with -extraAnno)')
+parser.add_argument('-geneClassFile', action='store', type=str, required=True,
+                    help='geneType-geneClass pairwise file')
 parser.add_argument('-gsize', action='store', type=str,
                     help='genome size file (required for DNA mode)')
+parser.add_argument('-input', action='store', type=str, required=True,
+                    help='input peak file (bed6 or bed6+)')
+parser.add_argument('-kbTSS', action='store', type=str,
+                    default='1,2,3,5:1,2',
+                    help='<int,int,...:int,int,...> record (up:down) distance to TSS in kb')
+parser.add_argument('-kbTTS', action='store', type=str,
+                    default='1:1,2',
+                    help='<int,int,...:int,int,...> record (up:down) distance to TSS in kb')
+parser.add_argument('--keepName', action='store_true',
+                    default=False,
+                    help='keep original 4th column in output')
+parser.add_argument('-method', action='store', type=str, choices=['center', 'border'],
+                    default='border',
+                    help='use peak center|border to calcualte distance to TSS|TTS')
+parser.add_argument('-mode', action='store', type=str, choices=['DNA', 'RNA'],
+                    default='RNA',
+                    help='Annotation mode (DNA|RNA)')
+parser.add_argument('-ncbiGeneInfo', action='store', type=str,
+                    help='*.gene_info file downloaded from NCBI')
+parser.add_argument('-name', action='store', type=str,
+                    default='peak=',
+                    help='prefix for each peak name')
 parser.add_argument('-priF', action='store', type=str,
                     help="Defined priority of features (eg., \"CDS,5' UTR\")")
 parser.add_argument('-priG', action='store', type=str,
                     help='Defined priority of gene types (eg., "protein-coding,lncRNA")')
-parser.add_argument('-geneClassFile', action='store', type=str, required=True,
-                    help='geneType-geneClass pairwise file')
 parser.add_argument('-output', action='store', type=str, required=True,
                     help='output result (coordiantes in 0-base)')
+parser.add_argument('-strand', action='store_true',
+                    default=False,
+                    help='bedtools: -s (strand)')
 
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
