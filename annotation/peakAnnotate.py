@@ -12,7 +12,7 @@ import BedMan
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-anno', action='store', type=str, required=True,
                     help='Gene annotation file in bed12 format (main annotation) \
-                    (4th column:gene_id:gene_name:gene_type:tx_id:tx_name:tx_type)')
+                    (4th column [gene_id:gene_name:gene_type:tx_id:tx_name:tx_type])')
 parser.add_argument('-input', action='store', type=str, required=True,
                     help='input peak file (bed6 or bed6+)')
 parser.add_argument('-bf', action='store', type=str,
@@ -51,7 +51,7 @@ parser.add_argument('--keepName', action='store_true',
                     help='keep original 4th column in output')
 parser.add_argument('-extraAnno', nargs='*', type=str,
                     help='individual extraitional annotations in bed6 format \
-                    (4th column:extraName1:extraName2:extraName3:type) \
+                    (4th column[extraName1:extraName2:extraName3:type]) \
                     (the order represents type priority)')
 parser.add_argument('-extraType', nargs='*', type=str, choices=['gene', 'element'],
                     help='type of extraitional annotations (gene|element, same length with -extraAnno)')
