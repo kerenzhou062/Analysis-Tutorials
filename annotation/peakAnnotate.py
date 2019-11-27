@@ -828,8 +828,10 @@ for peakId in peakIdList:
             outputRow = peakRow + mainAnnoRow + extraAnnoRow
             outputRowList.append(outputRow)
     else:
-        appendRow = ['intergenic', 'intergenic', 'intergenic', 'intergenic']
-        appendRow.extend(['na' for i in range(16)])
+        appendRow = ['na' for i in range(20)]
+        appendRow[4] = 'intergenic'
+        appendRow[5] = 'intergenic'
+        appendRow[8] = 'intergenic'
         appendRow[9] = 'intergenic'
         outputRow = peakRow + appendRow
         outputRowList.append(outputRow)
