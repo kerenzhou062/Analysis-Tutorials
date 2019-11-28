@@ -49,7 +49,7 @@ parser.add_argument('--keepName', action='store_true',
                     help='keep original 4th column in output')
 parser.add_argument('-method', action='store', type=str, choices=['center', 'border'],
                     default='border',
-                    help='use peak center|border to calcualte distance to TSS|TTS')
+                    help='use peak center|border to calculate distance to TSS|TTS')
 parser.add_argument('-mode', action='store', type=str, choices=['DNA', 'RNA'],
                     default='RNA',
                     help='Annotation mode (DNA|RNA)')
