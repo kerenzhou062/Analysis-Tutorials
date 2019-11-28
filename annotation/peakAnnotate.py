@@ -787,7 +787,7 @@ for peakId in peakIdList:
                 extraAnnoRow = ['na' for i in range(7)]
             else:
                 extraAnnoRow = ['na' for i in range(8)]
-                extraAnnoRow[6] = str(1e9)
+                extraAnnoRow[6] = str(1e10)
             extraAnnoRow[-1] = str(-1)
         mainAnnoRow = list()
         if 'mainAnno' in annoPeakDict[peakId]:
@@ -827,7 +827,7 @@ for peakId in peakIdList:
                 mainAnnoRow = ['na' for i in range(13)]
             else:
                 mainAnnoRow = ['na' for i in range(12)]
-                mainAnnoRow[10] = str(1e9)
+                mainAnnoRow[10] = str(1e10)
             mainAnnoRow[4] = 'intergenic'
             mainAnnoRow[5] = 'intergenic'
             mainAnnoRow[8] = 'intergenic'
@@ -841,13 +841,13 @@ for peakId in peakIdList:
         appendRow[5] = 'intergenic'
         appendRow[8] = 'intergenic'
         appendRow[9] = 'intergenic'
-        ## if intergenic, distance set to 1e9, overlap set to -1
+        ## if intergenic, distance set to 1e10, overlap set to -1
         if args.mode == 'RNA':
             appendRow[12] = str(-1)
             appendRow[-1] = str(-1)
         else:
-            appendRow[10] = str(1e9)
-            appendRow[18] = str(1e9)
+            appendRow[10] = str(1e10)
+            appendRow[18] = str(1e10)
         outputRow = peakRow + appendRow
         outputRowList.append(outputRow)
 
