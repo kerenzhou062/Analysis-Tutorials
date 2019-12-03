@@ -30,6 +30,7 @@ function showHelp {
     --mfreq: # of mutation tags (defined enriched sites) <int>
     --mkr: m/k ratio for enriched mutation sites <str>
     --dbkey: CTK dbkey (hg38|hg19|mm10) <str>
+    --gene: custom gene annotation bed (tag2peak.pl) <str>
     --full-bed: all transcripts annotation in bed12 <str>
     --index: genome index <str>
     --longest-bed: mRNA longest annotation in bed12 <str>
@@ -39,6 +40,7 @@ function showHelp {
     --keep-tmp-fastq: keep temporary fastqs <bool>
     --skip-mapping: skip reads mapping step <bool>
     --skip-pooling: skip pooling step <bool>
+    --skip-PCR-am: skip removing PCR duplicates after mapping <bool>
     --skip-calling: skip m6A sites calling step <bool>"
   exit 2;
 }
@@ -50,7 +52,8 @@ then
   exit 2
 fi
 
-TEMP=`getopt -o hb:e:g:i:m:o:p:q:t: --long help,skip-mapping,skip-pooling,skip-calling,keep-tmp-fastq \
+TEMP=`getopt -o hb:e:g:i:m:o:p:q:t: --long help,skip-mapping,skip-pooling,skip-calling \
+  --long keep-tmp-fastq,skip-PCR-am \
   --long input:,thread:,output:,exp-prefix:,pool-prefix:,index:,min-length:,dbkey: \
   --long longest-bed:,full-bed:,repeat-bed:,barcode-length:,fasta:,quality:,mkr:,motif:,mtag: \
   -- "$@"`
@@ -71,6 +74,7 @@ EXP_PREFIX=
 POOL_PREFIX=
 BWA_INDEX=
 DB_KEY=
+CUSTOM_GENE=
 QUALITY=20
 FASTA=
 GENOME_SIZE=
@@ -84,6 +88,7 @@ MOTIF_TAG=3
 KEEP_TMP_FASTQ=false
 SKIP_MAPPING=false
 SKIP_POOLING=false
+SKIP_PCR_AM=false
 SKIP_CALLING=false
 while true; do
   case "$1" in
@@ -101,6 +106,7 @@ while true; do
     --mfreq ) MUTATE_FREQ="$2"; shift 2 ;;
     --mkr ) MKR_RATIO="$2"; shift 2 ;;
     --dbkey ) DB_KEY="$2"; shift 2 ;;
+    --gene ) CUSTOM_GENE="$2"; shift 2 ;;
     --full-bed ) FULL_BED="$2"; shift 2 ;;
     --index ) BWA_INDEX="$2"; shift 2 ;;
     --longest-bed ) LONGEST_BED="$2"; shift 2 ;;
@@ -110,6 +116,7 @@ while true; do
     --keep-tmp-fastq ) KEEP_TMP_FASTQ=true; shift ;;
     --skip-mapping ) SKIP_MAPPING=true; shift ;;
     --skip-pooling ) SKIP_POOLING=true; shift ;;
+    --skip-PCR-am ) SKIP_PCR_AM=true; shift ;;
     --skip-calling ) SKIP_CALLING=true; shift ;;
     -- ) shift; break ;;
     * ) break ;;
@@ -138,6 +145,10 @@ if [ -z $POOL_PREFIX ]; then
   exit 2
 fi
 
+if [ -z $DB_KEY ]; then
+  echo "--dbkey: Wrong! Please specify --dbkey";
+fi
+
 if [ ! -f ${BWA_INDEX}.bwt ]; then
   echo "--index: Wrong! Invalid BWA index!"
   exit 2
@@ -153,6 +164,7 @@ echo "EXP_PREFIX=$EXP_PREFIX"
 echo "POOL_PREFIX=$POOL_PREFIX"
 echo "BWA_INDEX=$BWA_INDEX"
 echo "DB_KEY=$DB_KEY"
+echo "CUSTOM_GENE=$CUSTOM_GENE"
 echo "QUALITY=$QUALITY"
 echo "FASTA=$FASTA"
 echo "GENOME_SIZE=$GENOME_SIZE"
@@ -166,6 +178,7 @@ echo "MOTIF_TAG=$MOTIF_TAG"
 echo "KEEP_TMP_FASTQ=$KEEP_TMP_FASTQ"
 echo "SKIP_MAPPING=$SKIP_MAPPING"
 echo "SKIP_POOLING=$SKIP_POOLING"
+echo "SKIP_PCR_AM=$SKIP_PCR_AM"
 echo "SKIP_CALLING=$SKIP_CALLING"
 echo ""
 
@@ -289,12 +302,21 @@ else
         ${MAP_PREFIX}.tag.norRNA.bed > ${MAP_PREFIX}.tagoverlap.log 2>&1
       # Collapse PCR duplicates
       if (( $BARCODE_LEN > 0 )); then
-        tag2collapse.pl -big -v --random-barcode -EM 30 \
-          --seq-error-model alignment -weight --weight-in-name \
-          --keep-max-score --keep-tag-name ${MAP_PREFIX}.tag.norRNA.bed \
-          ${MAP_PREFIX}.tag.uniq.bed
+        if $SKIP_PCR_AM; then
+          cp ${MAP_PREFIX}.tag.norRNA.bed ${MAP_PREFIX}.tag.uniq.bed
+        else
+          tag2collapse.pl -big -v --random-barcode -EM 30 \
+            --seq-error-model alignment -weight --weight-in-name \
+            --keep-max-score --keep-tag-name ${MAP_PREFIX}.tag.norRNA.bed \
+            ${MAP_PREFIX}.tag.uniq.bed
+        fi
       else
-        mv ${MAP_PREFIX}.tag.norRNA.bed ${MAP_PREFIX}.tag.uniq.bed
+        if $SKIP_PCR_AM; then
+          cp ${MAP_PREFIX}.tag.norRNA.bed ${MAP_PREFIX}.tag.uniq.bed
+        else
+          tag2collapse.pl -v -big -weight --weight-in-name --keep-max-score \
+            --keep-tag-name ${MAP_PREFIX}.tag.norRNA.bed ${MAP_PREFIX}.tag.uniq.bed
+        fi
       fi
       
       awk '{print $3-$2}' ${MAP_PREFIX}.tag.uniq.bed | sort -n | uniq -c | \
@@ -368,6 +390,7 @@ if $SKIP_CALLING; then
   echo "Skip peak calling."
 else
   ## Mode 1: Peak calling with no statistical significance
+  echo "Peak calling [mode1]..."
   PEAK_PREFIX="${POOL_PREFIX}.peak.nostats"
   tag2peak.pl -big -ss -v --valley-seeking --valley-depth 0.9 \
     ${POOL_PREFIX}.pool.tag.uniq.rgb.bed ${PEAK_PREFIX}.bed \
@@ -386,13 +409,24 @@ else
     -output ${PEAK_PREFIX}.${MOTIF}.bed
   
   ## Mode 2: Peak calling with statistical significance
+  echo "Peak calling [mode2]..."
   PEAK_PREFIX="${POOL_PREFIX}.peak.sig"
-  tag2peak.pl -big -ss -v --valley-seeking -p 0.05 \
-    --valley-depth 0.9 --multi-test --dbkey ${DB_KEY} \
-    ${POOL_PREFIX}.pool.tag.uniq.rgb.bed ${PEAK_PREFIX}.bed \
-    --out-boundary ${PEAK_PREFIX}.boundary.bed \
-    --out-half-PH ${PEAK_PREFIX}.halfPH.bed \
-    > ${PEAK_PREFIX}.mode2.log 2>&1
+  if [[ -z $CUSTOM_GENE ]]; then
+    tag2peak.pl -big -ss -v --valley-seeking -p 0.05 \
+      --valley-depth 0.9 --multi-test --dbkey ${DB_KEY} \
+      ${POOL_PREFIX}.pool.tag.uniq.rgb.bed ${PEAK_PREFIX}.bed \
+      --out-boundary ${PEAK_PREFIX}.boundary.bed \
+      --out-half-PH ${PEAK_PREFIX}.halfPH.bed \
+      > ${PEAK_PREFIX}.mode2.log 2>&1
+  else
+    echo "Peak calling with CUSTOM GENE annotation..."
+    tag2peak.pl -big -ss -v --valley-seeking -p 0.05 \
+      --valley-depth 0.9 --multi-test --gene ${CUSTOM_GENE} \
+      ${POOL_PREFIX}.pool.tag.uniq.rgb.bed ${PEAK_PREFIX}.bed \
+      --out-boundary ${PEAK_PREFIX}.boundary.bed \
+      --out-half-PH ${PEAK_PREFIX}.halfPH.bed \
+      > ${PEAK_PREFIX}.mode2.log 2>&1
+  fi
   
   ### scan RRACH motif
   scanMotif.py -input ${PEAK_PREFIX}.bed -format bed6 \
@@ -436,7 +470,7 @@ awk 'BEGIN{FS="\t";OFS="\t";}{if(FNR>1){print $1,$2,$3,$4,$5,$6,$7,$8,$9}}' \
 
 ##enriched: get CIMS, m/k>=0.5
 awk -v mkr="${MKR_RATIO}" -v mfreq=${MUTATE_FREQ} \
-  'BEGIN{FS="\t";OFS="\t";}{if(FNR==1){print $0}else{if($5>=mkr && $8>=mfreq) {print $0}}}' \
+  'BEGIN{FS="\t";OFS="\t";}{if($5>=mkr && $8>=mfreq) {print $0}}' \
   ${POOL_PREFIX}.c2t.CIMS.mk.txt > ${POOL_PREFIX}.c2t.CIMS.enrich.bed
 
 ##significant: get CIMS
@@ -512,10 +546,46 @@ cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.sig.${MOTIF}.bed ./
 cp $CITS_DIR/${POOL_PREFIX}.CITS.${MOTIF}.bed ./
 cp $CITS_DIR/${POOL_PREFIX}.CITS.sig.${MOTIF}.bed ./
 
-cat ${POOL_PREFIX}.c2t.CIMS.${MOTIF}.bed ${POOL_PREFIX}.CITS.${MOTIF}.bed | \
-  sort -t $'\t' -k1,1 -k2,2n > ${POOL_PREFIX}.combine.${MOTIF}.bed
-cat ${POOL_PREFIX}.c2t.CIMS.sig.${MOTIF}.bed ${POOL_PREFIX}.CITS.sig.${MOTIF}.bed | \
-  sort -t $'\t' -k1,1 -k2,2n > ${POOL_PREFIX}.combine.sig.${MOTIF}.bed
+## cat CIMS and CITS and uniq
+function combine {
+  input1=$1
+  input2=$2
+  output=$3
+  cat $input1 $input2 | \
+    awk 'BEGIN{OFS="\t";FS="\t";}
+    {
+      if($1!="#chrom") {
+        key = $1"\t"$2"\t"$3":"$5"\t"$6;
+        if (match($4, /CITS/) ) {
+          type = "CITS";
+        }else{
+          type = "CIMS";
+        }
+        if (key in arrayA) {
+          arrayA[key] = arrayA[key]"|"type
+        }else{
+          arrayA[key] = $(NF-1)"="type
+        }
+      }
+    }
+    END{
+      for (key in arrayA) {
+        split(key,splitArr,":");
+        pos = splitArr[1];
+        remain = splitArr[2];
+        print pos, arrayA[key], remain;
+      }
+    }' | sort -k1,1 -k2,2n > $output
+}
+
+combine ${POOL_PREFIX}.c2t.CIMS.${MOTIF}.bed \
+  ${POOL_PREFIX}.CITS.${MOTIF}.bed \
+  ${POOL_PREFIX}.combine.${MOTIF}.bed
+combine ${POOL_PREFIX}.c2t.CIMS.sig.${MOTIF}.bed \
+  ${POOL_PREFIX}.CITS.sig.${MOTIF}.bed \
+  ${POOL_PREFIX}.combine.sig.${MOTIF}.bed
+
+echo "Pooling CT and Truncation m6A sites done."
 
 ## annotate beds
 echo "Annotating beds..."

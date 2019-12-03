@@ -433,7 +433,7 @@ do
         split(key,splitArr,":");
         pos = splitArr[1];
         strand = splitArr[2];
-        print pos, arrayA[key], arrayB[key], strand, $9;
+        print pos, arrayA[key], arrayB[key], strand;
       }
     }' | sort -k1,1 -k2,2n > ${i}.m6ASite.combine.bed
 done
