@@ -732,7 +732,8 @@ else:
     extraHeaderRow.append('ExtraOverlapLength')
 
 headerRow.extend(mainHeaderRow)
-headerRow.extend(extraHeaderRow)
+if bool(args.extraAnno):
+    headerRow.extend(extraHeaderRow)
 ## construct output contents
 outputRowList = [headerRow]
 for peakId in peakIdList:
@@ -783,12 +784,13 @@ for peakId in peakIdList:
                 extraAnnoRow.append(distanceCol)
             extraAnnoRow.append(overlapLengthCol)
         else:
-            if args.mode == 'RNA':
-                extraAnnoRow = ['na' for i in range(7)]
-            else:
-                extraAnnoRow = ['na' for i in range(8)]
-                extraAnnoRow[6] = str(1e10)
-            extraAnnoRow[-1] = str(-1)
+            if bool(args.extraAnno):
+                if args.mode == 'RNA':
+                    extraAnnoRow = ['na' for i in range(7)]
+                else:
+                    extraAnnoRow = ['na' for i in range(8)]
+                    extraAnnoRow[6] = str(1e10)
+                extraAnnoRow[-1] = str(-1)
         mainAnnoRow = list()
         if 'mainAnno' in annoPeakDict[peakId]:
             mainAnnoPeakDict = annoPeakDict[peakId]['mainAnno']
@@ -836,18 +838,27 @@ for peakId in peakIdList:
             outputRow = peakRow + mainAnnoRow + extraAnnoRow
             outputRowList.append(outputRow)
     else:
-        appendRow = ['na' for i in range(20)]
+        if bool(args.extraAnno):
+            appendRow = ['na' for i in range(20)]
+            ## if intergenic, distance set to 1e10, overlap set to -1
+            if args.mode == 'RNA':
+                appendRow[12] = str(-1)
+                appendRow[-1] = str(-1)
+            else:
+                appendRow[10] = str(1e10)
+                appendRow[18] = str(1e10)
+        else:
+            ## if intergenic, distance set to 1e10, overlap set to -1
+            if args.mode == 'RNA':
+                appendRow = ['na' for i in range(13)]
+            else:
+                appendRow = ['na' for i in range(12)]
+                appendRow[10] = str(1e10)
+            mainAnnoRow[-1] = str(-1)
         appendRow[4] = 'intergenic'
         appendRow[5] = 'intergenic'
         appendRow[8] = 'intergenic'
         appendRow[9] = 'intergenic'
-        ## if intergenic, distance set to 1e10, overlap set to -1
-        if args.mode == 'RNA':
-            appendRow[12] = str(-1)
-            appendRow[-1] = str(-1)
-        else:
-            appendRow[10] = str(1e10)
-            appendRow[18] = str(1e10)
         outputRow = peakRow + appendRow
         outputRowList.append(outputRow)
 
