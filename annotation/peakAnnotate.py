@@ -6,6 +6,7 @@ import re
 from collections import defaultdict
 import tempfile
 import subprocess
+import copy
 ## own module
 import BedMan
 
@@ -386,8 +387,7 @@ with open(args.input, 'r') as f, open(peakBed6Tmp.name, 'w') as temp:
         uniqPeakId = uniqPeakPre + str(count)
         peakIdList.append(uniqPeakId)
         ## keep original peak record
-        peakInfoDict[uniqPeakId]['original'] = originalId
-        peakInfoDict[uniqPeakId]['row'] = row
+        peakInfoDict[uniqPeakId] = copy.copy(row)
         ## construct peak-bed6
         row[3] = uniqPeakId
         bed6Line = '\t'.join(row[:6]) + '\n'
@@ -737,7 +737,7 @@ if bool(args.extraAnno):
 ## construct output contents
 outputRowList = [headerRow]
 for peakId in peakIdList:
-    peakRow = peakInfoDict[peakId]['row']
+    peakRow = peakInfoDict[peakId]
     peakLength = int(peakRow[2])-int(peakRow[1])
     peakRow.append(str(peakLength))
     if args.keepName is False:
