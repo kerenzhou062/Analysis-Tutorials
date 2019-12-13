@@ -154,7 +154,8 @@ fi
 if [[ ! -d $OUTPUT_DIR ]]; then
   mkdir -p $OUTPUT_DIR
 else
-  rm -rf $OUTPUT_DIR/*
+  rm -rf $OUTPUT_DIR
+  mkdir -p $OUTPUT_DIR
 fi
 
 cd $OUTPUT_DIR
