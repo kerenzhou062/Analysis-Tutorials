@@ -132,7 +132,7 @@ echo "Running pipleline with following parameters:"
 echo "THREAD=$THREAD"
 echo "MEMORY=$MEMORY"
 echo "OUTPUT_DIR=$OUTPUT_DIR"
-echo "EXP_PREFIX=$EXP_PREFIX"
+echo "PREFIX=$PREFIX"
 echo "STAR_GENOME_DIR=$STAR_GENOME_DIR"
 echo "RSEM_GENOME_DIR=$RSEM_GENOME_DIR"
 echo "MAX_MISMATCH=$MAX_MISMATCH"
@@ -330,18 +330,18 @@ rm -f sig.tmp
 
 echo "Rename outputs..."
 #find . -type f -name "*.bw" | perl -pe 'print $_; s/Signal/HepG2_control_rep2/' | xargs -n2 mv
-mv Quant.genes.results "${EXP_PREFIX}.genes.results"
-mv Quant.isoforms.results "${EXP_PREFIX}.isoforms.results"
-mv Quant.pdf "${EXP_PREFIX}.Quant.pdf"
-mv Signal/Log.out "${EXP_PREFIX}.Signal.Log.out"
-mv Log.rsem "${EXP_PREFIX}.rsem.log"
-mv SJ.out.tab "${EXP_PREFIX}.SJ.out.tab"
+mv Quant.genes.results "${PREFIX}.genes.results"
+mv Quant.isoforms.results "${PREFIX}.isoforms.results"
+mv Quant.pdf "${PREFIX}.Quant.pdf"
+mv Signal/Log.out "${PREFIX}.Signal.Log.out"
+mv Log.rsem "${PREFIX}.rsem.log"
+mv SJ.out.tab "${PREFIX}.SJ.out.tab"
 
 rm -rf Signal
 
-rename "Signal." "${EXP_PREFIX}." *.bw
-rename "Aligned." "${EXP_PREFIX}." *.bam
-rename "Aligned." "${EXP_PREFIX}." *.out
-rename "Log." "${EXP_PREFIX}.Log." *.out
+rename "Signal." "${PREFIX}." *.bw
+rename "Aligned." "${PREFIX}." *.bam
+rename "Aligned." "${PREFIX}." *.out
+rename "Log." "${PREFIX}.Log." *.out
 
 echo "RSEM_STAR pipeline done."
