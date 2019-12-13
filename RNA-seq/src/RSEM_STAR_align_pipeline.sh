@@ -28,6 +28,7 @@ function showHelp {
   echo -e "options:
     -h | --help: show help information <bool>
     -o | --output: the output folder <str>
+    -p | --prefix: the output prefix (align) <str>
     -t | --thread: # of cpus <int>
     --max-mismatch: --outFilterMismatchNoverLmax in STAR (0.04) <float>
     --mem: # of memory used for RSEM --ci-memory [GB] (30) <int>
@@ -46,7 +47,7 @@ if [[ $# == 0 ]]; then
   exit 2
 fi
 
-TEMP=`getopt -o he:o:t: --long help,thread:,max-mismatch:,mem: \
+TEMP=`getopt -o hp:o:t: --long help,thread:,max-mismatch:,mem:,prefix: \
   --long rsem-genome-dir:,star-genome-dir:,read1:,read2:,data-type:, \
   --long zcat-flag \
   -- "$@"`
@@ -59,11 +60,12 @@ eval set -- "$TEMP"
 # Initialize variables:
 THREAD=10
 MEMORY="60"
+PREFIX="align"
 OUTPUT_DIR=
 STAR_GENOME_DIR=
 RSEM_GENOME_DIR=
 MAX_MISMATCH=0.04
-DATA_TYPE="str_SE"
+DATA_TYPE="str_PE"
 READ1=
 READ2=""
 ZCAT_FLAG=false
@@ -72,6 +74,7 @@ while true; do
   case "$1" in
     -h | --help ) showHelp; shift ;;
     -o | --output ) OUTPUT_DIR="$2"; shift 2 ;;
+    -p | --prefix ) PREFIX="$2"; shift 2 ;;
     -t | --thread ) THREAD="$2"; shift 2 ;;
     --rsem-genome-dir ) RSEM_GENOME_DIR="$2"; shift 2 ;;
     --star-genome-dir ) STAR_GENOME_DIR="$2"; shift 2 ;;
@@ -156,14 +159,16 @@ fi
 
 cd $OUTPUT_DIR
 
+# to avoid out of memory 
+MEMORY=$((MEMORY-3))
 # STAR parameters: common
-STARparCommon=" --genomeDir $STAR_GENOME_DIR  --readFilesIn $read1 $read2   --outSAMunmapped Within --outFilterType BySJout \
+STARparCommon=" --genomeDir $STAR_GENOME_DIR  --readFilesIn ${READ1} ${READ2}   --outSAMunmapped Within --outFilterType BySJout \
   --outSAMattributes NH HI AS NM MD    --outFilterMultimapNmax 20   --outFilterMismatchNmax 999 \
   --outFilterMismatchNoverReadLmax ${MAX_MISMATCH}   --alignIntronMin 20   --alignIntronMax 1000000   --alignMatesGapMax 1000000 \
   --alignSJoverhangMin 8   --alignSJDBoverhangMin 1 --sjdbScore 1 $zcatCommand "
 
 # STAR parameters: run-time, controlled by DCC
-STARparRun=" --runThreadN ${THREAD} --genomeLoad LoadAndKeep  --limitBAMsortRAM 0"
+STARparRun=" --runThreadN ${THREAD} --genomeLoad NoSharedMemory  --limitBAMsortRAM 0"
 
 # STAR parameters: type of BAM output: quantification or sorted BAM or both
 #     OPTION: sorted BAM output
@@ -171,11 +176,11 @@ STARparRun=" --runThreadN ${THREAD} --genomeLoad LoadAndKeep  --limitBAMsortRAM 
 #     OPTION: transcritomic BAM for quantification
 ## STARparBAM="--outSAMtype None --quantMode TranscriptomeSAM"
 #     OPTION: both
-STARparBAM="--outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM"
+STARparBAM="--outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM "
 
 # STAR parameters: strandedness, affects bedGraph (wiggle) files and XS tag in BAM 
 
-case "$dataType" in
+case "$DATA_TYPE" in
 str_SE|str_PE)
       #OPTION: stranded data
       STARparStrand=""
@@ -207,9 +212,12 @@ $STAR $STARparCommon $STARparRun $STARparBAM $STARparStrand $STARparsMeta
 # working subdirectory for this STAR run
 mkdir Signal
 
-echo $STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam --outWigType bedGraph $STARparWig --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr
-$STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam --outWigType bedGraph $STARparWig --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr
+echo "$STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam "
+echo "  --outWigType bedGraph $STARparWig --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr"
+$STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam \
+  --outWigType bedGraph $STARparWig --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr
 
+echo "Generating signal tracks..."
 # move the signal files from the subdirectory
 mv Signal/Signal*bg .
 
@@ -217,25 +225,25 @@ mv Signal/Signal*bg .
 # exclude spikeins
 grep ^chr $STAR_GENOME_DIR/chrNameLength.txt > chrNL.txt
 
-case "$dataType" in
+case "$DATA_TYPE" in
 str_SE|str_PE)
       # stranded data
-      str[1]=-; str[2]=+;
+      str[1]="minus"; str[2]="plus";
       for istr in 1 2
       do
-      for imult in Unique UniqueMultiple
-      do
-          grep ^chr Signal.$imult.str${istr}.out.bg > sig.tmp
-          $bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.strand${str[istr]}.bw
-      done
+        for imult in Unique UniqueMultiple
+        do
+          grep ^chr Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
+          $bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.bw
+        done
       done
       ;;
 unstr_SE|unstr_PE)
       # unstranded data
       for imult in Unique UniqueMultiple
       do
-          grep ^chr Signal.$imult.str1.out.bg > sig.tmp
-          $bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.bw
+        grep ^chr Signal.$imult.str1.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
+        $bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.bw
       done
       ;;
 esac
@@ -245,24 +253,35 @@ esac
 #### prepare for RSEM: sort transcriptome BAM to ensure the order of the reads, to make RSEM output (not pme) deterministic
 trBAMsortRAM="${MEMORY}G"
 
+echo "Sorting toTranscriptome bam..."
 mv Aligned.toTranscriptome.out.bam Tr.bam 
 
-case "$dataType" in
+case "$DATA_TYPE" in
 str_SE|unstr_SE)
       # single-end data
-      cat <( samtools view -H Tr.bam ) <( samtools view -@ $THREAD Tr.bam | sort -S $trBAMsortRAM -T ./ ) | samtools view -@ $THREAD -bS - > Aligned.toTranscriptome.out.bam
+      cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | sort -S ${trBAMsortRAM} -T ./ ) | \
+        samtools view -@ ${THREAD} -bS - > Aligned.toTranscriptome.out.bam
       ;;
 str_PE|unstr_PE)
       # paired-end data, merge mates into one line before sorting, and un-merge after sorting
-      cat <( samtools view -H Tr.bam ) <( samtools view -@ $THREAD Tr.bam | awk '{printf "%s", $0 " "; getline; print}' | sort -S $trBAMsortRAM -T ./ | tr ' ' '\n' ) | samtools view -@ $THREAD -bS - > Aligned.toTranscriptome.out.bam
+      cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | \
+        awk '{printf "%s", $0 " "; getline; print}' | sort -S ${trBAMsortRAM} -T ./ | tr ' ' '\n' ) | \
+        samtools view -@ $THREAD -bS - > Aligned.toTranscriptome.out.bam
       ;;
 esac
 
 'rm' Tr.bam
 
 
+echo "Running RSEM: ${RSEM}..."
 # RSEM parameters: common
-RSEMparCommon="--bam --estimate-rspd  --calc-ci --no-bam-output --seed 12345"
+## --estimate-rspd enabls RSEM to learn from data how the reads are distributed across a transcript. 
+## The learned statistics can help us assess if any positional biases are shown in the data.
+## The --calc-ci option tells RSEM to calculate credibility intervals and CQV values for each isoform / gene
+## The coefficient of quartile variation (CQV), which is a robust way to measure 
+## the ratio between standard deviation and mean.
+## Small CQV(0.05) means that we have enough reads to produce a good estimate
+RSEMparCommon="--bam --append-names --estimate-rspd  --calc-ci --no-bam-output --seed 12345"
 
 mb_memory=$((MEMORY*1000))
 # RSEM parameters: run-time, number of threads and RAM in MB
@@ -270,7 +289,7 @@ RSEMparRun=" -p $THREAD --ci-memory ${MEMORY} "
 
 # RSEM parameters: data type dependent
 
-case "$dataType" in
+case "$DATA_TYPE" in
 str_SE)
       #OPTION: stranded single end
       RSEMparType="--forward-prob 0"
@@ -291,14 +310,37 @@ esac
 
 
 ###### RSEM command
-echo $RSEM $RSEMparCommon $RSEMparRun $RSEMparType Aligned.toTranscriptome.out.bam $RSEM_GENOME_DIR Quant >& Log.rsem
+echo "$RSEM $RSEMparCommon $RSEMparRun "
+echo "  $RSEMparType Aligned.toTranscriptome.out.bam $RSEM_GENOME_DIR Quant >& Log.rsem"
 $RSEM $RSEMparCommon $RSEMparRun $RSEMparType Aligned.toTranscriptome.out.bam $RSEM_GENOME_DIR Quant >& Log.rsem
 
 ###### RSEM diagnostic plot creation
 # Notes:
 # 1. rsem-plot-model requires R (and the Rscript executable)
 # 2. This command produces the file Quant.pdf, which contains multiple plots
-echo rsem-plot-model Quant Quant.pdf
+echo "rsem-plot-model Quant Quant.pdf"
 rsem-plot-model Quant Quant.pdf
+
+## deleting temp files
+echo "Deleting temp files..."
+rm -rf _STARtmp
+rm -f *out.bg
+rm -f sig.tmp
+
+echo "Rename outputs..."
+#find . -type f -name "*.bw" | perl -pe 'print $_; s/Signal/HepG2_control_rep2/' | xargs -n2 mv
+mv Quant.genes.results "${EXP_PREFIX}.genes.results"
+mv Quant.isoforms.results "${EXP_PREFIX}.isoforms.results"
+mv Quant.pdf "${EXP_PREFIX}.Quant.pdf"
+mv Signal/Log.out "${EXP_PREFIX}.Signal.Log.out"
+mv Log.rsem "${EXP_PREFIX}.rsem.log"
+mv SJ.out.tab "${EXP_PREFIX}.SJ.out.tab"
+
+rm -rf Signal
+
+rename "Signal." "${EXP_PREFIX}." *.bw
+rename "Aligned." "${EXP_PREFIX}." *.bam
+rename "Aligned." "${EXP_PREFIX}." *.out
+rename "Log." "${EXP_PREFIX}.Log." *.out
 
 echo "RSEM_STAR pipeline done."
