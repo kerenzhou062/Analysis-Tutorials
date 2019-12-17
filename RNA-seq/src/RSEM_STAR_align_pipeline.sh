@@ -37,6 +37,7 @@ function showHelp {
     --read1: fastq of read1 <str>
     --read2: fastq of read2 (not set if single-end) <str>
     --data-type: RNA-seq type, possible values: str_SE str_PE unstr_SE unstr_PE
+    --append-names: set RSEM with --append-names
     --zcat-flag: set if the input fastq"
   exit 2;
 }
@@ -49,7 +50,7 @@ fi
 
 TEMP=`getopt -o hp:o:t: --long help,thread:,max-mismatch:,mem:,prefix: \
   --long rsem-genome-dir:,star-genome-dir:,read1:,read2:,data-type:, \
-  --long zcat-flag \
+  --long append-names,zcat-flag \
   -- "$@"`
 
 if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
@@ -68,6 +69,7 @@ MAX_MISMATCH=0.04
 DATA_TYPE="str_PE"
 READ1=
 READ2=""
+APPEND_NAMES=false
 ZCAT_FLAG=false
 
 while true; do
@@ -83,6 +85,7 @@ while true; do
     --read1 ) READ1="$2"; shift 2 ;;
     --read2 ) READ2="$2"; shift 2 ;;
     --data-type ) DATA_TYPE="$2"; shift 2 ;;
+    --append-names ) APPEND_NAMES=true; shift ;;
     --zcat-flag ) ZCAT_FLAG=true; shift ;;
     -- ) shift; break ;;
     * ) break ;;
@@ -282,7 +285,11 @@ echo "Running RSEM: ${RSEM}..."
 ## The coefficient of quartile variation (CQV), which is a robust way to measure 
 ## the ratio between standard deviation and mean.
 ## Small CQV(0.05) means that we have enough reads to produce a good estimate
-RSEMparCommon="--bam --append-names --estimate-rspd  --calc-ci --no-bam-output --seed 12345"
+if APPEND_NAMES; then
+  RSEMparCommon="--bam --append-names --estimate-rspd  --calc-ci --no-bam-output --seed 12345"
+else
+  RSEMparCommon="--bam --estimate-rspd  --calc-ci --no-bam-output --seed 12345"
+fi
 
 mb_memory=$((MEMORY*1000))
 # RSEM parameters: run-time, number of threads and RAM in MB
