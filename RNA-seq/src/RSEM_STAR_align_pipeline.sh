@@ -38,6 +38,7 @@ function showHelp {
     --read2: fastq of read2 (not set if single-end) <str>
     --data-type: RNA-seq type, possible values: str_SE str_PE unstr_SE unstr_PE
     --append-names: set RSEM with --append-names
+    --disable-bw: do not generate bigWig files
     --zcat-flag: set if the input fastq"
   exit 2;
 }
@@ -50,7 +51,7 @@ fi
 
 TEMP=`getopt -o hp:o:t: --long help,thread:,max-mismatch:,mem:,prefix: \
   --long rsem-genome-dir:,star-genome-dir:,read1:,read2:,data-type:, \
-  --long append-names,zcat-flag \
+  --long append-names,disable-bw,zcat-flag \
   -- "$@"`
 
 if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
@@ -70,6 +71,7 @@ DATA_TYPE="str_PE"
 READ1=
 READ2=""
 APPEND_NAMES=false
+DISABLE_BW=false
 ZCAT_FLAG=false
 
 while true; do
@@ -86,6 +88,7 @@ while true; do
     --read2 ) READ2="$2"; shift 2 ;;
     --data-type ) DATA_TYPE="$2"; shift 2 ;;
     --append-names ) APPEND_NAMES=true; shift ;;
+    --disable-bw ) DISABLE_BW=true; shift ;;
     --zcat-flag ) ZCAT_FLAG=true; shift ;;
     -- ) shift; break ;;
     * ) break ;;
@@ -212,46 +215,50 @@ echo -e '@CO\tLIBID:ENCLB175ZZZ
 echo $STAR $STARparCommon $STARparRun $STARparBAM $STARparStrand $STARparsMeta
 $STAR $STARparCommon $STARparRun $STARparBAM $STARparStrand $STARparsMeta
 
-###### bedGraph generation, now decoupled from STAR alignment step
-# working subdirectory for this STAR run
-mkdir Signal
-
-echo "$STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam "
-echo "  --outWigType bedGraph $STARparWig --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr"
-$STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam \
-  --outWigType bedGraph $STARparWig --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr
-
-echo "Generating signal tracks..."
-# move the signal files from the subdirectory
-mv Signal/Signal*bg .
-
-###### bigWig conversion commands
-# exclude spikeins
-grep ^chr $STAR_GENOME_DIR/chrNameLength.txt > chrNL.txt
-
-case "$DATA_TYPE" in
-str_SE|str_PE)
-      # stranded data
-      str[1]="minus"; str[2]="plus";
-      for istr in 1 2
-      do
+if $DISABLE_BW; then
+  echo "Skip signal tracks generation."
+else
+  echo "Generating signal tracks..."
+  ###### bedGraph generation, now decoupled from STAR alignment step
+  # working subdirectory for this STAR run
+  mkdir Signal
+  
+  echo "$STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam "
+  echo "  --outWigType bedGraph $STARparWig --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr"
+  $STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam \
+    --outWigType bedGraph $STARparWig --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr
+  
+  echo "Converting bedGraph tracks to bigWig tracks..."
+  # move the signal files from the subdirectory
+  mv Signal/Signal*bg .
+  
+  ###### bigWig conversion commands
+  # exclude spikeins
+  grep ^chr $STAR_GENOME_DIR/chrNameLength.txt > chrNL.txt
+  
+  case "$DATA_TYPE" in
+  str_SE|str_PE)
+        # stranded data
+        str[1]="minus"; str[2]="plus";
+        for istr in 1 2
+        do
+          for imult in Unique UniqueMultiple
+          do
+            grep ^chr Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
+            $bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.bw
+          done
+        done
+        ;;
+  unstr_SE|unstr_PE)
+        # unstranded data
         for imult in Unique UniqueMultiple
         do
-          grep ^chr Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
-          $bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.bw
+          grep ^chr Signal.$imult.str1.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
+          $bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.bw
         done
-      done
-      ;;
-unstr_SE|unstr_PE)
-      # unstranded data
-      for imult in Unique UniqueMultiple
-      do
-        grep ^chr Signal.$imult.str1.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
-        $bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.bw
-      done
-      ;;
-esac
-
+        ;;
+  esac
+fi
 ######### RSEM
 
 #### prepare for RSEM: sort transcriptome BAM to ensure the order of the reads, to make RSEM output (not pme) deterministic
@@ -274,8 +281,7 @@ str_PE|unstr_PE)
       ;;
 esac
 
-'rm' Tr.bam
-
+rm -f Tr.bam
 
 echo "Running RSEM: ${RSEM}..."
 # RSEM parameters: common
