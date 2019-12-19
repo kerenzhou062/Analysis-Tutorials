@@ -79,10 +79,6 @@ done
 ## getopt end
 
 ## check required arguments
-if [ -z $SPIKE_FASTA ]; then
-  echo "--SPIKE_FASTA: Wrong! Spike-in FASTA NOT found!"
-  exit 2
-fi
 
 if [ -z $GENOME_FASTA ]; then
   echo "-f|--fasta: Wrong! Genome fasta NOT found!"
@@ -133,15 +129,24 @@ fi
 
 ### the command below is for RSEM >=1.2.19
 ### note, that for RSEM < 1.2.19, --no-polyA should be added
-
-RSEMcommand="rsem-prepare-reference --gtf ${GTF} ${GENOME_FASTA}","${SPIKE_FASTA} $RSEM_GENOME_DIR/RSEMref"
+if [[ -z $SPIKE_FASTA ]]; then
+  RSEMcommand="rsem-prepare-reference --gtf ${GTF} ${GENOME_FASTA} $RSEM_GENOME_DIR/RSEMref"
+else
+  RSEMcommand="rsem-prepare-reference --gtf ${GTF} ${GENOME_FASTA}","${SPIKE_FASTA} $RSEM_GENOME_DIR/RSEMref"
+fi
 echo $RSEMcommand
 $RSEMcommand
 
 
 # STAR genome
 mkdir $STAR_GENOME_DIR
-STARcommand="STAR --runThreadN ${THREAD} --runMode genomeGenerate --genomeDir ${STAR_GENOME_DIR} --genomeFastaFiles ${GENOME_FASTA} \
-  ${SPIKE_FASTA} --sjdbGTFfile ${GTF} --sjdbOverhang ${OVERHANG} --outFileNamePrefix $STAR_GENOME_DIR"
+if [[ -z $SPIKE_FASTA ]]; then
+  STARcommand="STAR --runThreadN ${THREAD} --runMode genomeGenerate --genomeDir ${STAR_GENOME_DIR} --genomeFastaFiles ${GENOME_FASTA} \
+    --sjdbGTFfile ${GTF} --sjdbOverhang ${OVERHANG} --outFileNamePrefix $STAR_GENOME_DIR"
+else
+  STARcommand="STAR --runThreadN ${THREAD} --runMode genomeGenerate --genomeDir ${STAR_GENOME_DIR} --genomeFastaFiles ${GENOME_FASTA} \
+    ${SPIKE_FASTA} --sjdbGTFfile ${GTF} --sjdbOverhang ${OVERHANG} --outFileNamePrefix $STAR_GENOME_DIR"
+fi
+
 echo $STARcommand
 $STARcommand

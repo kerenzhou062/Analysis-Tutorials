@@ -371,7 +371,7 @@ mv SJ.out.tab "${PREFIX}.SJ.out.tab"
 
 rm -rf Signal
 
-rename "Signal." "${PREFIX}." *.rpm.bw
+rename "Signal." "${PREFIX}." *.bw
 rename "Aligned." "${PREFIX}." *.bam
 rename "Aligned." "${PREFIX}." *.out
 rename "Log." "${PREFIX}.Log." *.out
