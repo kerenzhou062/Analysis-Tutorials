@@ -274,6 +274,9 @@ else
         done
         ;;
   esac
+  echo "Rename bigWig tracks..."
+  rename "Signal." "${PREFIX}." *.bw
+
   echo "Deleting bedGraph tracks..."
   rm -rf ./Signal_RAW
   rm -rf ./Signal_RPM
@@ -369,9 +372,6 @@ mv Signal/Log.out "${PREFIX}.Signal.Log.out"
 mv Log.rsem "${PREFIX}.rsem.log"
 mv SJ.out.tab "${PREFIX}.SJ.out.tab"
 
-rm -rf Signal
-
-rename "Signal." "${PREFIX}." *.bw
 rename "Aligned." "${PREFIX}." *.bam
 rename "Aligned." "${PREFIX}." *.out
 rename "Log." "${PREFIX}.Log." *.out
