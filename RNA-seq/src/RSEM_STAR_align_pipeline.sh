@@ -19,8 +19,8 @@
 # Quant.genes.results                           # RSEM gene quantifications, tab separated text, RSEM formatting
 # Quant.isoforms.results                        # RSEM transcript quantifications, tab separated text, RSEM formatting
 # Quant.pdf                                     # RSEM diagnostic plots
-# Signal.{Unique,UniqueMultiple}.strand{+,-}.bw # 4 bigWig files for stranded data
-# Signal.{Unique,UniqueMultiple}.unstranded.bw  # 2 bigWig files for unstranded data
+# Signal.{Unique,UniqueMultiple}.strand{+,-}.rpm.bw # 4 bigWig files for stranded data
+# Signal.{Unique,UniqueMultiple}.unstranded.rpm.bw  # 2 bigWig files for unstranded data
 
 function showHelp {
   echo -ne "usage: sbatch RSEM_STAR_align_pipeline.sh -n <thread_num> -o <log> --mem <30G> "
@@ -218,20 +218,28 @@ $STAR $STARparCommon $STARparRun $STARparBAM $STARparStrand $STARparsMeta
 if $DISABLE_BW; then
   echo "Skip signal tracks generation."
 else
-  echo "Generating signal tracks..."
+  echo "Generating bedGraph signal tracks with raw counts..."
   ###### bedGraph generation, now decoupled from STAR alignment step
   # working subdirectory for this STAR run
-  mkdir Signal
+  mkdir Signal_RAW
   
   echo "$STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam "
-  echo "  --outWigType bedGraph $STARparWig --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr"
+  echo "  --outWigType bedGraph $STARparWig --outWigNorm None --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr"
   $STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam \
-    --outWigType bedGraph $STARparWig --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr
+    --outWigType bedGraph $STARparWig --outWigNorm None --outFileNamePrefix ./Signal_RAW/ --outWigReferencesPrefix chr
+  
+  echo "Generating bedGraph signal tracks nomalized by RPM..."
+  ###### bedGraph generation, now decoupled from STAR alignment step
+  # working subdirectory for this STAR run
+  mkdir Signal_RPM
+  
+  echo "$STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam "
+  echo "  --outWigType bedGraph $STARparWig --outWigNorm RPM --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr"
+  $STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam \
+    --outWigType bedGraph $STARparWig --outWigNorm RPM --outFileNamePrefix ./Signal_RPM/ --outWigReferencesPrefix chr
   
   echo "Converting bedGraph tracks to bigWig tracks..."
-  # move the signal files from the subdirectory
-  mv Signal/Signal*bg .
-  
+
   ###### bigWig conversion commands
   # exclude spikeins
   grep ^chr $STAR_GENOME_DIR/chrNameLength.txt > chrNL.txt
@@ -244,8 +252,12 @@ else
         do
           for imult in Unique UniqueMultiple
           do
-            grep ^chr Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
-            $bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.bw
+            ## raw counts 
+            grep ^chr ./Signal_RAW/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
+            $bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.raw.bw
+            ## RPM 
+            grep ^chr ./Signal_RPM/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
+            $bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.rpm.bw
           done
         done
         ;;
@@ -253,11 +265,18 @@ else
         # unstranded data
         for imult in Unique UniqueMultiple
         do
-          grep ^chr Signal.$imult.str1.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
-          $bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.bw
+          ## raw counts 
+          grep ^chr ./Signal_RAW/Signal.$imult.str1.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
+          $bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.raw.bw
+          ## RPM 
+          grep ^chr ./Signal_RPM/Signal.$imult.str1.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
+          $bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.rpm.bw
         done
         ;;
   esac
+  echo "Deleting bedGraph tracks..."
+  rm -rf ./Signal_RAW
+  rm -rf ./Signal_RPM
 fi
 ######### RSEM
 
@@ -342,7 +361,7 @@ rm -f *out.bg
 rm -f sig.tmp
 
 echo "Rename outputs..."
-#find . -type f -name "*.bw" | perl -pe 'print $_; s/Signal/HepG2_control_rep2/' | xargs -n2 mv
+#find . -type f -name "*.rpm.bw" | perl -pe 'print $_; s/Signal/HepG2_control_rep2/' | xargs -n2 mv
 mv Quant.genes.results "${PREFIX}.genes.results"
 mv Quant.isoforms.results "${PREFIX}.isoforms.results"
 mv Quant.pdf "${PREFIX}.Quant.pdf"
@@ -352,7 +371,7 @@ mv SJ.out.tab "${PREFIX}.SJ.out.tab"
 
 rm -rf Signal
 
-rename "Signal." "${PREFIX}." *.bw
+rename "Signal." "${PREFIX}." *.rpm.bw
 rename "Aligned." "${PREFIX}." *.bam
 rename "Aligned." "${PREFIX}." *.out
 rename "Log." "${PREFIX}.Log." *.out
