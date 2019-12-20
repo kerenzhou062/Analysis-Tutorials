@@ -7,6 +7,7 @@ command =  matrix(c(
     "filter",       "f",   2,  "integer",   "Filter out genes less than # counts across all samples",
     "spikein",      "sp",  0,  "logical",   "EstimateSizeFactors with spikeins",
     "spiregex",     "pa",  1,  "character", "Name pattern of spikeins in gene_id (Spikein-ERCC|ERCC)",
+    "removesp",     "rs",  1,  "logical",   "Remove spikeins before reads passed to DESeq()",
     "counts",       "ct",  1,  "character", "Gene counts matrix",
     "samplemtx",    "sm",  1,  "character", "Sample relationships matrix",
     "design1",      "d1",  1,  "character", "Design for construction of DESeqDataSet (colname in colData)",
@@ -68,8 +69,19 @@ NormalizeData <- function(method, sampleSize) {
   return(normalizeData)
 }
 
-## load DESeq2 and perform Differential Analysis
+RatioGgplot <- function(data1, data2) {
+  span1 <- max(data1) - min(data1)
+  span2 <- max(data2) - min(data2)
+  maxVal = max(c(span1, span2))
+  minVal = min(c(span1, span2))
+  ratio <- round(maxVal/minVal, digits = 1)
+  return(ratio)
+}
+
+## load DESeq2
 suppressMessages(library('DESeq2'))
+suppressMessages(library('ggplot2'))
+suppressMessages(library('dplyr'))
 ## load arguments
 geneCountMtx <- args$counts
 sampleMtx <- args$samplemtx
@@ -82,10 +94,22 @@ normalize <- args$normalize
 
 # With the count matrix, cts, and the sample information, colData
 cts <- as.matrix(read.csv(geneCountMtx, sep="\t", row.names="gene_id"))
+cts <-round(cts,0)
 colData <- read.csv(sampleMtx, row.names=1, sep="\t")
 ## check all sample rownames in geneCountMtx colNames
 all(rownames(colData) %in% colnames(cts))
 cts <- cts[, rownames(colData)]
+
+# filter out gSpikein_phiX174, ENCODE
+genes <- rownames(cts)[grep('_phiX174', rownames(cts), invert=TRUE)]
+cts <- cts[genes,]
+
+sampleSize <- nrow(colData)
+# pre-filtering, counts > args$filter in at least half of the samples
+if(!is.null(args$filter)){
+  filter <- apply(cts, 1, function(x) length(x[x>args$filter])>=round(sampleSize/2))
+  cts <- cts[filter,]
+}
 
 # if used spikein, use "RUVSeq" to Estimating the factors of unwanted variation using control genes
 if( !is.null(args$spikein) ){
@@ -101,13 +125,14 @@ if( !is.null(args$spikein) ){
   ## data using upper-quartile (UQ) normalization
   set <- betweenLaneNormalization(set, which="upper")
   ## plot RLE and PCA before RUVg
+  spif <- as.factor(colData[[design1]])
   rlePlotPdf <- file.path(output, paste(prefix, ".beforeSpikein.RLE.pdf", sep=""))
   pdf(rlePlotPdf, paper='a4r', height=0)
   plotRLE(set, outline=FALSE, ylim=c(-4, 4), col=colors[spif])
   garbage <- dev.off()
   pcaPlotPdf <- file.path(output, paste(prefix, ".beforeSpikein.PCA.pdf", sep=""))
   pdf(pcaPlotPdf, paper='a4r', height=0)
-  plotPCA(set, col=colors[spif], cex=1.2)
+  plotPCA(set, col=colors[spif], cex=1)
   garbage <- dev.off()
   ## RUVg: Estimating the factors of unwanted variation using control genes
   spikeNorSet <- RUVg(set, spikes, k=1)
@@ -118,17 +143,22 @@ if( !is.null(args$spikein) ){
   garbage <- dev.off()
   pcaPlotPdf <- file.path(output, paste(prefix, ".afterSpikein.PCA.pdf", sep=""))
   pdf(pcaPlotPdf, paper='a4r', height=0)
-  plotPCA(spikeNorSet, col=colors[spif], cex=1.2)
+  plotPCA(spikeNorSet, col=colors[spif], cex=1)
   garbage <- dev.off()
   ## pass spikeNorSet to DESeq2
-  ## re-construct cts, filter out spike-ins
-  cts <- cts[genes,]
-  designFormula <- as.formula(paste("~", "W_1", "+", design, sep=" "))
+  ## re-construct cts, filter out spike-ins if --removesp set
+  if(!is.null(args$removesp)){
+    cts <- cts[genes,]
+  }
+  colData <- pData(spikeNorSet)
+  designFormula <- as.formula(paste("~", "W_1", "+", design1, "+", design2, sep=" "))
 }else{
-  ## filter out spike-ins 
-  genes <- rownames(cts)[grep(spiRegex, rownames(cts), invert=TRUE)]
-  cts <- cts[genes,]
-  designFormula <- as.formula(paste("~", design, sep=" "))
+  ## filter out spike-ins if --removesp set
+  if(!is.null(args$removesp)){
+    genes <- rownames(cts)[grep(spiRegex, rownames(cts), invert=TRUE)]
+    cts <- cts[genes,]
+  }
+  designFormula <- as.formula(paste("~", design1, "+", design2, sep=" "))
 }
 
 dds <- DESeqDataSetFromMatrix(countData = cts,
@@ -138,17 +168,10 @@ dds <- DESeqDataSetFromMatrix(countData = cts,
 featureData <- data.frame(gene=rownames(cts))
 mcols(dds) <- DataFrame(mcols(dds), featureData)
 
-# pre-filtering, counts > 0
-if(!is.null(args$filter)){
-  keep <- rowSums(counts(dds)) > 0
-  dds <- dds[keep,]
-}
-
 # use the Poisson Distance to calculate sample distance 
 suppressMessages(library("pheatmap"))
 suppressMessages(library("RColorBrewer"))
 
-sampleSize <- nrow(colData)
 sampleDisPdf <- file.path(output, paste(prefix, ".sd.heatmap.pdf", sep=""))
 if(!is.null(args$poiheatmap)) {
   suppressMessages(library("PoiClaClu"))
@@ -157,6 +180,7 @@ if(!is.null(args$poiheatmap)) {
   rownames(sampleDistMatrix) <- paste( dds[[design1]], dds[[design2]], sep=" - " )
   colnames(sampleDistMatrix) <- NULL
   colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+  pdf(sampleDisPdf, paper='a4r', height=0)
   pheatmap(sampleDistMatrix,
            clustering_distance_rows = poisd$dd,
            clustering_distance_cols = poisd$dd,
@@ -169,6 +193,7 @@ if(!is.null(args$poiheatmap)) {
   rownames(sampleDistMatrix) <- paste( normalizeData[[design1]], normalizeData[[design2]], sep = " - " )
   colnames(sampleDistMatrix) <- NULL
   colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+  pdf(sampleDisPdf, paper='a4r', height=0)
   pheatmap(sampleDistMatrix,
            clustering_distance_rows = sampleDists,
            clustering_distance_cols = sampleDists,
@@ -176,49 +201,49 @@ if(!is.null(args$poiheatmap)) {
   garbage <- dev.off()
 }
 
-
 # plot PCA
-
+pcaPdf <- file.path(output, paste(prefix, ".PCA.pdf", sep=""))
+pdf(pcaPdf, paper='a4r', height=0)
 if(!is.null(args$glmpca)) {
   suppressMessages(library("glmpca"))
   gpca <- glmpca(counts(dds), L=2)
   gpca.dat <- gpca$factors
   gpca.dat[[design1]] <- dds[[design1]]
   gpca.dat[[design2]] <- dds[[design2]]
-  pcaPdf <- file.path(output, paste(prefix, ".GLM.PCA.pdf", sep=""))
-  ggplot(gpca.dat, aes(x = dim1, y = dim2, color = dex, shape = cell)) +
-    geom_point(size =3) + coord_fixed() + ggtitle("glmpca - Generalized PCA")
+  ratio <- RatioGgplot(gpca.dat$dim1, gpca.dat$dim2)
+  title <- "glmpca - Generalized PCA"
+  print(ggplot(gpca.dat, aes_string(x = 'dim1', y = 'dim2', color = design1, shape = design2)) +
+    geom_point(size =3) + coord_fixed(ratio = ratio) + ggtitle(title))
   garbage <- dev.off()
 }else{
   if (! VarDefined(normalizeData)) {
     normalizeData <- NormalizeData(normalize, sampleSize)
   }
-  
   pcaData <- plotPCA(normalizeData, intgroup = c( design1, design2), returnData = TRUE)
   percentVar <- round(100 * attr(pcaData, "percentVar"))
-  pcaPdf <- file.path(output, paste(prefix, ".PCA.pdf", sep=""))
-  ggplot(pcaData, aes(x = PC1, y = PC2, color = dex, shape = cell)) +
+  ratio <- RatioGgplot(pcaData$PC1, pcaData$PC2)
+  title <- paste("PCA plot with normalized data", " (", normalize, ")", sep="")
+  print(ggplot(pcaData, aes_string(x = 'PC1', y = 'PC2', color = design1, shape = design2)) +
     geom_point(size =3) +
     xlab(paste0("PC1: ", percentVar[1], "% variance")) +
     ylab(paste0("PC2: ", percentVar[2], "% variance")) +
-    coord_fixed() +
-    ggtitle(paste("PCA plot with normalized data", " (", normalize, ")", sep=""))
+    coord_fixed(ratio = ratio) + ggtitle(title))
   garbage <- dev.off()
 }
 
 # plot MDS
-mdsPdf <- file.path(output, paste(prefix, ".MDS.pdf", sep=""))
+
 if(!is.null(args$poiheatmap)) {
-  mdsPois <- as.data.frame(colData(dds)) %>%
-     cbind(cmdscale(sampleDistMatrix))
-  ggplot(mdsPois, aes(x = `1`, y = `2`, color = dex, shape = cell)) +
-    geom_point(size = 3) + coord_fixed() + ggtitle("MDS with PoissonDistances")
-  garbage <- dev.off()
+  mds <- as.data.frame(colData(dds)) %>% cbind(cmdscale(sampleDistMatrix))
+  title <- "MDS with PoissonDistances"
 }else{
-  mds <- as.data.frame(colData(normalizeData))  %>%
-           cbind(cmdscale(sampleDistMatrix))
-  ggplot(mds, aes(x = `1`, y = `2`, color = dex, shape = cell)) +
-    geom_point(size = 3) + coord_fixed() +
-    ggtitle(paste("MDS plot with normalized data", " (", normalize, ")", sep=""))
-  garbage <- dev.off()
+  mds <- as.data.frame(colData(normalizeData))  %>% cbind(cmdscale(sampleDistMatrix))
+  title <- paste("MDS plot with normalized data", " (", normalize, ")", sep="")
 }
+ratio <- RatioGgplot(mds$`1`, mds$`2`)
+
+mdsPdf <- file.path(output, paste(prefix, ".MDS.pdf", sep=""))
+pdf(mdsPdf, paper='a4r', height=0)
+ggplot(mds, aes_string(x = '`1`', y = '`2`', color = design1, shape = design2)) +
+  geom_point(size = 3) + coord_fixed(ratio = ratio) + ggtitle(title)
+garbage <- dev.off()
