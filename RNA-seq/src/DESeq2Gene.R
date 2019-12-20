@@ -7,6 +7,7 @@ command =  matrix(c(
     "filter",       "f",   2,  "integer",     "Filter out genes less than # counts across all samples",
     "spikein",      "sp",  0,  "logical",     "EstimateSizeFactors with spikeins",
     "spiregex",     "pa",  1,  "character",   "Name pattern of spikeins in gene_id (Spikein-ERCC-|ERCC-)",
+    "removesp",     "rs",  1,  "logical",     "Remove spikeins before reads passed to DESeq()",
     "counts",       "ct",  1,  "character",   "Gene counts matrix",
     "samplemtx",    "sm",  1,  "character",   "Sample relationships matrix",
     "design",       "de",  1,  "character",   "Design for construction of DESeqDataSet (colname in colData)",
@@ -66,6 +67,7 @@ if ( is.null(args$shrink) ) {
 
 ## load DESeq2 and perform Differential Analysis
 suppressMessages(library('DESeq2'))
+suppressMessages(library('ggplot2'))
 ## load arguments
 geneCountMtx <- args$counts
 sampleMtx <- args$samplemtx
@@ -75,18 +77,31 @@ treat <- args$treat
 test <- args$test
 pvalCutoff <- args$pval
 padjCuotff <- args$adjp
+shrink <- args$shrink
 prefix <- args$prefix
 output <- args$output
 spiRegex <- args$spiregex
 
 # With the count matrix, cts, and the sample information, colData
 cts <- as.matrix(read.csv(geneCountMtx, sep="\t", row.names="gene_id"))
+cts <-round(cts,0)
 colData <- read.csv(sampleMtx, row.names=1, sep="\t")
 #colData <- colData[,c("condition","type")]
 
 ## check all sample rownames in geneCountMtx colNames
 all(rownames(colData) %in% colnames(cts))
 cts <- cts[, rownames(colData)]
+
+# filter out gSpikein_phiX174, ENCODE
+genes <- rownames(cts)[grep('_phiX174', rownames(cts), invert=TRUE)]
+cts <- cts[genes,]
+
+sampleSize <- nrow(colData)
+# pre-filtering, counts > args$filter in at least half of the samples
+if(!is.null(args$filter)){
+  filter <- apply(cts, 1, function(x) length(x[x>args$filter])>=round(sampleSize/2))
+  cts <- cts[filter,]
+}
 
 # if used spikein, use "RUVSeq" to Estimating the factors of unwanted variation using control genes
 if( !is.null(args$spikein) ){
@@ -101,13 +116,18 @@ if( !is.null(args$spikein) ){
   ## RUVg: Estimating the factors of unwanted variation using control genes
   spikeNorSet <- RUVg(set, spikes, k=1)
   ## pass spikeNorSet to DESeq2
-  ## re-construct cts, filter out spike-ins
-  cts <- cts[genes,]
+  ## re-construct cts, filter out spike-ins if --removesp set
+  if(!is.null(args$removesp)){
+    cts <- cts[genes,]
+  }
+  colData <- pData(spikeNorSet)
   designFormula <- as.formula(paste("~", "W_1", "+", design, sep=" "))
 }else{
-  ## filter out spike-ins 
-  genes <- rownames(cts)[grep(spiRegex, rownames(cts), invert=TRUE)]
-  cts <- cts[genes,]
+  ## filter out spike-ins if --removesp set
+  if(!is.null(args$removesp)){
+    genes <- rownames(cts)[grep(spiRegex, rownames(cts), invert=TRUE)]
+    cts <- cts[genes,]
+  }
   designFormula <- as.formula(paste("~", design, sep=" "))
 }
 
@@ -119,21 +139,15 @@ dds <- DESeqDataSetFromMatrix(countData = cts,
 featureData <- data.frame(gene=rownames(cts))
 mcols(dds) <- DataFrame(mcols(dds), featureData)
 
-# pre-filtering, counts > 0
-if(!is.null(args$filter)){
-  keep <- rowSums(counts(dds)) > args$filter
-  dds <- dds[keep,]
-}
-
 # Note on factor levels
 dds[[design]] <- factor(dds[[design]], levels = c(control, treat))
 # dds$condition <- relevel(dds$condition, ref = "untreated")
 dds <- DESeq(dds, test=test)
 res <- results(dds, contrast=c(design, treat, control))
 
-if ( args$shrink != 'none' ) {
+if ( shrink != 'none' ) {
   coefName = paste(design, treat, 'vs', control, sep="_")
-  res <- lfcShrink(dds, coef=coefName, type=args$shrink)
+  res <- lfcShrink(dds, coef=coefName, type=shrink)
 }
 
 # plot MA plot
@@ -144,7 +158,8 @@ abline(h=c(-1,1), col="dodgerblue", lwd=2)
 garbage <- dev.off()
 
 # plot the histogram of the p values
-maPlotPdf <- file.path(output, paste(prefix, ".pvalue.histogram.pdf", sep=""))
+histoPlotPdf <- file.path(output, paste(prefix, ".pvalue.histogram.pdf", sep=""))
+pdf(histoPlotPdf, paper='a4r', height=0)
 hist(res$pvalue[res$baseMean > 1], breaks = 0:20/20,
      col = "grey50", border = "white", 
      xlab = 'p-value', main = 'Histogram of p-value (baseMean > 1)')

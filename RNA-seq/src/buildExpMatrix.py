@@ -14,6 +14,8 @@ parser.add_argument('-input', action='store', type=str, required=True,
 parser.add_argument('-identity', action='store', type=str, choices=['genes', 'isoforms'],
                     default='genes',
                     help='use genes|isoforms to generate exression matrix')
+parser.add_argument('-grep', action='store', type=str,
+                    help='regex for filtering files')
 parser.add_argument('-output', action='store', type=str, required=True,
                     help='output result matrix')
 
@@ -23,13 +25,17 @@ if len(sys.argv[1:]) == 0:
     parser.exit()
 
 ##public arguments
+if bool(args.grep):
+    regex = re.compile(r'{0}'.format(args.grep))
 countMtxFiles = sorted(glob(os.path.join(args.input, '**', '*.'+args.identity+'.results'), recursive=True))
 
 expDict = defaultdict(list)
-
 sampleNameList = list()
 for countMtx in countMtxFiles:
     sampleName = os.path.split(countMtx)[-1].replace('.'+args.identity+'.results', '')
+    if bool(args.grep):
+        if bool(regex.search(sampleName)) is False:
+            continue
     sampleNameList.append(sampleName)
     with open(countMtx, 'r') as f:
         __ = f.readline()

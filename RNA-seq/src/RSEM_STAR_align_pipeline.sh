@@ -6,7 +6,7 @@
 #SBATCH -N 1-1                        # Min - Max Nodes
 #SBATCH -p all                        # default queue is all if you don't specify
 #SBATCH --mem=60G                      # Amount of memory in GB
-#SBATCH --time=72:10:00               # Time limit hrs:min:sec
+#SBATCH --time=120:10:00               # Time limit hrs:min:sec
 #SBATCH --output=RSEM_STAR_align_pipeline.log               # Time limit hrs:min:sec
 
 # NOTE: This requires GNU getopt.  On Mac OS X and FreeBSD, you have to install this
