@@ -133,12 +133,12 @@ if( !is.null(args$spikein) ){
   designFormula <- as.formula(paste("~", design, sep=" "))
 }
 
-## keep --keeprow in --keepcol
+## keep colData controled by --keeprow and --keepcol
 if (!is.null(args$keepcol) & !is.null(args$keeprow)) {
   colData <- colData[colData[[args$keepcol]] == args$keeprow, ]
 }
 
-# reconstruct cts dataframe
+# reconstruct cts dataframe, remove unwanted samples
 all(rownames(colData) %in% colnames(cts))
 cts <- cts[, rownames(colData)]
 
