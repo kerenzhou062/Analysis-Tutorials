@@ -7,12 +7,14 @@ command =  matrix(c(
     "filter",       "f",   2,  "integer",     "Filter out genes less than # counts across all samples",
     "spikein",      "sp",  0,  "logical",     "EstimateSizeFactors with spikeins",
     "spiregex",     "pa",  1,  "character",   "Name pattern of spikeins in gene_id (Spikein-ERCC-|ERCC-)",
-    "removesp",     "rs",  1,  "logical",     "Remove spikeins before reads passed to DESeq()",
+    "removesp",     "rs",  1,  "logical",     "Remove spikeins before reads passing to DESeq()",
     "counts",       "ct",  1,  "character",   "Gene counts matrix",
     "samplemtx",    "sm",  1,  "character",   "Sample relationships matrix",
     "design",       "de",  1,  "character",   "Design for construction of DESeqDataSet (colname in colData)",
     "pval",         "p",   2,  "numeric",     "pval cutoff (0.05)",
     "adjp",         "q",   2,  "numeric",     "adjp cutoff (0.1)",
+    "keepcol",      "kc",  2,  "character",   "Only 'excol' in samplemtx keeped before passing to DESeq()",
+    "keeprow",      "kr",  2,  "character",   "Only 'exrow' from 'excol' in samplemtx keeped before passing to DESeq()",
     "shrink",       "sr",  1,  "character",   "Shrinkage method for DE results (none|normal|apeglm[default]|ashr)",
     "control",      "cn",  1,  "character",   "Name for control design in colData",
     "treat",        "tr",  1,  "character",   "Name for treat design in colData",
@@ -131,6 +133,15 @@ if( !is.null(args$spikein) ){
   designFormula <- as.formula(paste("~", design, sep=" "))
 }
 
+## keep --keeprow in --keepcol
+if (!is.null(args$keepcol) & !is.null(args$keeprow)) {
+  colData <- colData[colData[[args$keepcol]] == args$keeprow, ]
+}
+
+# reconstruct cts dataframe
+all(rownames(colData) %in% colnames(cts))
+cts <- cts[, rownames(colData)]
+
 # construct a DESeqDataSet object
 dds <- DESeqDataSetFromMatrix(countData = cts,
                               colData = colData,
@@ -177,6 +188,6 @@ resOrdered <- res[order(res$pvalue),]
 resSig <- subset(resOrdered, padj < padjCuotff, pvalue < pvalCutoff)
 resultFile <- file.path(output, paste(prefix, ".DE.sig.txt", sep=""))
 output.file <- file(resultFile, "wb")
-write.table(as.data.frame(res), sep="\t", eol = "\n", 
+write.table(as.data.frame(resSig), sep="\t", eol = "\n", 
             quote = FALSE, row.names=TRUE, file=output.file)
 close(output.file)
