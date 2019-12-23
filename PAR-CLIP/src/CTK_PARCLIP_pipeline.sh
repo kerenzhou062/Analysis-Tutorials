@@ -6,7 +6,7 @@
 #SBATCH -N 1-1                        # Min - Max Nodes
 #SBATCH -p all                        # default queue is all if you don't specify
 #SBATCH --mem=100G                      # Amount of memory in GB
-#SBATCH --time=72:10:00               # Time limit hrs:min:sec
+#SBATCH --time=120:10:00               # Time limit hrs:min:sec
 #SBATCH --output=CTK_miCLIP_pipeline.log   # Standard output and error log
 
 # NOTE: This requires GNU getopt.  On Mac OS X and FreeBSD, you have to install this
@@ -28,8 +28,10 @@ function showHelp {
     -q | --quality: quality cutoff of mapped reads to parse (parseAlignment) <str>
     -t | --thread: # of cpus <int>
     --dbkey: CTK dbkey (hg38|hg19|mm10) <str>
+    --gene: custom gene annotation bed (tag2peak.pl) <str>
     --full-bed: all transcripts annotation in bed12 <str>
     --index: genome index <str>
+    --joinWrapper-loc: # location of joinWrapper.py <str>
     --longest-bed: mRNA longest annotation in bed12 <str>
     --motif: MOTIF sequence used to search (RRACH) <str>
     --mfreq: # of mutation tags (defined enriched sites) <int>
@@ -43,6 +45,7 @@ function showHelp {
     --keep-tmp-fastq: keep temporary fastqs <bool>
     --skip-mapping: skip reads mapping step <bool>
     --skip-pooling: skip pooling step <bool>
+    --skip-PCR-am: skip removing PCR duplicates after mapping <bool>
     --skip-calling: skip crosslink sites calling step <bool>"
   exit 2;
 }
@@ -54,8 +57,9 @@ then
   exit 2
 fi
 
-TEMP=`getopt -o hb:e:g:i:m:o:p:q:t: --long help,skip-mapping,skip-pooling,skip-calling,keep-tmp-fastq \
-  --long input:,thread:,output:,exp-prefix:,pool-prefix:,index:,min-length:,dbkey: \
+TEMP=`getopt -o hb:e:g:i:m:o:p:q:t: --long help,skip-mapping,skip-pooling,skip-calling \
+  --long keep-tmp-fastq,skip-PCR-am \
+  --long input:,thread:,output:,exp-prefix:,pool-prefix:,index:,min-length:,dbkey:,gene:,joinWrapper-loc: \
   --long longest-bed:,full-bed:,repeat-bed:,barcode-length:,fasta:,quality: \
   --long motif:,mtag:,downstream:,upstream:,mfreq:,mkr:,nfrom:,nto: \
   -- "$@"`
@@ -76,9 +80,11 @@ EXP_PREFIX=
 POOL_PREFIX=
 BWA_INDEX=
 DB_KEY=
+CUSTOM_GENE=
 QUALITY=20
 FASTA=
 GENOME_SIZE=
+JOIN_WRAPPER_LOC=
 LONGEST_BED=
 FULL_BED=
 REPEAT_BED=
@@ -93,6 +99,7 @@ MKR_RATIO=0.5
 KEEP_TMP_FASTQ=false
 SKIP_MAPPING=false
 SKIP_POOLING=false
+SKIP_PCR_AM=false
 SKIP_CALLING=false
 while true; do
   case "$1" in
@@ -108,8 +115,10 @@ while true; do
     -q | --quality ) QUALITY="$2"; shift 2 ;;
     -t | --thread ) THREAD="$2"; shift 2 ;;
     --dbkey ) DB_KEY="$2"; shift 2 ;;
+    --gene ) CUSTOM_GENE="$2"; shift 2 ;;
     --full-bed ) FULL_BED="$2"; shift 2 ;;
     --index ) BWA_INDEX="$2"; shift 2 ;;
+    --joinWrapper-loc ) JOIN_WRAPPER_LOC="$2"; shift 2 ;;
     --longest-bed ) LONGEST_BED="$2"; shift 2 ;;
     --motif ) MOTIF="$2"; shift 2 ;;
     --mfreq ) MUTATE_FREQ="$2"; shift 2 ;;
@@ -123,6 +132,7 @@ while true; do
     --keep-tmp-fastq ) KEEP_TMP_FASTQ=true; shift ;;
     --skip-mapping ) SKIP_MAPPING=true; shift ;;
     --skip-pooling ) SKIP_POOLING=true; shift ;;
+    --skip-PCR-am ) SKIP_PCR_AM=true; shift ;;
     --skip-calling ) SKIP_CALLING=true; shift ;;
     -- ) shift; break ;;
     * ) break ;;
@@ -151,6 +161,10 @@ if [ -z $POOL_PREFIX ]; then
   exit 2
 fi
 
+if [ -z $DB_KEY ]; then
+  echo "--dbkey: Wrong! Please specify --dbkey";
+fi
+
 if [ ! -f ${BWA_INDEX}.bwt ]; then
   echo "--index: Wrong! Invalid BWA index!"
   exit 2
@@ -171,6 +185,7 @@ echo "EXP_PREFIX=$EXP_PREFIX"
 echo "POOL_PREFIX=$POOL_PREFIX"
 echo "BWA_INDEX=$BWA_INDEX"
 echo "DB_KEY=$DB_KEY"
+echo "CUSTOM_GENE=$CUSTOM_GENE"
 echo "QUALITY=$QUALITY"
 echo "FASTA=$FASTA"
 echo "GENOME_SIZE=$GENOME_SIZE"
@@ -188,6 +203,7 @@ echo "MKR_RATIO=$MKR_RATIO"
 echo "KEEP_TMP_FASTQ=$KEEP_TMP_FASTQ"
 echo "SKIP_MAPPING=$SKIP_MAPPING"
 echo "SKIP_POOLING=$SKIP_POOLING"
+echo "SKIP_PCR_AM=$SKIP_PCR_AM"
 echo "SKIP_CALLING=$SKIP_CALLING"
 echo ""
 
@@ -216,6 +232,12 @@ fi
 
 if [[ ! -d $MAP_DIR  ]]; then
   mkdir -p $MAP_DIR
+fi
+
+if [[ -z $JOIN_WRAPPER_LOC ]]; then
+  joinWrapper="joinWrapper.py"
+else
+  joinWrapper="$JOIN_WRAPPER_LOC/joinWrapper.py"
 fi
 
 if $SKIP_MAPPING; then
@@ -308,19 +330,28 @@ else
       parseAlignment.pl -v --map-qual 1 --min-len $MIN_LENGTH --mutation-file \
         ${MAP_PREFIX}.mutation.txt ${MAP_PREFIX}.sam.gz ${MAP_PREFIX}.tag.bed \
         > ${MAP_PREFIX}.parseAlignment.log 2>&1
-  
+      
       # Remove tags from rRNA and other repetitive RNA (optional)
       tagoverlap.pl -big -region ${REPEAT_BED} -ss --complete-overlap \
         -r --keep-tag-name --keep-score -v ${MAP_PREFIX}.tag.bed \
         ${MAP_PREFIX}.tag.norRNA.bed > ${MAP_PREFIX}.tagoverlap.log 2>&1
       # Collapse PCR duplicates
       if (( $BARCODE_LEN > 0 )); then
-        tag2collapse.pl -big -v --random-barcode -EM 30 \
-          --seq-error-model alignment -weight --weight-in-name \
-          --keep-max-score --keep-tag-name ${MAP_PREFIX}.tag.norRNA.bed \
-          ${MAP_PREFIX}.tag.uniq.bed
+        if $SKIP_PCR_AM; then
+          cp ${MAP_PREFIX}.tag.norRNA.bed ${MAP_PREFIX}.tag.uniq.bed
+        else
+          tag2collapse.pl -big -v --random-barcode -EM 30 \
+            --seq-error-model alignment -weight --weight-in-name \
+            --keep-max-score --keep-tag-name ${MAP_PREFIX}.tag.norRNA.bed \
+            ${MAP_PREFIX}.tag.uniq.bed
+        fi
       else
-        mv ${MAP_PREFIX}.tag.norRNA.bed ${MAP_PREFIX}.tag.uniq.bed
+        if $SKIP_PCR_AM; then
+          cp ${MAP_PREFIX}.tag.norRNA.bed ${MAP_PREFIX}.tag.uniq.bed
+        else
+          tag2collapse.pl -v -big -weight --weight-in-name --keep-max-score \
+            --keep-tag-name ${MAP_PREFIX}.tag.norRNA.bed ${MAP_PREFIX}.tag.uniq.bed
+        fi
       fi
       
       awk '{print $3-$2}' ${MAP_PREFIX}.tag.uniq.bed | sort -n | uniq -c | \
@@ -360,11 +391,19 @@ else
     rep=$i
     colorIndex=$((i-1))
     color="${colorArr[$colorIndex]}"
-    bed2rgb.pl -v -col $color ${EXP_PREFIX}${rep}.tag.uniq.bed ${EXP_PREFIX}${rep}.tag.uniq.rgb.bed
+    if (( $REP_NUM > 1 )); then
+      bed2rgb.pl -v -col $color ${EXP_PREFIX}${rep}.tag.uniq.bed ${EXP_PREFIX}${rep}.tag.uniq.rgb.bed
+    else
+      bed2rgb.pl -v -col $color ${EXP_PREFIX}.tag.uniq.bed ${EXP_PREFIX}.tag.uniq.rgb.bed
+    fi
   done
   
-  cat ${EXP_PREFIX}*.tag.uniq.rgb.bed > ${POOL_PREFIX}.pool.tag.uniq.rgb.bed
-  cat ${EXP_PREFIX}*.tag.uniq.mutation.txt > ${POOL_PREFIX}.pool.tag.uniq.mutation.txt
+  if (( $REP_NUM > 1 )); then
+    cat ${EXP_PREFIX}*.tag.uniq.rgb.bed > ${POOL_PREFIX}.pool.tag.uniq.rgb.bed
+    cat ${EXP_PREFIX}*.tag.uniq.mutation.txt > ${POOL_PREFIX}.pool.tag.uniq.mutation.txt
+  else
+    cp ${EXP_PREFIX}.tag.uniq.rgb.bed ${POOL_PREFIX}.pool.tag.uniq.rgb.bed
+  fi
   
   ## Annotating and visualizing CLIP tags
   bed2annotation.pl -dbkey ${DB_KEY} -ss -big -region -v \
@@ -394,6 +433,7 @@ if $SKIP_CALLING; then
   echo "Skip peak calling."
 else
   ## Mode 1: Peak calling with no statistical significance
+  echo "Peak calling [mode1]..."
   PEAK_PREFIX="${POOL_PREFIX}.peak.nostats"
   tag2peak.pl -big -ss -v --valley-seeking --valley-depth 0.9 \
     ${POOL_PREFIX}.pool.tag.uniq.rgb.bed ${PEAK_PREFIX}.bed \
@@ -408,13 +448,24 @@ else
     > ${PEAK_PREFIX}.annot.log 2>&1
 
   ## Mode 2: Peak calling with statistical significance
+  echo "Peak calling [mode2]..."
   PEAK_PREFIX="${POOL_PREFIX}.peak.sig"
-  tag2peak.pl -big -ss -v --valley-seeking -p 0.05 \
-    --valley-depth 0.9 --multi-test --dbkey ${DB_KEY} \
-    ${POOL_PREFIX}.pool.tag.uniq.rgb.bed ${PEAK_PREFIX}.bed \
-    --out-boundary ${PEAK_PREFIX}.boundary.bed \
-    --out-half-PH ${PEAK_PREFIX}.halfPH.bed \
-    > ${PEAK_PREFIX}.mode2.log 2>&1
+  if [[ -z $CUSTOM_GENE ]]; then
+    tag2peak.pl -big -ss -v --valley-seeking -p 0.05 \
+      --valley-depth 0.9 --multi-test --dbkey ${DB_KEY} \
+      ${POOL_PREFIX}.pool.tag.uniq.rgb.bed ${PEAK_PREFIX}.bed \
+      --out-boundary ${PEAK_PREFIX}.boundary.bed \
+      --out-half-PH ${PEAK_PREFIX}.halfPH.bed \
+      > ${PEAK_PREFIX}.mode2.log 2>&1
+  else
+    echo "Peak calling with CUSTOM GENE annotation..."
+    tag2peak.pl -big -ss -v --valley-seeking -p 0.05 \
+      --valley-depth 0.9 --multi-test --gene ${CUSTOM_GENE} \
+      ${POOL_PREFIX}.pool.tag.uniq.rgb.bed ${PEAK_PREFIX}.bed \
+      --out-boundary ${PEAK_PREFIX}.boundary.bed \
+      --out-half-PH ${PEAK_PREFIX}.halfPH.bed \
+      > ${PEAK_PREFIX}.mode2.log 2>&1
+  fi
 fi
 
 if [[ -z $MOTIF ]]; then
@@ -483,7 +534,7 @@ awk 'BEGIN{FS="\t";OFS="\t";}{if(FNR>1){print $1,$2,$3,$4,$5,$6,$7,$8,$9}}' \
 
 ##enriched: get CIMS, m/k>=0.5
 awk -v mkr="${MKR_RATIO}" -v mfreq=${MUTATE_FREQ} \
-  'BEGIN{FS="\t";OFS="\t";}{if(FNR==1){print $0}else{if($5>=mkr && $8>=mfreq) {print $0}}}' \
+  'BEGIN{FS="\t";OFS="\t";}{if($5>=mkr && $8>=mfreq) {print $0}}' \
   ${POOL_PREFIX}.${MUTATE}.CIMS.mk.txt > ${POOL_PREFIX}.${MUTATE}.CIMS.enrich.bed
 
 ##significant: get CIMS
@@ -572,26 +623,26 @@ if [ ! -z $LONGEST_BED ]; then
   done
 fi
 
-if [ ! -z $FULL_BED ]; then
-  ## get mRNA annotation bed12
-  cat $FULL_BED | awk '/protein_coding.+protein_coding\t/' > mRNA.annotation.bed12.tmp
-  for i in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
-  do
-    temp="${POOL_PREFIX}.tmp"
-    cut -f 1-6 $i > $temp
-    PREFIX=${i%%.bed}
-    ### gene type
-    geneDistribution.pl -strand --input $temp \
-      -bed12 $FULL_BED -o ${PREFIX}.gene
-    sed -i '1i geneType\tpeakNumber' ${PREFIX}.gene
-    ### gene region
-    regionDistribution.pl -strand -size 200 -f '5utr,cds,stopCodon,3utr' \
-      --input $temp \
-      -bed12 mRNA.annotation.bed12.tmp -o ${PREFIX}.region
-    sed -i '1i region\tpeakNumber\tenrichment' ${PREFIX}.region
-  done
-  rm -f mRNA.annotation.bed12.tmp
-fi
+#if [ ! -z $FULL_BED ]; then
+#  ## get mRNA annotation bed12
+#  cat $FULL_BED | awk '/protein_coding.+protein_coding\t/' > mRNA.annotation.bed12.tmp
+#  for i in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
+#  do
+#    temp="${POOL_PREFIX}.tmp"
+#    cut -f 1-6 $i > $temp
+#    PREFIX=${i%%.bed}
+#    ### gene type
+#    geneDistribution.pl -strand --input $temp \
+#      -bed12 $FULL_BED -o ${PREFIX}.gene
+#    sed -i '1i geneType\tpeakNumber' ${PREFIX}.gene
+#    ### gene region
+#    regionDistribution.pl -strand -size 200 -f '5utr,cds,stopCodon,3utr' \
+#      --input $temp \
+#      -bed12 mRNA.annotation.bed12.tmp -o ${PREFIX}.region
+#    sed -i '1i region\tpeakNumber\tenrichment' ${PREFIX}.region
+#  done
+#  rm -f mRNA.annotation.bed12.tmp
+#fi
 rm -f *.tmp
 
 echo "beds annotation done."
