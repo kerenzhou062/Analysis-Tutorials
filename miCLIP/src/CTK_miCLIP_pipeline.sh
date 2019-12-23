@@ -6,7 +6,7 @@
 #SBATCH -N 1-1                        # Min - Max Nodes
 #SBATCH -p all                        # default queue is all if you don't specify
 #SBATCH --mem=100G                      # Amount of memory in GB
-#SBATCH --time=72:10:00               # Time limit hrs:min:sec
+#SBATCH --time=120:10:00               # Time limit hrs:min:sec
 #SBATCH --output=CTK_miCLIP_pipeline.log   # Standard output and error log
 
 # NOTE: This requires GNU getopt.  On Mac OS X and FreeBSD, you have to install this
@@ -33,6 +33,7 @@ function showHelp {
     --gene: custom gene annotation bed (tag2peak.pl) <str>
     --full-bed: all transcripts annotation in bed12 <str>
     --index: genome index <str>
+    --joinWrapper-loc: # location of joinWrapper.py <str>
     --longest-bed: mRNA longest annotation in bed12 <str>
     --motif: MOTIF sequence used to search (RRACH) <str>
     --mtag: -tag parameter in scanMotif.py <str>
@@ -54,7 +55,7 @@ fi
 
 TEMP=`getopt -o hb:e:g:i:m:o:p:q:t: --long help,skip-mapping,skip-pooling,skip-calling \
   --long keep-tmp-fastq,skip-PCR-am \
-  --long input:,thread:,output:,exp-prefix:,pool-prefix:,index:,min-length:,dbkey: \
+  --long input:,thread:,output:,exp-prefix:,pool-prefix:,index:,min-length:,dbkey:,joinWrapper-loc: \
   --long longest-bed:,full-bed:,repeat-bed:,barcode-length:,fasta:,quality:,mkr:,motif:,mtag: \
   -- "$@"`
 
@@ -79,6 +80,7 @@ QUALITY=20
 FASTA=
 GENOME_SIZE=
 LONGEST_BED=
+JOIN_WRAPPER_LOC=
 FULL_BED=
 REPEAT_BED=
 MUTATE_FREQ=1
@@ -109,6 +111,7 @@ while true; do
     --gene ) CUSTOM_GENE="$2"; shift 2 ;;
     --full-bed ) FULL_BED="$2"; shift 2 ;;
     --index ) BWA_INDEX="$2"; shift 2 ;;
+    --joinWrapper-loc ) JOIN_WRAPPER_LOC="$2"; shift 2 ;;
     --longest-bed ) LONGEST_BED="$2"; shift 2 ;;
     --motif ) MOTIF="$2"; shift 2 ;;
     --mtag ) MOTIF_TAG="$2"; shift 2 ;;
@@ -169,6 +172,7 @@ echo "QUALITY=$QUALITY"
 echo "FASTA=$FASTA"
 echo "GENOME_SIZE=$GENOME_SIZE"
 echo "LONGEST_BED=$LONGEST_BED"
+echo "JOIN_WRAPPER_LOC=$JOIN_WRAPPER_LOC"
 echo "FULL_BED=$FULL_BED"
 echo "REPEAT_BED=$REPEAT_BED"
 echo "MUTATE_FREQ=$MUTATE_FREQ"
@@ -207,6 +211,12 @@ fi
 
 if [[ ! -d $MAP_DIR  ]]; then
   mkdir -p $MAP_DIR
+fi
+
+if [[ -z $JOIN_WRAPPER_LOC ]]; then
+  joinWrapper="joinWrapper.py"
+else
+  joinWrapper="$JOIN_WRAPPER_LOC/joinWrapper.py"
 fi
 
 if $SKIP_MAPPING; then
@@ -323,7 +333,7 @@ else
         awk '{print $2"\t"$1}' > ${MAP_PREFIX}.tag.uniq.len.dist.txt
       
       ## Get the mutations in unique tags
-      joinWrapper.py ${MAP_PREFIX}.mutation.txt \
+      $joinWrapper ${MAP_PREFIX}.mutation.txt \
         ${MAP_PREFIX}.tag.uniq.bed 4 4 N ${MAP_PREFIX}.tag.uniq.mutation.txt
       ## end
       echo >&9
@@ -348,6 +358,7 @@ fi
 if $SKIP_POOLING; then
   echo "Skip pooling."
 else
+  echo $REP;
   cd $MAP_DIR
   declare -a colorArr
   colorArr=("153,0,0" "153,76,0" "76,153,0" "0,76,153" "76,0,153" "153,76,0" "0,153,153")
@@ -356,11 +367,19 @@ else
     rep=$i
     colorIndex=$((i-1))
     color="${colorArr[$colorIndex]}"
-    bed2rgb.pl -v -col $color ${EXP_PREFIX}${rep}.tag.uniq.bed ${EXP_PREFIX}${rep}.tag.uniq.rgb.bed
+    if (( $REP > 1 )); then
+      bed2rgb.pl -v -col $color ${EXP_PREFIX}${rep}.tag.uniq.bed ${EXP_PREFIX}${rep}.tag.uniq.rgb.bed
+    else
+      bed2rgb.pl -v -col $color ${EXP_PREFIX}.tag.uniq.bed ${EXP_PREFIX}.tag.uniq.rgb.bed
+    fi
   done
-  
-  cat ${EXP_PREFIX}*.tag.uniq.rgb.bed > ${POOL_PREFIX}.pool.tag.uniq.rgb.bed
-  cat ${EXP_PREFIX}*.tag.uniq.mutation.txt > ${POOL_PREFIX}.pool.tag.uniq.mutation.txt
+
+  if (( $REP > 1 )); then
+    cp ${EXP_PREFIX}.tag.uniq.rgb.bed ${POOL_PREFIX}.pool.tag.uniq.rgb.bed
+  else
+    cat ${EXP_PREFIX}*.tag.uniq.rgb.bed > ${POOL_PREFIX}.pool.tag.uniq.rgb.bed
+    cat ${EXP_PREFIX}*.tag.uniq.mutation.txt > ${POOL_PREFIX}.pool.tag.uniq.mutation.txt
+  fi
   
   ## Annotating and visualizing CLIP tags
   bed2annotation.pl -dbkey ${DB_KEY} -ss -big -region -v \
@@ -605,26 +624,26 @@ if [ ! -z $LONGEST_BED ]; then
   done
 fi
 
-if [ ! -z $FULL_BED ]; then
-  ## get mRNA annotation bed12
-  cat $FULL_BED | awk '/protein_coding.+protein_coding\t/' > mRNA.annotation.bed12.tmp
-  for i in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
-  do
-    temp="${POOL_PREFIX}.tmp"
-    cut -f 1-6 $i > $temp
-    PREFIX=${i%%.bed}
-    ### gene type
-    geneDistribution.pl -strand --input $temp \
-      -bed12 $FULL_BED -o ${PREFIX}.gene
-    sed -i '1i geneType\tpeakNumber' ${PREFIX}.gene
-    ### gene region
-    regionDistribution.pl -strand -size 200 -f '5utr,cds,stopCodon,3utr' \
-      --input $temp \
-      -bed12 mRNA.annotation.bed12.tmp -o ${PREFIX}.region
-    sed -i '1i region\tpeakNumber\tenrichment' ${PREFIX}.region
-  done
-  rm -f mRNA.annotation.bed12.tmp
-fi
+#if [ ! -z $FULL_BED ]; then
+#  ## get mRNA annotation bed12
+#  cat $FULL_BED | awk '/protein_coding.+protein_coding\t/' > mRNA.annotation.bed12.tmp
+#  for i in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
+#  do
+#    temp="${POOL_PREFIX}.tmp"
+#    cut -f 1-6 $i > $temp
+#    PREFIX=${i%%.bed}
+#    ### gene type
+#    geneDistribution.pl -strand --input $temp \
+#      -bed12 $FULL_BED -o ${PREFIX}.gene
+#    sed -i '1i geneType\tpeakNumber' ${PREFIX}.gene
+#    ### gene region
+#    regionDistribution.pl -strand -size 200 -f '5utr,cds,stopCodon,3utr' \
+#      --input $temp \
+#      -bed12 mRNA.annotation.bed12.tmp -o ${PREFIX}.region
+#    sed -i '1i region\tpeakNumber\tenrichment' ${PREFIX}.region
+#  done
+#  rm -f mRNA.annotation.bed12.tmp
+#fi
 rm -f *.tmp
 
 echo "beds annotation done."

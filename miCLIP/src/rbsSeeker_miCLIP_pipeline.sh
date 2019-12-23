@@ -6,7 +6,7 @@
 #SBATCH -N 1-1                        # Min - Max Nodes
 #SBATCH -p all                        # default queue is all if you don't specify
 #SBATCH --mem=100G                      # Amount of memory in GB
-#SBATCH --time=72:10:00               # Time limit hrs:min:sec
+#SBATCH --time=120:10:00               # Time limit hrs:min:sec
 #SBATCH --output=rbsSeeker_pipeline.log               # Time limit hrs:min:sec
 
 # NOTE: This requires GNU getopt.  On Mac OS X and FreeBSD, you have to install this
@@ -425,7 +425,7 @@ do
       }else{
         arrayA[key] = $4
         arrayB[key] = int($5)
-        arrayB[key] = $9
+        arrayC[key] = $9
       }
     }
     END{
@@ -433,7 +433,7 @@ do
         split(key,splitArr,":");
         pos = splitArr[1];
         strand = splitArr[2];
-        print pos, arrayA[key], arrayB[key], strand;
+        print pos, arrayC[key]"="arrayA[key], arrayB[key], strand;
       }
     }' | sort -k1,1 -k2,2n > ${i}.m6ASite.combine.bed
 done
@@ -458,26 +458,26 @@ if [ ! -z $LONGEST_BED ]; then
   done
 fi
 
-if [ ! -z $FULL_BED ]; then
-  ## get mRNA annotation bed12
-  cat $FULL_BED | awk '/protein_coding.+protein_coding\t/' > mRNA.annotation.bed12.tmp
-  for i in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
-  do
-    temp="${POOL_PREFIX}.tmp"
-    cut -f 1-6 $i > $temp
-    PREFIX=${i%%.bed}
-    ### gene type
-    geneDistribution.pl -strand --input $temp \
-      -bed12 $FULL_BED -o ${PREFIX}.gene
-    sed -i '1i geneType\tpeakNumber' ${PREFIX}.gene
-    ### gene region
-    regionDistribution.pl -strand -size 200 -f '5utr,cds,stopCodon,3utr' \
-      --input $temp \
-      -bed12 mRNA.annotation.bed12.tmp -o ${PREFIX}.region
-    sed -i '1i region\tpeakNumber\tenrichment' ${PREFIX}.region
-  done
-  rm -f mRNA.annotation.bed12.tmp
-fi
-rm -f *.tmp
+#if [ ! -z $FULL_BED ]; then
+#  ## get mRNA annotation bed12
+#  cat $FULL_BED | awk '/protein_coding.+protein_coding\t/' > mRNA.annotation.bed12.tmp
+#  for i in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
+#  do
+#    temp="${POOL_PREFIX}.tmp"
+#    cut -f 1-6 $i > $temp
+#    PREFIX=${i%%.bed}
+#    ### gene type
+#    geneDistribution.pl -strand --input $temp \
+#      -bed12 $FULL_BED -o ${PREFIX}.gene
+#    sed -i '1i geneType\tpeakNumber' ${PREFIX}.gene
+#    ### gene region
+#    regionDistribution.pl -strand -size 200 -f '5utr,cds,stopCodon,3utr' \
+#      --input $temp \
+#      -bed12 mRNA.annotation.bed12.tmp -o ${PREFIX}.region
+#    sed -i '1i region\tpeakNumber\tenrichment' ${PREFIX}.region
+#  done
+#  rm -f mRNA.annotation.bed12.tmp
+#fi
+#rm -f *.tmp
 
 echo "beds annotation done."
