@@ -276,6 +276,8 @@ else
   esac
   echo "Rename bigWig tracks..."
   rename "Signal." "${PREFIX}." *.bw
+  mv Signal_RAW/Log.out "${PREFIX}.Signal.raw.Log.out"
+  mv Signal_RPM/Log.out "${PREFIX}.Signal.rpm.Log.out"
 
   echo "Deleting bedGraph tracks..."
   rm -rf ./Signal_RAW
@@ -368,7 +370,6 @@ echo "Rename outputs..."
 mv Quant.genes.results "${PREFIX}.genes.results"
 mv Quant.isoforms.results "${PREFIX}.isoforms.results"
 mv Quant.pdf "${PREFIX}.Quant.pdf"
-mv Signal/Log.out "${PREFIX}.Signal.Log.out"
 mv Log.rsem "${PREFIX}.rsem.log"
 mv SJ.out.tab "${PREFIX}.SJ.out.tab"
 
