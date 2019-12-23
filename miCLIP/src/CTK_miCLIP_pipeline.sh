@@ -375,10 +375,10 @@ else
   done
 
   if (( $REP > 1 )); then
-    cp ${EXP_PREFIX}.tag.uniq.rgb.bed ${POOL_PREFIX}.pool.tag.uniq.rgb.bed
-  else
     cat ${EXP_PREFIX}*.tag.uniq.rgb.bed > ${POOL_PREFIX}.pool.tag.uniq.rgb.bed
     cat ${EXP_PREFIX}*.tag.uniq.mutation.txt > ${POOL_PREFIX}.pool.tag.uniq.mutation.txt
+  else
+    cp ${EXP_PREFIX}.tag.uniq.rgb.bed ${POOL_PREFIX}.pool.tag.uniq.rgb.bed
   fi
   
   ## Annotating and visualizing CLIP tags
