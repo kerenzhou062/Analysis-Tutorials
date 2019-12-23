@@ -4,19 +4,19 @@ suppressMessages(library('getopt'))
 
 command =  matrix(c(
     "help",         "h",   0,  "logical",     "Show help information",
-    "filter",       "f",   2,  "integer",     "Filter out genes less than # counts across all samples",
-    "spikein",      "sp",  0,  "logical",     "EstimateSizeFactors with spikeins",
-    "spiregex",     "pa",  1,  "character",   "Name pattern of spikeins in gene_id (Spikein-ERCC-|ERCC-)",
-    "removesp",     "rs",  1,  "logical",     "Remove spikeins before reads passing to DESeq()",
+    "adjp",         "q",   2,  "numeric",     "adjp cutoff (0.1)",
+    "control",      "cn",  1,  "character",   "Name for control design in colData",
     "counts",       "ct",  1,  "character",   "Gene counts matrix",
-    "samplemtx",    "sm",  1,  "character",   "Sample relationships matrix",
+    "filter",       "f",   2,  "integer",     "Filter out genes less than # counts across all samples",
     "design",       "de",  1,  "character",   "Design for construction of DESeqDataSet (colname in colData)",
     "pval",         "p",   2,  "numeric",     "pval cutoff (0.05)",
-    "adjp",         "q",   2,  "numeric",     "adjp cutoff (0.1)",
-    "keepcol",      "kc",  2,  "character",   "Only 'excol' in samplemtx keeped before passing to DESeq()",
-    "keeprow",      "kr",  2,  "character",   "Only 'exrow' from 'excol' in samplemtx keeped before passing to DESeq()",
+    "keepCol",      "kc",  2,  "character",   "Only 'excol' in samplemtx keeped before passing to DESeq()",
+    "keepRow",      "kr",  2,  "character",   "Only 'exrow' from 'excol' in samplemtx keeped before passing to DESeq()",
+    "removeSp",     "rs",  1,  "logical",     "Remove spikeins before reads passing to DESeq()",
+    "sampleMtx",    "sm",  1,  "character",   "Sample relationships matrix",
     "shrink",       "sr",  1,  "character",   "Shrinkage method for DE results (none|normal|apeglm[default]|ashr)",
-    "control",      "cn",  1,  "character",   "Name for control design in colData",
+    "spikein",      "sp",  0,  "logical",     "EstimateSizeFactors with spikeins",
+    "spiRegex",     "pa",  1,  "character",   "Name pattern of spikeins in gene_id (Spikein-ERCC-|ERCC-)",
     "treat",        "tr",  1,  "character",   "Name for treat design in colData",
     "test",         "t",   1,  "character",   "test method for p-value (Wald|LRT)",
     "prefix",       "pr",  1,  "character",   "Prefix for output",
@@ -72,7 +72,7 @@ suppressMessages(library('DESeq2'))
 suppressMessages(library('ggplot2'))
 ## load arguments
 geneCountMtx <- args$counts
-sampleMtx <- args$samplemtx
+sampleMtx <- args$sampleMtx
 design <- args$design
 control <- args$control
 treat <- args$treat
@@ -82,7 +82,7 @@ padjCuotff <- args$adjp
 shrink <- args$shrink
 prefix <- args$prefix
 output <- args$output
-spiRegex <- args$spiregex
+spiRegex <- args$spiRegex
 
 # With the count matrix, cts, and the sample information, colData
 cts <- as.matrix(read.csv(geneCountMtx, sep="\t", row.names="gene_id"))
@@ -118,24 +118,24 @@ if( !is.null(args$spikein) ){
   ## RUVg: Estimating the factors of unwanted variation using control genes
   spikeNorSet <- RUVg(set, spikes, k=1)
   ## pass spikeNorSet to DESeq2
-  ## re-construct cts, filter out spike-ins if --removesp set
-  if(!is.null(args$removesp)){
+  ## re-construct cts, filter out spike-ins if --removeSp set
+  if(!is.null(args$removeSp)){
     cts <- cts[genes,]
   }
   colData <- pData(spikeNorSet)
   designFormula <- as.formula(paste("~", "W_1", "+", design, sep=" "))
 }else{
-  ## filter out spike-ins if --removesp set
-  if(!is.null(args$removesp)){
+  ## filter out spike-ins if --removeSp set
+  if(!is.null(args$removeSp)){
     genes <- rownames(cts)[grep(spiRegex, rownames(cts), invert=TRUE)]
     cts <- cts[genes,]
   }
   designFormula <- as.formula(paste("~", design, sep=" "))
 }
 
-## keep colData controled by --keeprow and --keepcol
-if (!is.null(args$keepcol) & !is.null(args$keeprow)) {
-  colData <- colData[colData[[args$keepcol]] == args$keeprow, ]
+## keep colData controled by --keepRow and --keepCol
+if (!is.null(args$keepCol) & !is.null(args$keepRow)) {
+  colData <- colData[colData[[args$keepCol]] == args$keepRow, ]
 }
 
 # reconstruct cts dataframe, remove unwanted samples
@@ -185,7 +185,8 @@ close(output.file)
 
 # significant output result
 resOrdered <- res[order(res$pvalue),]
-resSig <- subset(resOrdered, padj < padjCuotff, pvalue < pvalCutoff)
+resSig <- subset(resOrdered, padj < padjCuotff)
+resSig <- subset(resSig, pvalue < pvalCutoff)
 resultFile <- file.path(output, paste(prefix, ".DE.sig.txt", sep=""))
 output.file <- file(resultFile, "wb")
 write.table(as.data.frame(resSig), sep="\t", eol = "\n", 
