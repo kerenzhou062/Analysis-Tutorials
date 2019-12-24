@@ -5,72 +5,112 @@ suppressMessages(library('getopt'))
 command =  matrix(c(
     "help",         "h",   0,  "logical",     "Show help information",
     "adjp",         "q",   2,  "numeric",     "adjp cutoff (0.1)",
-    "control",      "cn",  1,  "character",   "Name for control design in colData",
-    "counts",       "ct",  1,  "character",   "Gene counts matrix",
+    "batchMethod",  "b",   1,  "character",   "Remove hidden batch effect (none|RUVg|spikeins)",
+    "control",      "c",   1,  "character",   "Name for control design in colData",
+    "counts",       "g",   1,  "character",   "Gene counts matrix",
+    "design",       "d",   1,  "character",   "Design for construction of DESeqDataSet (colname in colData)",
     "filter",       "f",   2,  "integer",     "Filter out genes less than # counts across all samples",
-    "design",       "de",  1,  "character",   "Design for construction of DESeqDataSet (colname in colData)",
+    "selectCol",    "C",   2,  "character",   "Only 'selectCol' in samplemtx keeped before passing to DESeq()",
+    "selectRow",    "R",   2,  "character",   "Only 'selectRow' from 'excol' in samplemtx keeped before passing to DESeq()",
+    "keepSpike",    "S",   0,  "logical",     "Keep spikeins reads when passing to DESeq()",
+    "output" ,      "o",   1,  "character",   "Output directory",
+    "prefix",       "e",   1,  "character",   "Prefix for output",
     "pval",         "p",   2,  "numeric",     "pval cutoff (0.05)",
-    "keepCol",      "kc",  2,  "character",   "Only 'excol' in samplemtx keeped before passing to DESeq()",
-    "keepRow",      "kr",  2,  "character",   "Only 'exrow' from 'excol' in samplemtx keeped before passing to DESeq()",
-    "removeSp",     "rs",  1,  "logical",     "Remove spikeins before reads passing to DESeq()",
-    "sampleMtx",    "sm",  1,  "character",   "Sample relationships matrix",
-    "shrink",       "sr",  1,  "character",   "Shrinkage method for DE results (none|normal|apeglm[default]|ashr)",
-    "spikein",      "sp",  0,  "logical",     "EstimateSizeFactors with spikeins",
-    "spiRegex",     "pa",  1,  "character",   "Name pattern of spikeins in gene_id (Spikein-ERCC-|ERCC-)",
-    "treat",        "tr",  1,  "character",   "Name for treat design in colData",
-    "test",         "t",   1,  "character",   "test method for p-value (Wald|LRT)",
-    "prefix",       "pr",  1,  "character",   "Prefix for output",
-    "output" ,      "o",   1,  "character",   "Output directory"
+    "sampleMtx",    "m",   1,  "character",   "Sample relationships matrix",
+    "shrink",       "s",   1,  "character",   "Shrinkage method for DE results (none|normal|apeglm[default]|ashr)",
+    "spiRegex",     "r",   1,  "character",   "Name pattern of spikeins in gene_id (Spikein-ERCC-|ERCC-)",
+    "treat",        "t",   1,  "character",   "Name for treat design in colData",
+    "test",         "T",   1,  "character",   "test method for p-value (Wald|LRT)"
 ), byrow=TRUE, ncol=5)
 
-## parsing arguments
+# function
+ShowHelp <- function(object, param, reverse=FALSE, bool=FALSE) {
+  if (reverse) {
+    if (bool) {
+      judge <- !isTRUE(object)
+    }else{
+      judge <- !is.null(object)
+    }
+  }else{
+    if (bool) {
+      judge <- isTRUE(object)
+    }else{
+      judge <- is.null(object)
+    }
+  }
+  if (judge) {
+    if (param != 'none') {
+      cat(paste("None valid ", param, "!\n"))
+    }
+    cat(paste(getopt(command, usage = T),"\n"))
+    q()
+  }
+}
+
+LoadPacakge <- function(name) {
+  cat(paste("Load package: ", name, ".\n"))
+}
+
+# parsing arguments
 args <- getopt(command)
 
-if(!is.null(args$help)){
-  cat(paste(getopt(command, usage = T),"\n"))
-  q()
-}
-
-if(is.null(args$design) || is.null(args$control) || is.null(args$treat)){
-  cat(paste(getopt(command, usage = T),"\n"))
-  q()
-}
-
-if(is.null(args$test)){
-  cat(paste(getopt(command, usage = T),"\n"))
-  q()
-}
+ShowHelp(args$help, 'none', TRUE)
+ShowHelp(args$counts, '-g|--counts')
+ShowHelp(args$sampleMtx, '-s|--sampleMtx')
+ShowHelp(args$design, '-d|--design')
+ShowHelp(args$control, '-c|--control')
+ShowHelp(args$treat, '-t|--treat')
 
 if ( is.null(args$test) ) {
   args$test = 'Wald'
 }else{
   testVetor <- c('Wald', 'LRT')
-  if (isFALSE(args$test %in% testVetor)) {
-    cat("None valid -t|--test!\n")
-    cat(paste(getopt(command, usage = T),"\n"))
-    q()
-  }
+  bool <- isFALSE(args$test %in% testVetor)
+  ShowHelp(bool, '-T|--test', FALSE, TRUE)
 }
 
-if ( is.null(args$pval) ) { args$pval = 0.05 }
-if ( is.null(args$adjp) ) { args$adjp = 0.1 }
-if ( is.null(args$spiregex) ) { args$spiregex = 'ERCC-' }
+if ( is.null(args$batchMethod) ) {
+  args$batchMethod = 'none'
+}else{
+  bmVetor <- c('none', 'RUVg', 'spikeins')
+  bool <- isFALSE(args$batchMethod %in% bmVetor)
+  ShowHelp(bool, '-b|--batchMethod', FALSE, TRUE)
+}
 
 if ( is.null(args$shrink) ) {
   args$shrink = 'apeglm'
 }else{
   shrinkVetor <- c('none', 'normal', 'apeglm', 'ashr')
-  if (isFALSE(args$shrink %in% shrinkVetor)) {
-    cat("None valid -sr|--shrink!\n")
-    cat(paste(getopt(command, usage = T),"\n"))
-    q()
-  }
+  bool <- isFALSE(args$shrink %in% shrinkVetor))
+  ShowHelp(bool, '-s|--shrink', FALSE, TRUE)
 }
 
-## load DESeq2 and perform Differential Analysis
+if (!is.null(args$selectCol)) {
+  bool <- is.null(args$selectRow)
+  ShowHelp(bool, '-C|--selectCol & -R|--selectRow', FALSE, TRUE)
+}
+
+if (!is.null(args$selectRow)) {
+  bool <- is.null(args$selectCol)
+  ShowHelp(bool, '-C|--selectCol & -R|--selectRow', FALSE, TRUE)
+}
+
+# default values
+if ( is.null(args$pval) ) { args$pval = 0.05 }
+if ( is.null(args$adjp) ) { args$adjp = 0.1 }
+if ( is.null(args$spiRegex) ) { args$spiRegex = 'ERCC-' }
+if ( is.null(args$keepSpike) ) { args$keepSpike = FALSE }
+if ( is.null(args$prefix) ) { args$prefix = 'result' }
+if ( is.null(args$output) ) { args$output = './' }
+
+
+# load DESeq2 and perform Differential Analysis
 suppressMessages(library('DESeq2'))
 suppressMessages(library('ggplot2'))
+LoadPacakge('DESeq2')
+LoadPacakge('ggplot2')
 ## load arguments
+batchMethod <- args$batchMethod
 geneCountMtx <- args$counts
 sampleMtx <- args$sampleMtx
 design <- args$design
@@ -83,6 +123,7 @@ shrink <- args$shrink
 prefix <- args$prefix
 output <- args$output
 spiRegex <- args$spiRegex
+keepSpike <- args$keepSpike
 
 # With the count matrix, cts, and the sample information, colData
 cts <- as.matrix(read.csv(geneCountMtx, sep="\t", row.names="gene_id"))
@@ -106,8 +147,11 @@ if(!is.null(args$filter)){
 }
 
 # if used spikein, use "RUVSeq" to Estimating the factors of unwanted variation using control genes
-if( !is.null(args$spikein) ){
+if( args$batchMethod == "spikeins" ){
+  # Removing hidden batch effects using spike-in controls by RUVg
+  cat('Removing hidden batch effects with spike-ins (RUVg)!\n')
   suppressMessages(library('RUVSeq'))
+  LoadPacakge('RUVSeq')
   ## seperate to genes and spikes
   genes <- rownames(cts)[grep(spiRegex, rownames(cts), invert=TRUE)]
   spikes <- rownames(cts)[grep(spiRegex, rownames(cts))]
@@ -118,43 +162,94 @@ if( !is.null(args$spikein) ){
   ## RUVg: Estimating the factors of unwanted variation using control genes
   spikeNorSet <- RUVg(set, spikes, k=1)
   ## pass spikeNorSet to DESeq2
-  ## re-construct cts, filter out spike-ins if --removeSp set
-  if(!is.null(args$removeSp)){
+  ## re-construct cts, filter out spike-ins if --keepSpike set
+  if(! keepSpike){
     cts <- cts[genes,]
   }
   colData <- pData(spikeNorSet)
-  designFormula <- as.formula(paste("~", "W_1", "+", design, sep=" "))
+
+  if (!is.null(args$selectCol)) {
+    designFormula <- as.formula(paste("~ W1 +", design, '+', design, ':', selectCol, sep=" "))
+    name <- paste( design,control, '.', selectCol, selectRow, sep="")
+  }else{
+    designFormula <- as.formula(paste("~ W1 +", design, sep=" "))
+    name <- paste( design, treat, 'vs', control, sep="_")
+  }
+  dds <- DESeqDataSetFromMatrix(countData = cts,
+                                colData = colData,
+                                design = designFormula)
+  res <- results( dds, name=name )
 }else{
-  ## filter out spike-ins if --removeSp set
-  if(!is.null(args$removeSp)){
+  ## filter out spike-ins if --keepSpike set
+  if(! keepSpike){
     genes <- rownames(cts)[grep(spiRegex, rownames(cts), invert=TRUE)]
     cts <- cts[genes,]
   }
   designFormula <- as.formula(paste("~", design, sep=" "))
 }
 
-## keep colData controled by --keepRow and --keepCol
-if (!is.null(args$keepCol) & !is.null(args$keepRow)) {
-  colData <- colData[colData[[args$keepCol]] == args$keepRow, ]
+# Removing hidden batch effects using RUVg, --batchMethod: RUVg
+if (args$batchMethod == 'RUVg') {
+  cat('Removing hidden batch effects using RUVg.\n')
+  cat('Using empirical control genes by looking at the genes that do not have a small p-value\n')
+  suppressMessages(library('RUVSeq'))
+  LoadPacakge('RUVSeq')
+
+  # construct a DESeqDataSet object
+  dds <- DESeqDataSetFromMatrix(countData = cts,
+                                colData = colData,
+                                design = designFormula)
+  
+  featureData <- data.frame(gene=rownames(cts))
+  mcols(dds) <- DataFrame(mcols(dds), featureData)
+  # perform DE analysis before passing to RUVg
+  dds[[design]] <- factor(dds[[design]], levels = c(control, treat))
+  dds <- DESeq(dds, test=test)
+  res <- results(dds, contrast=c(design, treat, control))
+
+  # removing hidden batch effect
+  set <- newSeqExpressionSet(counts(dds), phenoData = colData)
+  if (is.null(args$filter)) {
+    idx <- rowSums(counts(set) > 5) >= round(sampleSize/2)
+    set <- set[idx, ]
+  }
+  set <- betweenLaneNormalization(set, which="upper")
+  notSig <- rownames(res)[which(res$pvalue > .1)]
+  empirical <- rownames(set)[ rownames(set) %in% notSig ]
+  set <- RUVg(set, empirical, k=2)
+
+  # assign dds to ddsruv
+  ddsruv <- dds
+  ddsruv$W1 <- set$W_1
+  ddsruv$W2 <- set$W_2
+  if (!is.null(args$selectCol)) {
+    design(ddsruv) <- as.formula(paste("~ W1 + W2 +", design, '+', design, ':', selectCol, sep=" "))
+    name <- paste( design,control, '.', selectCol, selectRow, sep="")
+  }else{
+    design(ddsruv) <- as.formula(paste("~ W1 + W2 +", design, sep=" "))
+    name <- paste( design, treat, 'vs', control, sep="_")
+  }
+  res <- results( ddsruv, name=name )
+}else{
+  ## keep colData controled by --selectRow and --selectCol
+  if ( !is.null(args$selectCol) ) {
+    colData <- colData[colData[[args$selectCol]] == args$selectRow, ]
+  }
+  # reconstruct cts dataframe, remove unwanted samples
+  all(rownames(colData) %in% colnames(cts))
+  cts <- cts[, rownames(colData)]
+  # construct a DESeqDataSet object
+  dds <- DESeqDataSetFromMatrix(countData = cts,
+                                colData = colData,
+                                design = designFormula)
+  
+  featureData <- data.frame(gene=rownames(cts))
+  mcols(dds) <- DataFrame(mcols(dds), featureData)
+  # Note on factor levels
+  dds[[design]] <- factor(dds[[design]], levels = c(control, treat))
+  dds <- DESeq(dds, test=test)
+  res <- results(dds, contrast=c(design, treat, control))
 }
-
-# reconstruct cts dataframe, remove unwanted samples
-all(rownames(colData) %in% colnames(cts))
-cts <- cts[, rownames(colData)]
-
-# construct a DESeqDataSet object
-dds <- DESeqDataSetFromMatrix(countData = cts,
-                              colData = colData,
-                              design = designFormula)
-
-featureData <- data.frame(gene=rownames(cts))
-mcols(dds) <- DataFrame(mcols(dds), featureData)
-
-# Note on factor levels
-dds[[design]] <- factor(dds[[design]], levels = c(control, treat))
-# dds$condition <- relevel(dds$condition, ref = "untreated")
-dds <- DESeq(dds, test=test)
-res <- results(dds, contrast=c(design, treat, control))
 
 if ( shrink != 'none' ) {
   coefName = paste(design, treat, 'vs', control, sep="_")
@@ -174,6 +269,19 @@ pdf(histoPlotPdf, paper='a4r', height=0)
 hist(res$pvalue[res$baseMean > 1], breaks = 0:20/20,
      col = "grey50", border = "white", 
      xlab = 'p-value', main = 'Histogram of p-value (baseMean > 1)')
+garbage <- dev.off()
+
+# The ratio of small p values for genes binned by mean normalized count.
+resLFC1 <- results(dds, lfcThreshold=1)
+qs <- c(0, quantile(resLFC1$baseMean[resLFC1$baseMean > 0], 0:6/6))
+bins <- cut(resLFC1$baseMean, qs)
+levels(bins) <- paste0("~", round(signif((qs[-1] + qs[-length(qs)])/2, 2)))
+fractionSig <- tapply(resLFC1$pvalue, bins, function(p)
+                          mean(p < .05, na.rm = TRUE))
+barPlotPdf <- file.path(output, paste(prefix, ".pvalueNorCounts.bar.pdf", sep=""))
+pdf(barPlotPdf, paper='a4r', height=0)
+barplot(fractionSig, xlab = "Mean normalized count",
+                     ylab = "Fraction of small p values")
 garbage <- dev.off()
 
 # output result
