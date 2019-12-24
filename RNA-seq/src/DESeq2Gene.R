@@ -14,6 +14,7 @@ command =  matrix(c(
     "output" ,      "o",   1,  "character",   "Output directory",
     "prefix",       "e",   1,  "character",   "Prefix for output",
     "pval",         "p",   2,  "numeric",     "pval cutoff (0.05)",
+    "ruvgCount",    "u",   2,  "integer",     "Counts cutoff for filtering count matrix with --batchMethod RUVg (5)",
     "selectCol",    "C",   2,  "character",   "Only 'selectCol' in samplemtx was selected as contrast in results()",
     "selectRow",    "R",   2,  "character",   "Only 'selectRow' from 'selectCol' was selected as contrast in results()",
     "sampleMtx",    "m",   1,  "character",   "Sample relationships matrix",
@@ -102,7 +103,7 @@ if ( is.null(args$spiRegex) ) { args$spiRegex = 'ERCC-' }
 if ( is.null(args$keepSpike) ) { args$keepSpike = FALSE }
 if ( is.null(args$prefix) ) { args$prefix = 'result' }
 if ( is.null(args$output) ) { args$output = './' }
-
+if ( is.null(args$ruvgCount) ) { args$ruvgCount = 5 }
 
 # load DESeq2 and perform Differential Analysis
 suppressMessages(library('DESeq2'))
@@ -129,9 +130,8 @@ keepSpike <- args$keepSpike
 cts <- as.matrix(read.csv(geneCountMtx, sep="\t", row.names="gene_id"))
 cts <-round(cts,0)
 colData <- read.csv(sampleMtx, row.names=1, sep="\t")
-#colData <- colData[,c("condition","type")]
 
-## check all sample rownames in geneCountMtx colNames
+# check all sample rownames in geneCountMtx colNames
 all(rownames(colData) %in% colnames(cts))
 cts <- cts[, rownames(colData)]
 
@@ -154,7 +154,7 @@ if (!is.null(args$selectCol)) {
 
 # if used spikein, use "RUVSeq" to Estimating the factors of unwanted variation using control genes
 if( args$batchMethod == "spikeins" ){
-  # Removing hidden batch effects using spike-in controls by RUVg
+  ## Removing hidden batch effects using spike-in controls by RUVg
   cat('Removing hidden batch effects with spike-ins (RUVg)!\n')
   suppressMessages(library('RUVSeq'))
   LoadPacakge('RUVSeq')
@@ -193,6 +193,12 @@ dds <- DESeqDataSetFromMatrix(countData = cts,
                               colData = colData,
                               design = designFormula)
 
+featureData <- data.frame(gene=rownames(cts))
+mcols(dds) <- DataFrame(mcols(dds), featureData)
+# Note on factor levels
+dds[[design]] <- factor(dds[[design]], levels = c(control, treat))
+dds <- DESeq(dds, test=test)
+
 # Removing hidden batch effects using RUVg, --batchMethod: RUVg
 if (args$batchMethod == 'RUVg') {
   cat('Removing hidden batch effects using RUVg.\n')
@@ -208,10 +214,8 @@ if (args$batchMethod == 'RUVg') {
   res <- results(dds, contrast=c(design, treat, control))
   # removing hidden batch effect
   set <- newSeqExpressionSet(counts(dds), phenoData = colData)
-  if (is.null(args$filter)) {
-    idx <- rowSums(counts(set) > 5) >= round(sampleSize/2)
-    set <- set[idx, ]
-  }
+  idx <- rowSums(counts(set) > args$ruvgCount) >= round(sampleSize/2)
+  set <- set[idx, ]
   set <- betweenLaneNormalization(set, which="upper")
   notSig <- rownames(res)[which(res$pvalue > .1)]
   empirical <- rownames(set)[ rownames(set) %in% notSig ]
@@ -225,11 +229,6 @@ if (args$batchMethod == 'RUVg') {
   }else{
     design(dds) <- as.formula(paste("~ W1 + W2 +", design, sep=" "))
   }
-}else{
-  featureData <- data.frame(gene=rownames(cts))
-  mcols(dds) <- DataFrame(mcols(dds), featureData)
-  # Note on factor levels
-  dds[[design]] <- factor(dds[[design]], levels = c(control, treat))
   dds <- DESeq(dds, test=test)
 }
 
