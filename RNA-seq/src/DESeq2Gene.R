@@ -146,6 +146,12 @@ if(!is.null(args$filter)){
   cts <- cts[filter,]
 }
 
+if (!is.null(args$selectCol)) {
+  name <- paste( design,control, '.', selectCol, selectRow, sep="")
+}else{
+  name <- paste( design, treat, 'vs', control, sep="_")
+}
+
 # if used spikein, use "RUVSeq" to Estimating the factors of unwanted variation using control genes
 if( args$batchMethod == "spikeins" ){
   # Removing hidden batch effects using spike-in controls by RUVg
@@ -170,15 +176,9 @@ if( args$batchMethod == "spikeins" ){
 
   if (!is.null(args$selectCol)) {
     designFormula <- as.formula(paste("~ W1 +", design, '+', design, ':', selectCol, sep=" "))
-    name <- paste( design,control, '.', selectCol, selectRow, sep="")
   }else{
     designFormula <- as.formula(paste("~ W1 +", design, sep=" "))
-    name <- paste( design, treat, 'vs', control, sep="_")
   }
-  dds <- DESeqDataSetFromMatrix(countData = cts,
-                                colData = colData,
-                                design = designFormula)
-  res <- results( dds, name=name )
 }else{
   ## filter out spike-ins if --keepSpike set
   if(! keepSpike){
@@ -188,6 +188,11 @@ if( args$batchMethod == "spikeins" ){
   designFormula <- as.formula(paste("~", design, sep=" "))
 }
 
+# construct a DESeqDataSet object
+dds <- DESeqDataSetFromMatrix(countData = cts,
+                              colData = colData,
+                              design = designFormula)
+
 # Removing hidden batch effects using RUVg, --batchMethod: RUVg
 if (args$batchMethod == 'RUVg') {
   cat('Removing hidden batch effects using RUVg.\n')
@@ -195,18 +200,12 @@ if (args$batchMethod == 'RUVg') {
   suppressMessages(library('RUVSeq'))
   LoadPacakge('RUVSeq')
 
-  # construct a DESeqDataSet object
-  dds <- DESeqDataSetFromMatrix(countData = cts,
-                                colData = colData,
-                                design = designFormula)
-  
   featureData <- data.frame(gene=rownames(cts))
   mcols(dds) <- DataFrame(mcols(dds), featureData)
   # perform DE analysis before passing to RUVg
   dds[[design]] <- factor(dds[[design]], levels = c(control, treat))
   dds <- DESeq(dds, test=test)
   res <- results(dds, contrast=c(design, treat, control))
-
   # removing hidden batch effect
   set <- newSeqExpressionSet(counts(dds), phenoData = colData)
   if (is.null(args$filter)) {
@@ -217,43 +216,27 @@ if (args$batchMethod == 'RUVg') {
   notSig <- rownames(res)[which(res$pvalue > .1)]
   empirical <- rownames(set)[ rownames(set) %in% notSig ]
   set <- RUVg(set, empirical, k=2)
-
-  # assign dds to ddsruv
-  ddsruv <- dds
-  ddsruv$W1 <- set$W_1
-  ddsruv$W2 <- set$W_2
+  ## assign W_1 and W_2 to dd
+  dds$W1 <- set$W_1
+  dds$W2 <- set$W_2
+  ## re-design factors
   if (!is.null(args$selectCol)) {
-    design(ddsruv) <- as.formula(paste("~ W1 + W2 +", design, '+', design, ':', selectCol, sep=" "))
-    name <- paste( design,control, '.', selectCol, selectRow, sep="")
+    design(dds) <- as.formula(paste("~ W1 + W2 +", design, '+', design, ':', selectCol, sep=" "))
   }else{
-    design(ddsruv) <- as.formula(paste("~ W1 + W2 +", design, sep=" "))
-    name <- paste( design, treat, 'vs', control, sep="_")
+    design(dds) <- as.formula(paste("~ W1 + W2 +", design, sep=" "))
   }
-  res <- results( ddsruv, name=name )
 }else{
-  ## keep colData controled by --selectRow and --selectCol
-  if ( !is.null(args$selectCol) ) {
-    colData <- colData[colData[[args$selectCol]] == args$selectRow, ]
-  }
-  # reconstruct cts dataframe, remove unwanted samples
-  all(rownames(colData) %in% colnames(cts))
-  cts <- cts[, rownames(colData)]
-  # construct a DESeqDataSet object
-  dds <- DESeqDataSetFromMatrix(countData = cts,
-                                colData = colData,
-                                design = designFormula)
-  
   featureData <- data.frame(gene=rownames(cts))
   mcols(dds) <- DataFrame(mcols(dds), featureData)
   # Note on factor levels
   dds[[design]] <- factor(dds[[design]], levels = c(control, treat))
   dds <- DESeq(dds, test=test)
-  res <- results(dds, contrast=c(design, treat, control))
 }
 
 if ( shrink != 'none' ) {
-  coefName = paste(design, treat, 'vs', control, sep="_")
-  res <- lfcShrink(dds, coef=coefName, type=shrink)
+  res <- lfcShrink(dds, coef=name, type=shrink)
+}else{
+  res <- results( dds, name=name )
 }
 
 # plot MA plot
