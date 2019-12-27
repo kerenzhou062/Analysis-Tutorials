@@ -128,7 +128,7 @@ keepSpike <- args$keepSpike
 
 # With the count matrix, cts, and the sample information, colData
 cts <- as.matrix(read.csv(geneCountMtx, sep="\t", row.names="gene_id"))
-cts <-round(cts,0)
+cts <-round(cts, 0)
 colData <- read.csv(sampleMtx, row.names=1, sep="\t")
 
 # check all sample rownames in geneCountMtx colNames
@@ -167,8 +167,7 @@ if( args$batchMethod == "spikeins" ){
   set <- betweenLaneNormalization(set, which="upper")
   ## RUVg: Estimating the factors of unwanted variation using control genes
   spikeNorSet <- RUVg(set, spikes, k=1)
-  ## pass spikeNorSet to DESeq2
-  ## re-construct cts, filter out spike-ins if --keepSpike set
+  ## re-construct cts, filter out spike-ins if --keepSpike not set
   if(! keepSpike){
     cts <- cts[genes,]
   }
@@ -208,11 +207,11 @@ if (args$batchMethod == 'RUVg') {
 
   featureData <- data.frame(gene=rownames(cts))
   mcols(dds) <- DataFrame(mcols(dds), featureData)
-  # perform DE analysis before passing to RUVg
+  ## perform DE analysis before passing to RUVg
   dds[[design]] <- factor(dds[[design]], levels = c(control, treat))
   dds <- DESeq(dds, test=test)
   res <- results(dds, contrast=c(design, treat, control))
-  # removing hidden batch effect
+  ## removing hidden batch effect
   set <- newSeqExpressionSet(counts(dds), phenoData = colData)
   idx <- rowSums(counts(set) > args$ruvgCount) >= round(sampleSize/2)
   set <- set[idx, ]
