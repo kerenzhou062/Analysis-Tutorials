@@ -6,6 +6,7 @@ command =  matrix(c(
     "help",         "h",   0,  "logical",     "Show help information",
     "adjp",         "q",   2,  "numeric",     "adjp cutoff (0.1)",
     "batchMethod",  "b",   1,  "character",   "Remove hidden batch effect (none|RUVg|spikeins)",
+    "autoBatch",    "a",   2,  "logical",     "Use 'design' column to remove hidden batch effect (work with RUVg)",
     "control",      "c",   1,  "character",   "Name for control design in colData",
     "counts",       "g",   1,  "character",   "Gene counts matrix",
     "design",       "d",   1,  "character",   "Design for construction of DESeqDataSet (colname in colData)",
@@ -19,7 +20,7 @@ command =  matrix(c(
     "selectRow",    "R",   2,  "character",   "Only 'selectRow' from 'selectCol' was selected as contrast in results()",
     "sampleMtx",    "m",   1,  "character",   "Sample relationships matrix",
     "shrink",       "s",   1,  "character",   "Shrinkage method for DE results (none|normal|apeglm[default]|ashr)",
-    "spiRegex",     "r",   1,  "character",   "Name pattern of spikeins in gene_id (Spikein-ERCC-|ERCC-)",
+    "spiRegex",     "r",   1,  "character",   "Name pattern of spikeins in gene_id (ERCC-)",
     "treat",        "t",   1,  "character",   "Name for treat design in colData",
     "test",         "T",   1,  "character",   "test method for p-value (Wald|LRT)"
 ), byrow=TRUE, ncol=5)
@@ -103,6 +104,7 @@ if ( is.null(args$spiRegex) ) { args$spiRegex = 'ERCC-' }
 if ( is.null(args$keepSpike) ) { args$keepSpike = FALSE }
 if ( is.null(args$prefix) ) { args$prefix = 'result' }
 if ( is.null(args$output) ) { args$output = './' }
+if ( is.null(args$autoBatch) ) { args$autoBatch = FALSE }
 if ( is.null(args$ruvgCount) ) { args$ruvgCount = 5 }
 
 # load DESeq2 and perform Differential Analysis
@@ -125,11 +127,24 @@ prefix <- args$prefix
 output <- args$output
 spiRegex <- args$spiRegex
 keepSpike <- args$keepSpike
+autoBatch <- args$autoBatch
 
 # With the count matrix, cts, and the sample information, colData
 cts <- as.matrix(read.csv(geneCountMtx, sep="\t", row.names="gene_id"))
 cts <-round(cts, 0)
 colData <- read.csv(sampleMtx, row.names=1, sep="\t")
+
+# judge if --control and --treat in colData
+designs <- unique(as.character(colData[[design]]))
+if ( !(control %in% designs) ) {
+  bool <- TRUE
+  ShowHelp(bool, '-c|--control', FALSE, TRUE)
+}
+
+if ( !(treat %in% designs) ) {
+  bool <- TRUE
+  ShowHelp(bool, '-t|--treat', FALSE, TRUE)
+}
 
 # check all sample rownames in geneCountMtx colNames
 all(rownames(colData) %in% colnames(cts))
@@ -194,8 +209,7 @@ dds <- DESeqDataSetFromMatrix(countData = cts,
 
 featureData <- data.frame(gene=rownames(cts))
 mcols(dds) <- DataFrame(mcols(dds), featureData)
-# Note on factor levels
-dds[[design]] <- factor(dds[[design]], levels = c(control, treat))
+# runing DESeq
 dds <- DESeq(dds, test=test)
 
 # Removing hidden batch effects using RUVg, --batchMethod: RUVg
@@ -204,20 +218,29 @@ if (args$batchMethod == 'RUVg') {
   cat('Using empirical control genes by looking at the genes that do not have a small p-value\n')
   suppressMessages(library('RUVSeq'))
   LoadPacakge('RUVSeq')
-
-  featureData <- data.frame(gene=rownames(cts))
-  mcols(dds) <- DataFrame(mcols(dds), featureData)
-  ## perform DE analysis before passing to RUVg
-  dds[[design]] <- factor(dds[[design]], levels = c(control, treat))
-  dds <- DESeq(dds, test=test)
-  res <- results(dds, contrast=c(design, treat, control))
-  ## removing hidden batch effect
-  set <- newSeqExpressionSet(counts(dds), phenoData = colData)
-  idx <- rowSums(counts(set) > args$ruvgCount) >= round(sampleSize/2)
-  set <- set[idx, ]
-  set <- betweenLaneNormalization(set, which="upper")
-  notSig <- rownames(res)[which(res$pvalue > .1)]
-  empirical <- rownames(set)[ rownames(set) %in% notSig ]
+  if (! autoBatch) {
+    res <- results(dds, contrast=c(design, treat, control))
+    ## removing hidden batch effect
+    set <- newSeqExpressionSet(counts(dds), phenoData = colData)
+    idx <- rowSums(counts(set) > args$ruvgCount) == sampleSize
+    set <- set[idx, ]
+    set <- betweenLaneNormalization(set, which="upper")
+    notSig <- rownames(res)[which(res$pvalue > .1)]
+    empirical <- rownames(set)[ rownames(set) %in% notSig ]
+  }else{
+    empirical <- rownames(cts)
+    tDesigns <- designs[designs != control]
+    for (tDesign in tDesigns) {
+      tmpRes <- results(dds, contrast=c(design, tDesign, control))
+      tmpSet <- newSeqExpressionSet(counts(dds), phenoData = colData)
+      tmpIdx <- rowSums(counts(tmpSet) > args$ruvgCount) == sampleSize
+      tmpSet <- tmpSet[tmpIdx, ]
+      tmpSet <- betweenLaneNormalization(tmpSet, which="upper")
+      tmpNotSig <- rownames(tmpRes)[which(tmpRes$pvalue > .1)]
+      tmpEmpirical <- rownames(tmpSet)[ rownames(tmpSet) %in% tmpNotSig ]
+      empirical <- intersect(empirical, tmpEmpirical)
+    }
+  }
   set <- RUVg(set, empirical, k=2)
   ## assign W_1 and W_2 to dd
   dds$W1 <- set$W_1
