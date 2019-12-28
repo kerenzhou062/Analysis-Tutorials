@@ -218,16 +218,7 @@ if (args$batchMethod == 'RUVg') {
   cat('Using empirical control genes by looking at the genes that do not have a small p-value\n')
   suppressMessages(library('RUVSeq'))
   LoadPacakge('RUVSeq')
-  if (! autoBatch) {
-    res <- results(dds, contrast=c(design, treat, control))
-    ## removing hidden batch effect
-    set <- newSeqExpressionSet(counts(dds), phenoData = colData)
-    idx <- rowSums(counts(set) > args$ruvgCount) == sampleSize
-    set <- set[idx, ]
-    set <- betweenLaneNormalization(set, which="upper")
-    notSig <- rownames(res)[which(res$pvalue > .1)]
-    empirical <- rownames(set)[ rownames(set) %in% notSig ]
-  }else{
+  if (autoBatch) {
     empirical <- rownames(cts)
     tDesigns <- designs[designs != control]
     for (tDesign in tDesigns) {
@@ -240,6 +231,15 @@ if (args$batchMethod == 'RUVg') {
       tmpEmpirical <- rownames(tmpSet)[ rownames(tmpSet) %in% tmpNotSig ]
       empirical <- intersect(empirical, tmpEmpirical)
     }
+  }else{
+    res <- results(dds, contrast=c(design, treat, control))
+    ## removing hidden batch effect
+    set <- newSeqExpressionSet(counts(dds), phenoData = colData)
+    idx <- rowSums(counts(set) > args$ruvgCount) == sampleSize
+    set <- set[idx, ]
+    set <- betweenLaneNormalization(set, which="upper")
+    notSig <- rownames(res)[which(res$pvalue > .1)]
+    empirical <- rownames(set)[ rownames(set) %in% notSig ]
   }
   set <- RUVg(set, empirical, k=2)
   ## assign W_1 and W_2 to dd
