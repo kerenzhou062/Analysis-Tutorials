@@ -6,7 +6,7 @@ command =  matrix(c(
     "help",         "h",   0,  "logical",     "Show help information",
     "adjp",         "q",   2,  "numeric",     "adjp cutoff (0.1)",
     "batchMethod",  "b",   1,  "character",   "Remove hidden batch effect (none|RUVg|spikeins)",
-    "autoBatch",    "a",   2,  "logical",     "Use 'design' column to remove hidden batch effect (work with RUVg)",
+    "autoBatch",    "a",   0,  "logical",     "Use 'design' column to remove hidden batch effect (work with RUVg)",
     "control",      "c",   1,  "character",   "Name for control design in colData",
     "counts",       "g",   1,  "character",   "Gene counts matrix",
     "design",       "d",   1,  "character",   "Design for construction of DESeqDataSet (colname in colData)",
