@@ -4,41 +4,50 @@ suppressMessages(library('getopt'))
 
 command =  matrix(c(
     "help",         "h",   0,  "logical",   "Show help information",
+    "batchMethod",  "b",   1,  "character",   "Remove hidden batch effect (none|RUVg|spikeins)",
+    "counts",       "g",   1,  "character", "Gene counts matrix",
+    "design1",      "d",   1,  "character", "Design for construction of DESeqDataSet (colname in colData)",
+    "design2",      "D",   1,  "character", "Design for construction of DESeqDataSet (colname in colData)",
     "filter",       "f",   2,  "integer",   "Filter out genes less than # counts across all samples",
-    "spikein",      "sp",  0,  "logical",   "EstimateSizeFactors with spikeins",
-    "spiregex",     "pa",  1,  "character", "Name pattern of spikeins in gene_id (Spikein-ERCC|ERCC)",
-    "removesp",     "rs",  1,  "logical",   "Remove spikeins before reads passed to DESeq()",
-    "counts",       "ct",  1,  "character", "Gene counts matrix",
-    "samplemtx",    "sm",  1,  "character", "Sample relationships matrix",
-    "design1",      "d1",  1,  "character", "Design for construction of DESeqDataSet (colname in colData)",
-    "design2",      "d2",  1,  "character", "Design for construction of DESeqDataSet (colname in colData)",
-    "poiheatmap",   "po",  1,  "character", "Sample distance plot using Poisson Distance",
-    "glmpca",       "gp",  0,  "logical",   "PCA plot using Generalized PCA",
-    "normalize",    "nr",  1,  "character", "Normalize method for raw counts (auto|vst|rlog)",
-    "prefix",       "pr",  1,  "character", "Prefix for output",
-    "output" ,      "o",   1,  "character", "Output directory"
+    "glmPca",       "l",   0,  "logical",   "PCA plot using Generalized PCA",
+    "keepSpike",    "k",   1,  "logical",   "Keep spikeins reads when passing to DESeq()",
+    "normalize",    "n",   1,  "character", "Normalize method for raw counts (auto|vst|rlog)",
+    "output" ,      "o",   1,  "character", "Output directory",
+    "poiHeatmap",   "H",   1,  "character", "Sample distance plot using Poisson Distance",
+    "prefix",       "e",   1,  "character", "Prefix for output",
+    "ruvgCount",    "u",   2,  "integer",     "Counts cutoff for filtering count matrix with --batchMethod RUVg (5)",
+    "sampleMtx",    "m",   1,  "character", "Sample relationships matrix",
+    "spiRegex",     "r",   1,  "character", "Name pattern of spikeins in gene_id (ERCC)"
 ), byrow=TRUE, ncol=5)
 
-## parsing arguments
-args <- getopt(command)
-
-if(!is.null(args$help)){
-  cat(paste(getopt(command, usage = T),"\n"))
-  q()
-}
-
-if ( is.null(args$normalize) ) {
-  args$normalize = 'auto'
-}else{
-  norMethodVetor <- c('auto', 'vst', 'rlog')
-  if (isFALSE(args$normalize %in% norMethodVetor)) {
-    cat("None valid -nr|--normalize!\n")
+# functions
+ShowHelp <- function(object, param, reverse=FALSE, bool=FALSE) {
+  if (reverse) {
+    if (bool) {
+      judge <- !isTRUE(object)
+    }else{
+      judge <- !is.null(object)
+    }
+  }else{
+    if (bool) {
+      judge <- isTRUE(object)
+    }else{
+      judge <- is.null(object)
+    }
+  }
+  if (judge) {
+    if (param != 'none') {
+      cat(paste("None valid ", param, "!\n"))
+    }
     cat(paste(getopt(command, usage = T),"\n"))
     q()
   }
 }
 
-## functions
+LoadPacakge <- function(name) {
+  cat(paste("Load package: ", name, ".\n"))
+}
+
 VarDefined <- function(x) {
   tryCatch ( 
     if( class(x) == 'logical' ) {
@@ -78,19 +87,54 @@ RatioGgplot <- function(data1, data2) {
   return(ratio)
 }
 
-## load DESeq2
-suppressMessages(library('DESeq2'))
-suppressMessages(library('ggplot2'))
-suppressMessages(library('dplyr'))
-## load arguments
+# parsing arguments
+args <- getopt(command)
+
+ShowHelp(args$help, 'none', FALSE)
+ShowHelp(args$counts, '-g|--counts', TRUE)
+ShowHelp(args$design1, '-d|--design1', TRUE)
+ShowHelp(args$design2, '-D|--design2', TRUE)
+
+if ( is.null(args$batchMethod) ) {
+  args$batchMethod = 'none'
+}else{
+  bmVetor <- c('none', 'RUVg', 'spikeins')
+  bool <- isFALSE(args$batchMethod %in% bmVetor)
+  ShowHelp(bool, '-b|--batchMethod', FALSE, TRUE)
+}
+
+if ( is.null(args$normalize) ) {
+  args$normalize = 'auto'
+}else{
+  norMethodVetor <- c('auto', 'vst', 'rlog')
+  bool <- isFALSE(args$normalize %in% norMethodVetor))
+  ShowHelp(bool, '-n|--normalize', FALSE, TRUE)
+}
+
+# default values
+if ( is.null(args$spiRegex) ) { args$spiRegex = 'ERCC-' }
+if ( is.null(args$glmPca) ) { args$glmPca = FALSE }
+
+if ( is.null(args$prefix) ) { args$prefix = 'result' }
+if ( is.null(args$output) ) { args$output = './' }
+
+# load arguments
+batchMethod <- args$batchMethod
 geneCountMtx <- args$counts
-sampleMtx <- args$samplemtx
+sampleMtx <- args$sampleMtx
 design1 <- args$design1
 design2 <- args$design2
 prefix <- args$prefix
 output <- args$output
-spiRegex <- args$spiregex
+spiRegex <- args$spiRegex
 normalize <- args$normalize
+keepSpike <- args$keepSpike
+
+
+# load DESeq2
+suppressMessages(library('DESeq2'))
+suppressMessages(library('ggplot2'))
+suppressMessages(library('dplyr'))
 
 # With the count matrix, cts, and the sample information, colData
 cts <- as.matrix(read.csv(geneCountMtx, sep="\t", row.names="gene_id"))
@@ -112,11 +156,11 @@ if(!is.null(args$filter)){
 }
 
 # if used spikein, use "RUVSeq" to Estimating the factors of unwanted variation using control genes
-if( !is.null(args$spikein) ){
+if( args$batchMethod == "spikeins" ){
+  ## Removing hidden batch effects using spike-in controls by RUVg
+  cat('Removing hidden batch effects with spike-ins (RUVg)!\n')
   suppressMessages(library('RUVSeq'))
-  suppressMessages(library('RColorBrewer'))
-  colors <- brewer.pal(3, "Set2")
-
+  LoadPacakge('RUVSeq')
   ## seperate to genes and spikes
   genes <- rownames(cts)[grep(spiRegex, rownames(cts), invert=TRUE)]
   spikes <- rownames(cts)[grep(spiRegex, rownames(cts))]
@@ -124,41 +168,26 @@ if( !is.null(args$spikein) ){
   ## use the betweenLaneNormalization function of EDASeq to normalize the
   ## data using upper-quartile (UQ) normalization
   set <- betweenLaneNormalization(set, which="upper")
-  ## plot RLE and PCA before RUVg
-  spif <- as.factor(colData[[design1]])
-  rlePlotPdf <- file.path(output, paste(prefix, ".beforeSpikein.RLE.pdf", sep=""))
-  pdf(rlePlotPdf, paper='a4r', height=0)
-  plotRLE(set, outline=FALSE, ylim=c(-4, 4), col=colors[spif])
-  garbage <- dev.off()
-  pcaPlotPdf <- file.path(output, paste(prefix, ".beforeSpikein.PCA.pdf", sep=""))
-  pdf(pcaPlotPdf, paper='a4r', height=0)
-  plotPCA(set, col=colors[spif], cex=1)
-  garbage <- dev.off()
   ## RUVg: Estimating the factors of unwanted variation using control genes
   spikeNorSet <- RUVg(set, spikes, k=1)
-  ## plot RLE and PCA after RUVg
-  rlePlotPdf <- file.path(output, paste(prefix, ".afterSpikein.RLE.pdf", sep=""))
-  pdf(rlePlotPdf, paper='a4r', height=0)
-  plotRLE(spikeNorSet, outline=FALSE, ylim=c(-4, 4), col=colors[spif])
-  garbage <- dev.off()
-  pcaPlotPdf <- file.path(output, paste(prefix, ".afterSpikein.PCA.pdf", sep=""))
-  pdf(pcaPlotPdf, paper='a4r', height=0)
-  plotPCA(spikeNorSet, col=colors[spif], cex=1)
-  garbage <- dev.off()
-  ## pass spikeNorSet to DESeq2
-  ## re-construct cts, filter out spike-ins if --removesp set
-  if(!is.null(args$removesp)){
+  ## re-construct cts, filter out spike-ins if --keepSpike not set
+  if(! keepSpike){
     cts <- cts[genes,]
   }
   colData <- pData(spikeNorSet)
-  designFormula <- as.formula(paste("~", "W_1", "+", design1, "+", design2, sep=" "))
+
+  if (!is.null(args$selectCol)) {
+    designFormula <- as.formula(paste("~ W1 +", design, '+', design, ':', selectCol, sep=" "))
+  }else{
+    designFormula <- as.formula(paste("~ W1 +", design, sep=" "))
+  }
 }else{
-  ## filter out spike-ins if --removesp set
-  if(!is.null(args$removesp)){
+  ## filter out spike-ins if --keepSpike set
+  if(! keepSpike){
     genes <- rownames(cts)[grep(spiRegex, rownames(cts), invert=TRUE)]
     cts <- cts[genes,]
   }
-  designFormula <- as.formula(paste("~", design1, "+", design2, sep=" "))
+  designFormula <- as.formula(paste("~", design, sep=" "))
 }
 
 dds <- DESeqDataSetFromMatrix(countData = cts,
@@ -171,6 +200,40 @@ mcols(dds) <- DataFrame(mcols(dds), featureData)
 # use the Poisson Distance to calculate sample distance 
 suppressMessages(library("pheatmap"))
 suppressMessages(library("RColorBrewer"))
+
+
+# Removing hidden batch effects using RUVg, --batchMethod: RUVg
+if (args$batchMethod == 'RUVg') {
+  cat('Removing hidden batch effects using RUVg.\n')
+  cat('Using empirical control genes by looking at the genes that do not have a small p-value\n')
+  suppressMessages(library('RUVSeq'))
+  LoadPacakge('RUVSeq')
+
+  featureData <- data.frame(gene=rownames(cts))
+  mcols(dds) <- DataFrame(mcols(dds), featureData)
+  ## perform DE analysis before passing to RUVg
+  dds[[design]] <- factor(dds[[design]], levels = c(control, treat))
+  dds <- DESeq(dds, test=test)
+  res <- results(dds, contrast=c(design, treat, control))
+  ## removing hidden batch effect
+  set <- newSeqExpressionSet(counts(dds), phenoData = colData)
+  idx <- rowSums(counts(set) > args$ruvgCount) >= round(sampleSize/2)
+  set <- set[idx, ]
+  set <- betweenLaneNormalization(set, which="upper")
+  notSig <- rownames(res)[which(res$pvalue > .1)]
+  empirical <- rownames(set)[ rownames(set) %in% notSig ]
+  set <- RUVg(set, empirical, k=2)
+  ## assign W_1 and W_2 to dd
+  dds$W1 <- set$W_1
+  dds$W2 <- set$W_2
+  ## re-design factors
+  if (!is.null(args$selectCol)) {
+    design(dds) <- as.formula(paste("~ W1 + W2 +", design, '+', design, ':', selectCol, sep=" "))
+  }else{
+    design(dds) <- as.formula(paste("~ W1 + W2 +", design, sep=" "))
+  }
+  dds <- DESeq(dds, test=test)
+}
 
 sampleDisPdf <- file.path(output, paste(prefix, ".sd.heatmap.pdf", sep=""))
 if(!is.null(args$poiheatmap)) {

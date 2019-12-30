@@ -315,7 +315,7 @@ echo "Running RSEM: ${RSEM}..."
 ## The coefficient of quartile variation (CQV), which is a robust way to measure 
 ## the ratio between standard deviation and mean.
 ## Small CQV(0.05) means that we have enough reads to produce a good estimate
-if APPEND_NAMES; then
+if $APPEND_NAMES; then
   RSEMparCommon="--bam --append-names --estimate-rspd  --calc-ci --no-bam-output --seed 12345"
 else
   RSEMparCommon="--bam --estimate-rspd  --calc-ci --no-bam-output --seed 12345"
