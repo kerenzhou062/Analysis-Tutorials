@@ -204,11 +204,11 @@ esac
 STARparsMeta="--outSAMheaderCommentFile commentsENCODElong.txt --outSAMheaderHD @HD VN:1.4 SO:coordinate"
 
 ## not needed ## --outSAMheaderPG @PG ID:Samtools PN:Samtools CL:"$samtoolsCommand" PP:STAR VN:0.1.18"
-
+ANNO_NAME=$(basename $STAR_GENOME_DIR)
 # ENCODE metadata BAM comments
 echo -e '@CO\tLIBID:ENCLB175ZZZ
 @CO\tREFID:ENCFF001RGS
-@CO\tANNID:gencode.v19.annotation.gtf.gz
+@CO\tANNID:custom.annotation.${ANNO_NAME}
 @CO\tSPIKEID:ENCFF001RTP VN:Ambion-ERCC Mix, Cat no. 445670' > commentsENCODElong.txt
 
 ###### STAR command
