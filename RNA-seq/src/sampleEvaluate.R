@@ -12,7 +12,7 @@ command =  matrix(c(
     "keepSpike",    "k",   1,  "logical",   "Keep spikeins reads when passing to DESeq()",
     "normalize",    "n",   1,  "character", "Normalize method for raw counts (auto|vst|rlog)",
     "output" ,      "o",   1,  "character", "Output directory",
-    "poiHeatmap",   "H",   1,  "character", "Sample distance plot using Poisson Distance",
+    "poiHeatmap",   "H",   0,  "logical",   "Sample distance plot using Poisson Distance",
     "prefix",       "e",   1,  "character", "Prefix for output",
     "sampleMtx",    "m",   1,  "character", "Sample relationships matrix",
     "spiRegex",     "r",   1,  "character", "Name pattern of spikeins in gene_id (ERCC)"
