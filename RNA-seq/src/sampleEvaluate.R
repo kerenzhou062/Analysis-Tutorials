@@ -4,7 +4,6 @@ suppressMessages(library('getopt'))
 
 command =  matrix(c(
     "help",         "h",   0,  "logical",   "Show help information",
-    "batchMethod",  "b",   1,  "character",   "Remove hidden batch effect (none|RUVg|spikeins)",
     "counts",       "g",   1,  "character", "Gene counts matrix",
     "design1",      "d",   1,  "character", "Design for construction of DESeqDataSet (colname in colData)",
     "design2",      "D",   1,  "character", "Design for construction of DESeqDataSet (colname in colData)",
@@ -15,7 +14,6 @@ command =  matrix(c(
     "output" ,      "o",   1,  "character", "Output directory",
     "poiHeatmap",   "H",   1,  "character", "Sample distance plot using Poisson Distance",
     "prefix",       "e",   1,  "character", "Prefix for output",
-    "ruvgCount",    "u",   2,  "integer",     "Counts cutoff for filtering count matrix with --batchMethod RUVg (5)",
     "sampleMtx",    "m",   1,  "character", "Sample relationships matrix",
     "spiRegex",     "r",   1,  "character", "Name pattern of spikeins in gene_id (ERCC)"
 ), byrow=TRUE, ncol=5)
@@ -118,8 +116,10 @@ if ( is.null(args$glmPca) ) { args$glmPca = FALSE }
 if ( is.null(args$prefix) ) { args$prefix = 'result' }
 if ( is.null(args$output) ) { args$output = './' }
 
+if ( is.null(args$autoBatch) ) { args$autoBatch = FALSE }
+if ( is.null(args$ruvgCount) ) { args$ruvgCount = 5 }
+
 # load arguments
-batchMethod <- args$batchMethod
 geneCountMtx <- args$counts
 sampleMtx <- args$sampleMtx
 design1 <- args$design1
@@ -129,7 +129,6 @@ output <- args$output
 spiRegex <- args$spiRegex
 normalize <- args$normalize
 keepSpike <- args$keepSpike
-
 
 # load DESeq2
 suppressMessages(library('DESeq2'))
@@ -155,40 +154,12 @@ if(!is.null(args$filter)){
   cts <- cts[filter,]
 }
 
-# if used spikein, use "RUVSeq" to Estimating the factors of unwanted variation using control genes
-if( args$batchMethod == "spikeins" ){
-  ## Removing hidden batch effects using spike-in controls by RUVg
-  cat('Removing hidden batch effects with spike-ins (RUVg)!\n')
-  suppressMessages(library('RUVSeq'))
-  LoadPacakge('RUVSeq')
-  ## seperate to genes and spikes
+if(! keepSpike){
   genes <- rownames(cts)[grep(spiRegex, rownames(cts), invert=TRUE)]
-  spikes <- rownames(cts)[grep(spiRegex, rownames(cts))]
-  set <- newSeqExpressionSet(as.matrix(cts), phenoData = colData)
-  ## use the betweenLaneNormalization function of EDASeq to normalize the
-  ## data using upper-quartile (UQ) normalization
-  set <- betweenLaneNormalization(set, which="upper")
-  ## RUVg: Estimating the factors of unwanted variation using control genes
-  spikeNorSet <- RUVg(set, spikes, k=1)
-  ## re-construct cts, filter out spike-ins if --keepSpike not set
-  if(! keepSpike){
-    cts <- cts[genes,]
-  }
-  colData <- pData(spikeNorSet)
-
-  if (!is.null(args$selectCol)) {
-    designFormula <- as.formula(paste("~ W1 +", design, '+', design, ':', selectCol, sep=" "))
-  }else{
-    designFormula <- as.formula(paste("~ W1 +", design, sep=" "))
-  }
-}else{
-  ## filter out spike-ins if --keepSpike set
-  if(! keepSpike){
-    genes <- rownames(cts)[grep(spiRegex, rownames(cts), invert=TRUE)]
-    cts <- cts[genes,]
-  }
-  designFormula <- as.formula(paste("~", design, sep=" "))
+  cts <- cts[genes,]
 }
+
+designFormula <- as.formula(paste("~ ", design1, ' + ', design2, sep=" "))
 
 dds <- DESeqDataSetFromMatrix(countData = cts,
                               colData = colData,
@@ -196,44 +167,14 @@ dds <- DESeqDataSetFromMatrix(countData = cts,
 
 featureData <- data.frame(gene=rownames(cts))
 mcols(dds) <- DataFrame(mcols(dds), featureData)
+# runing DESeq
+dds <- DESeq(dds, test=test)
+
 
 # use the Poisson Distance to calculate sample distance 
 suppressMessages(library("pheatmap"))
 suppressMessages(library("RColorBrewer"))
 
-
-# Removing hidden batch effects using RUVg, --batchMethod: RUVg
-if (args$batchMethod == 'RUVg') {
-  cat('Removing hidden batch effects using RUVg.\n')
-  cat('Using empirical control genes by looking at the genes that do not have a small p-value\n')
-  suppressMessages(library('RUVSeq'))
-  LoadPacakge('RUVSeq')
-
-  featureData <- data.frame(gene=rownames(cts))
-  mcols(dds) <- DataFrame(mcols(dds), featureData)
-  ## perform DE analysis before passing to RUVg
-  dds[[design]] <- factor(dds[[design]], levels = c(control, treat))
-  dds <- DESeq(dds, test=test)
-  res <- results(dds, contrast=c(design, treat, control))
-  ## removing hidden batch effect
-  set <- newSeqExpressionSet(counts(dds), phenoData = colData)
-  idx <- rowSums(counts(set) > args$ruvgCount) >= round(sampleSize/2)
-  set <- set[idx, ]
-  set <- betweenLaneNormalization(set, which="upper")
-  notSig <- rownames(res)[which(res$pvalue > .1)]
-  empirical <- rownames(set)[ rownames(set) %in% notSig ]
-  set <- RUVg(set, empirical, k=2)
-  ## assign W_1 and W_2 to dd
-  dds$W1 <- set$W_1
-  dds$W2 <- set$W_2
-  ## re-design factors
-  if (!is.null(args$selectCol)) {
-    design(dds) <- as.formula(paste("~ W1 + W2 +", design, '+', design, ':', selectCol, sep=" "))
-  }else{
-    design(dds) <- as.formula(paste("~ W1 + W2 +", design, sep=" "))
-  }
-  dds <- DESeq(dds, test=test)
-}
 
 sampleDisPdf <- file.path(output, paste(prefix, ".sd.heatmap.pdf", sep=""))
 if(!is.null(args$poiheatmap)) {
