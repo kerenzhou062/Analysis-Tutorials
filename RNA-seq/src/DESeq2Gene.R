@@ -4,9 +4,9 @@ suppressMessages(library('getopt'))
 
 command =  matrix(c(
     "help",         "h",   0,  "logical",     "Show help information",
+    "autoBatch",    "a",   0,  "logical",     "Use 'design' column to remove hidden batch effect (work with RUVg)",
     "adjp",         "q",   2,  "numeric",     "adjp cutoff (0.1)",
     "batchMethod",  "b",   1,  "character",   "Remove hidden batch effect (none|RUVg|spikeins)",
-    "autoBatch",    "a",   0,  "logical",     "Use 'design' column to remove hidden batch effect (work with RUVg)",
     "control",      "c",   1,  "character",   "Name for control design in colData",
     "counts",       "g",   1,  "character",   "Gene counts matrix",
     "design",       "d",   1,  "character",   "Design for construction of DESeqDataSet (colname in colData)",
@@ -15,7 +15,9 @@ command =  matrix(c(
     "output" ,      "o",   1,  "character",   "Output directory",
     "prefix",       "e",   1,  "character",   "Prefix for output",
     "pval",         "p",   2,  "numeric",     "pval cutoff (0.05)",
-    "ruvgCount",    "u",   2,  "integer",     "Counts cutoff for filtering count matrix with --batchMethod RUVg (5)",
+    "ruvgCount",    "u",   2,  "numeric",     "Counts cutoff for filtering count matrix with --batchMethod RUVg (5)",
+    "ruvgLogfc",    "z",   2,  "numeric",     "pvalue cutoff for filtering count matrix with --batchMethod RUVg (1)",
+    "ruvgPval",     "v",   2,  "numeric",     "log2CF cutoff for filtering count matrix with --batchMethod RUVg (0.3)",
     "selectCol",    "C",   2,  "character",   "Only 'selectCol' in samplemtx was selected as contrast in results()",
     "selectRow",    "R",   2,  "character",   "Only 'selectRow' from 'selectCol' was selected as contrast in results()",
     "sampleMtx",    "m",   1,  "character",   "Sample relationships matrix",
@@ -106,7 +108,8 @@ if ( is.null(args$prefix) ) { args$prefix = 'result' }
 if ( is.null(args$output) ) { args$output = './' }
 if ( is.null(args$autoBatch) ) { args$autoBatch = FALSE }
 if ( is.null(args$ruvgCount) ) { args$ruvgCount = 5 }
-
+if ( is.null(args$ruvgLogfc) ) { args$ruvgLogfc = 1 }
+if ( is.null(args$ruvgPval) ) { args$ruvgPval = 0.3 }
 # load DESeq2 and perform Differential Analysis
 suppressMessages(library('DESeq2'))
 suppressMessages(library('ggplot2'))
@@ -218,29 +221,31 @@ if (args$batchMethod == 'RUVg') {
   cat('Using empirical control genes by looking at the genes that do not have a small p-value\n')
   suppressMessages(library('RUVSeq'))
   LoadPacakge('RUVSeq')
+  res <- results(dds, contrast=c(design, treat, control))
+  ## removing hidden batch effect
+  set <- newSeqExpressionSet(counts(dds))
+  idx <- rowSums(counts(set) > args$ruvgCount) == sampleSize
+  set <- set[idx, ]
+  set <- betweenLaneNormalization(set, which="upper")
   if (autoBatch) {
     empirical <- rownames(cts)
     tDesigns <- designs[designs != control]
     for (tDesign in tDesigns) {
       tmpRes <- results(dds, contrast=c(design, tDesign, control))
-      tmpSet <- newSeqExpressionSet(counts(dds), phenoData = colData)
+      tmpSet <- newSeqExpressionSet(counts(dds))
       tmpIdx <- rowSums(counts(tmpSet) > args$ruvgCount) == sampleSize
       tmpSet <- tmpSet[tmpIdx, ]
       tmpSet <- betweenLaneNormalization(tmpSet, which="upper")
-      tmpNotSig <- rownames(tmpRes)[which(tmpRes$pvalue > .1)]
+      tmpNotSig <- rownames(tmpRes)[which(tmpRes$pvalue > args$ruvgPval & abs(tmpRes$log2FoldChange) < args$ruvgLogfc)]
       tmpEmpirical <- rownames(tmpSet)[ rownames(tmpSet) %in% tmpNotSig ]
       empirical <- intersect(empirical, tmpEmpirical)
     }
   }else{
-    res <- results(dds, contrast=c(design, treat, control))
-    ## removing hidden batch effect
-    set <- newSeqExpressionSet(counts(dds), phenoData = colData)
-    idx <- rowSums(counts(set) > args$ruvgCount) == sampleSize
-    set <- set[idx, ]
-    set <- betweenLaneNormalization(set, which="upper")
-    notSig <- rownames(res)[which(res$pvalue > .1)]
+    notSig <- rownames(tmpRes)[which(tmpRes$pvalue > args$ruvgPval & abs(tmpRes$log2FoldChange) < args$ruvgLogfc)]
     empirical <- rownames(set)[ rownames(set) %in% notSig ]
   }
+  cat('empirical genes:')
+  print(length(empirical))
   set <- RUVg(set, empirical, k=2)
   ## assign W_1 and W_2 to dd
   dds$W1 <- set$W_1
@@ -263,7 +268,7 @@ if ( shrink != 'none' ) {
 # plot MA plot
 maPlotPdf <- file.path(output, paste(prefix, ".MA.pdf", sep=""))
 pdf(maPlotPdf, paper='a4r', height=0)
-plotMA(res, ylim=c(-6,6), alpha=padjCuotff, cex=0.8)
+DESeq2::plotMA(res, ylim=c(-6,6), alpha=padjCuotff, cex=0.6)
 abline(h=c(-1,1), col="dodgerblue", lwd=2)
 garbage <- dev.off()
 
