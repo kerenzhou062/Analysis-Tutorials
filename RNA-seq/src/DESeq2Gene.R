@@ -21,7 +21,7 @@ command =  matrix(c(
     "selectCol",    "C",   2,  "character",   "Only 'selectCol' in samplemtx was selected as contrast in results()",
     "selectRow",    "R",   2,  "character",   "Only 'selectRow' from 'selectCol' was selected as contrast in results()",
     "sampleMtx",    "m",   1,  "character",   "Sample relationships matrix",
-    "shrink",       "s",   1,  "character",   "Shrinkage method for DE results (none|normal|apeglm[default]|ashr)",
+    "shrink",       "s",   1,  "character",   "Shrinkage method for DE results (none|normal|apeglm|ashr[default])",
     "spiRegex",     "r",   1,  "character",   "Name pattern of spikeins in gene_id (ERCC-)",
     "treat",        "t",   1,  "character",   "Name for treat design in colData",
     "test",         "T",   1,  "character",   "test method for p-value (Wald|LRT)"
@@ -82,7 +82,7 @@ if ( is.null(args$batchMethod) ) {
 }
 
 if ( is.null(args$shrink) ) {
-  args$shrink = 'apeglm'
+  args$shrink = 'ashr'
 }else{
   shrinkVetor <- c('none', 'normal', 'apeglm', 'ashr')
   bool <- isFALSE(args$shrink %in% shrinkVetor)
@@ -259,7 +259,11 @@ if (args$batchMethod == 'RUVg') {
   }
   dds <- DESeq(dds, test=test)
 }
+
 resultsNameVector <- resultsNames(dds)
+resultsNameVector
+name
+contrast
 if ( shrink != 'none' ) {
   if ( name %in% resultsNameVector ) {
     res <- lfcShrink(dds, coef=name, type=shrink)
@@ -267,8 +271,8 @@ if ( shrink != 'none' ) {
     if (shrink == 'apeglm') {
       print('change shrink method to "ashr"!')
       shrink <- 'ashr'
-      res <- lfcShrink(dds, contrast=contrast, type=shrink)
     }
+    res <- lfcShrink(dds, contrast=contrast, type=shrink)
   }
 }else{
   if ( name %in% resultsNameVector ) {
@@ -313,6 +317,8 @@ write.table(as.data.frame(res), sep="\t", eol = "\n",
             quote = FALSE, row.names=TRUE, file=output.file)
 close(output.file)
 
+scan(pipe(paste("sed -i '1 s/baseMean/geneId\tbaseMean/' ", resultFile, sep = "")))
+
 # significant output result
 resOrdered <- res[order(res$pvalue),]
 resSig <- subset(resOrdered, padj < padjCuotff & pvalue < pvalCutoff)
@@ -321,3 +327,4 @@ output.file <- file(resultFile, "wb")
 write.table(as.data.frame(resSig), sep="\t", eol = "\n", 
             quote = FALSE, row.names=TRUE, file=output.file)
 close(output.file)
+scan(pipe(paste("sed -i '1 s/baseMean/geneId\tbaseMean/' ", resultFile, sep = "")))
