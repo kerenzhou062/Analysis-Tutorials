@@ -322,7 +322,7 @@ scan(pipe(paste("sed -i '1 s/baseMean/geneId\tbaseMean/' ", resultFile, sep = ""
 # significant output result
 resOrdered <- res[order(res$pvalue),]
 resSig <- subset(resOrdered, padj < padjCuotff & pvalue < pvalCutoff)
-resultFile <- file.path(output, paste(prefix, ".DESeq2.sig.txt", sep=""))
+resultFile <- file.path(output, paste(prefix, ".sig.DESeq2.txt", sep=""))
 output.file <- file(resultFile, "wb")
 write.table(as.data.frame(resSig), sep="\t", eol = "\n", 
             quote = FALSE, row.names=TRUE, file=output.file)
