@@ -112,7 +112,7 @@ if ( is.null(args$normalize) ) {
 # default values
 if ( is.null(args$spiRegex) ) { args$spiRegex = 'ERCC-' }
 if ( is.null(args$glmPca) ) { args$glmPca = FALSE }
-
+if ( is.null(args$poiheatmap) ) { args$glmPca = FALSE }
 if ( is.null(args$prefix) ) { args$prefix = 'result' }
 if ( is.null(args$output) ) { args$output = './' }
 
@@ -129,7 +129,8 @@ output <- args$output
 spiRegex <- args$spiRegex
 normalize <- args$normalize
 keepSpike <- args$keepSpike
-
+glmPca <- args$glmPca
+poiheatmap <- args$poiheatmap
 # load DESeq2
 suppressMessages(library('DESeq2'))
 suppressMessages(library('ggplot2'))
@@ -177,7 +178,7 @@ suppressMessages(library("RColorBrewer"))
 
 
 sampleDisPdf <- file.path(output, paste(prefix, ".sd.heatmap.pdf", sep=""))
-if(!is.null(args$poiheatmap)) {
+if(poiheatmap) {
   suppressMessages(library("PoiClaClu"))
   poisd <- PoissonDistance(t(counts(dds)))
   sampleDistMatrix <- as.matrix( poisd$dd )
@@ -208,7 +209,7 @@ if(!is.null(args$poiheatmap)) {
 # plot PCA
 pcaPdf <- file.path(output, paste(prefix, ".PCA.pdf", sep=""))
 pdf(pcaPdf, paper='a4r', height=0)
-if(!is.null(args$glmpca)) {
+if(glmPca) {
   suppressMessages(library("glmpca"))
   gpca <- glmpca(counts(dds), L=2)
   gpca.dat <- gpca$factors
