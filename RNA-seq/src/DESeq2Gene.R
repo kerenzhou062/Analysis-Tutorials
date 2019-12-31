@@ -100,6 +100,7 @@ if (!is.null(args$selectRow)) {
 }
 
 # default values
+if ( is.null(args$filter) ) { args$filter = 1 }
 if ( is.null(args$pval) ) { args$pval = 0.05 }
 if ( is.null(args$adjp) ) { args$adjp = 0.1 }
 if ( is.null(args$spiRegex) ) { args$spiRegex = 'ERCC-' }
@@ -119,6 +120,7 @@ LoadPacakge('ggplot2')
 batchMethod <- args$batchMethod
 geneCountMtx <- args$counts
 sampleMtx <- args$sampleMtx
+filter <- args$filter
 design <- args$design
 control <- args$control
 treat <- args$treat
@@ -159,13 +161,12 @@ cts <- cts[genes,]
 
 sampleSize <- nrow(colData)
 # pre-filtering, counts > args$filter in at least half of the samples
-if(!is.null(args$filter)){
-  filter <- apply(cts, 1, function(x) length(x[x>args$filter])>=round(sampleSize/2))
-  cts <- cts[filter,]
-}
+filtered <- apply(cts, 1, function(x) length(x[x>filter])>=round(sampleSize/2))
+cts <- cts[filtered,]
 
+contrast <- c(design, treat, control)
 if (!is.null(args$selectCol)) {
-  name <- paste( design,control, '.', selectCol, selectRow, sep="")
+  name <- paste( design, control, '.', selectCol, selectRow, sep="")
 }else{
   name <- paste( design, treat, 'vs', control, sep="_")
 }
@@ -258,11 +259,23 @@ if (args$batchMethod == 'RUVg') {
   }
   dds <- DESeq(dds, test=test)
 }
-
+resultsNameVector <- resultsNames(dds)
 if ( shrink != 'none' ) {
-  res <- lfcShrink(dds, coef=name, type=shrink)
+  if ( name %in% resultsNameVector ) {
+    res <- lfcShrink(dds, coef=name, type=shrink)
+  }else{
+    if (shrink == 'apeglm') {
+      print('change shrink method to "ashr"!')
+      shrink <- 'ashr'
+      res <- lfcShrink(dds, contrast=contrast, type=shrink)
+    }
+  }
 }else{
-  res <- results( dds, name=name )
+  if ( name %in% resultsNameVector ) {
+    res <- results( dds, name=name )
+  }else{
+    res <- results( dds, contrast=contrast )
+  }
 }
 
 # plot MA plot
@@ -302,8 +315,7 @@ close(output.file)
 
 # significant output result
 resOrdered <- res[order(res$pvalue),]
-resSig <- subset(resOrdered, padj < padjCuotff)
-resSig <- subset(resSig, pvalue < pvalCutoff)
+resSig <- subset(resOrdered, padj < padjCuotff & pvalue < pvalCutoff)
 resultFile <- file.path(output, paste(prefix, ".DE.sig.txt", sep=""))
 output.file <- file(resultFile, "wb")
 write.table(as.data.frame(resSig), sep="\t", eol = "\n", 
