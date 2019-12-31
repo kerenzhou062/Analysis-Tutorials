@@ -88,10 +88,10 @@ RatioGgplot <- function(data1, data2) {
 # parsing arguments
 args <- getopt(command)
 
-ShowHelp(args$help, 'none', FALSE)
-ShowHelp(args$counts, '-g|--counts', TRUE)
-ShowHelp(args$design1, '-d|--design1', TRUE)
-ShowHelp(args$design2, '-D|--design2', TRUE)
+ShowHelp(args$help, 'none', TRUE)
+ShowHelp(args$counts, '-g|--counts', FALSE)
+ShowHelp(args$design1, '-d|--design1', FALSE)
+ShowHelp(args$design2, '-D|--design2', FALSE)
 
 if ( is.null(args$batchMethod) ) {
   args$batchMethod = 'none'
@@ -105,7 +105,7 @@ if ( is.null(args$normalize) ) {
   args$normalize = 'auto'
 }else{
   norMethodVetor <- c('auto', 'vst', 'rlog')
-  bool <- isFALSE(args$normalize %in% norMethodVetor))
+  bool <- isFALSE(args$normalize %in% norMethodVetor)
   ShowHelp(bool, '-n|--normalize', FALSE, TRUE)
 }
 
