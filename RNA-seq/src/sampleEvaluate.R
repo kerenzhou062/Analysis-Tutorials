@@ -93,14 +93,6 @@ ShowHelp(args$counts, '-g|--counts', FALSE)
 ShowHelp(args$design1, '-d|--design1', FALSE)
 ShowHelp(args$design2, '-D|--design2', FALSE)
 
-if ( is.null(args$batchMethod) ) {
-  args$batchMethod = 'none'
-}else{
-  bmVetor <- c('none', 'RUVg', 'spikeins')
-  bool <- isFALSE(args$batchMethod %in% bmVetor)
-  ShowHelp(bool, '-b|--batchMethod', FALSE, TRUE)
-}
-
 if ( is.null(args$normalize) ) {
   args$normalize = 'auto'
 }else{
@@ -109,19 +101,30 @@ if ( is.null(args$normalize) ) {
   ShowHelp(bool, '-n|--normalize', FALSE, TRUE)
 }
 
+if ( is.null(args$test) ) {
+  args$test = 'Wald'
+}else{
+  testVetor <- c('Wald', 'LRT')
+  bool <- isFALSE(args$test %in% testVetor)
+  ShowHelp(bool, '-T|--test', FALSE, TRUE)
+}
+
 # default values
+if ( is.null(args$filter) ) { args$filter = 1 }
 if ( is.null(args$spiRegex) ) { args$spiRegex = 'ERCC-' }
 if ( is.null(args$glmPca) ) { args$glmPca = FALSE }
-if ( is.null(args$poiheatmap) ) { args$glmPca = FALSE }
+if ( is.null(args$poiHeatmap) ) { args$glmPca = FALSE }
 if ( is.null(args$prefix) ) { args$prefix = 'result' }
 if ( is.null(args$output) ) { args$output = './' }
-
+if ( is.null(args$keepSpike) ) { args$keepSpike = FALSE }
 if ( is.null(args$autoBatch) ) { args$autoBatch = FALSE }
 if ( is.null(args$ruvgCount) ) { args$ruvgCount = 5 }
 
 # load arguments
 geneCountMtx <- args$counts
 sampleMtx <- args$sampleMtx
+filter <- args$filter
+test <- args$test
 design1 <- args$design1
 design2 <- args$design2
 prefix <- args$prefix
@@ -130,7 +133,8 @@ spiRegex <- args$spiRegex
 normalize <- args$normalize
 keepSpike <- args$keepSpike
 glmPca <- args$glmPca
-poiheatmap <- args$poiheatmap
+poiHeatmap <- args$poiHeatmap
+
 # load DESeq2
 suppressMessages(library('DESeq2'))
 suppressMessages(library('ggplot2'))
@@ -138,7 +142,7 @@ suppressMessages(library('dplyr'))
 
 # With the count matrix, cts, and the sample information, colData
 cts <- as.matrix(read.csv(geneCountMtx, sep="\t", row.names="gene_id"))
-cts <-round(cts,0)
+cts <-round(cts, 0)
 colData <- read.csv(sampleMtx, row.names=1, sep="\t")
 ## check all sample rownames in geneCountMtx colNames
 all(rownames(colData) %in% colnames(cts))
@@ -150,17 +154,15 @@ cts <- cts[genes,]
 
 sampleSize <- nrow(colData)
 # pre-filtering, counts > args$filter in at least half of the samples
-if(!is.null(args$filter)){
-  filter <- apply(cts, 1, function(x) length(x[x>args$filter])>=round(sampleSize/2))
-  cts <- cts[filter,]
-}
+filtered <- apply(cts, 1, function(x) length(x[x>filter])>=round(sampleSize/2))
+cts <- cts[filtered,]
 
 if(! keepSpike){
   genes <- rownames(cts)[grep(spiRegex, rownames(cts), invert=TRUE)]
   cts <- cts[genes,]
 }
 
-designFormula <- as.formula(paste("~ ", design1, ' + ', design2, sep=" "))
+designFormula <- as.formula(paste("~ ", design1, sep=" "))
 
 dds <- DESeqDataSetFromMatrix(countData = cts,
                               colData = colData,
@@ -178,7 +180,7 @@ suppressMessages(library("RColorBrewer"))
 
 
 sampleDisPdf <- file.path(output, paste(prefix, ".sd.heatmap.pdf", sep=""))
-if(poiheatmap) {
+if(poiHeatmap) {
   suppressMessages(library("PoiClaClu"))
   poisd <- PoissonDistance(t(counts(dds)))
   sampleDistMatrix <- as.matrix( poisd$dd )
@@ -238,7 +240,7 @@ if(glmPca) {
 
 # plot MDS
 
-if(!is.null(args$poiheatmap)) {
+if(!is.null(args$poiHeatmap)) {
   mds <- as.data.frame(colData(dds)) %>% cbind(cmdscale(sampleDistMatrix))
   title <- "MDS with PoissonDistances"
 }else{
