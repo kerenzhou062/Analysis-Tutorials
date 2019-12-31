@@ -311,7 +311,7 @@ barplot(fractionSig, xlab = "Mean normalized count",
 garbage <- dev.off()
 
 # output result
-resultFile <- file.path(output, paste(prefix, ".DE.txt", sep=""))
+resultFile <- file.path(output, paste(prefix, ".DESeq2.txt", sep=""))
 output.file <- file(resultFile, "wb")
 write.table(as.data.frame(res), sep="\t", eol = "\n", 
             quote = FALSE, row.names=TRUE, file=output.file)
@@ -322,7 +322,7 @@ scan(pipe(paste("sed -i '1 s/baseMean/geneId\tbaseMean/' ", resultFile, sep = ""
 # significant output result
 resOrdered <- res[order(res$pvalue),]
 resSig <- subset(resOrdered, padj < padjCuotff & pvalue < pvalCutoff)
-resultFile <- file.path(output, paste(prefix, ".DE.sig.txt", sep=""))
+resultFile <- file.path(output, paste(prefix, ".DESeq2.sig.txt", sep=""))
 output.file <- file(resultFile, "wb")
 write.table(as.data.frame(resSig), sep="\t", eol = "\n", 
             quote = FALSE, row.names=TRUE, file=output.file)
