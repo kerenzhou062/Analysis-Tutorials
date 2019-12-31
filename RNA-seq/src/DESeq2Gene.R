@@ -16,7 +16,7 @@ command =  matrix(c(
     "prefix",       "e",   1,  "character",   "Prefix for output",
     "pval",         "p",   2,  "numeric",     "pval cutoff (0.05)",
     "ruvgCount",    "u",   2,  "numeric",     "Counts cutoff for filtering count matrix with --batchMethod RUVg (5)",
-    "ruvgLogfc",    "z",   2,  "numeric",     "pvalue cutoff for filtering count matrix with --batchMethod RUVg (1)",
+    "ruvgLogfc",    "l",   2,  "numeric",     "pvalue cutoff for filtering count matrix with --batchMethod RUVg (1)",
     "ruvgPval",     "v",   2,  "numeric",     "log2CF cutoff for filtering count matrix with --batchMethod RUVg (0.3)",
     "selectCol",    "C",   2,  "character",   "Only 'selectCol' in samplemtx was selected as contrast in results()",
     "selectRow",    "R",   2,  "character",   "Only 'selectRow' from 'selectCol' was selected as contrast in results()",
