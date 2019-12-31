@@ -85,7 +85,7 @@ if ( is.null(args$shrink) ) {
   args$shrink = 'apeglm'
 }else{
   shrinkVetor <- c('none', 'normal', 'apeglm', 'ashr')
-  bool <- isFALSE(args$shrink %in% shrinkVetor))
+  bool <- isFALSE(args$shrink %in% shrinkVetor)
   ShowHelp(bool, '-s|--shrink', FALSE, TRUE)
 }
 
