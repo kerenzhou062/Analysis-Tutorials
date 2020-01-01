@@ -92,9 +92,9 @@ for i in range(len(deFileList)):
 
 with open (args.output, 'w') as out:
     row = ['gene_id', 'baseMean']
-    row.extend([x + '_log2FC' for x in sampleNameList])
-    row.extend([x + '_pval' for x in sampleNameList])
-    row.extend([x + '_adjp' for x in sampleNameList])
+    row.extend(['log2FC_' + x for x in sampleNameList])
+    row.extend(['pval_' + x for x in sampleNameList])
+    row.extend(['adjp_' + x for x in sampleNameList])
     out.write('\t'.join(row) + '\n')
     for geneId in sorted(deDict.keys()):
         row = [geneId, bmDict[geneId]]
