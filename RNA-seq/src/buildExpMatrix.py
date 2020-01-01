@@ -6,15 +6,18 @@ import re
 from glob import glob
 from collections import defaultdict
 
-#usage: runExomePeakBash.py or runExomePeakBash.py <bam dir>
-
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-input', action='store', type=str, required=True,
                     help='input RSEM genes|isoforms counts results directory')
 parser.add_argument('-identity', action='store', type=str, choices=['genes', 'isoforms'],
                     default='genes',
                     help='use genes|isoforms to generate exression matrix')
-parser.add_argument('-grep', action='store', type=str,
+parser.add_argument('-abundance', action='store', type=str, choices=['counts', 'FPKM', 'TPM'],
+                    default='counts',
+                    help='export types of gene abundance')
+parser.add_argument('-grepKept', action='store', type=str,
+                    help='regex for keeping files')
+parser.add_argument('-grepExpel', action='store', type=str,
                     help='regex for filtering files')
 parser.add_argument('-output', action='store', type=str, required=True,
                     help='output result matrix')
@@ -25,31 +28,58 @@ if len(sys.argv[1:]) == 0:
     parser.exit()
 
 ##public arguments
-if bool(args.grep):
-    regex = re.compile(r'{0}'.format(args.grep))
+if bool(args.grepKept):
+    kept = True
+    regex = re.compile(r'{0}'.format(args.grepKept))
+elif bool(args.grepExpel):
+    kept = False
+    regex = re.compile(r'{0}'.format(args.grepExpel))
+else:
+    regex = False
 countMtxFiles = sorted(glob(os.path.join(args.input, '**', '*.'+args.identity+'.results'), recursive=True))
 
+if args.abundance == 'counts':
+    abIndex = 4
+elif args.abundance == 'FPKM':
+    abIndex = 6
+    cqvIndex = 16
+else:
+    abIndex = 5
+    cqvIndex = 13
+
 expDict = defaultdict(list)
+cqvDict = defaultdict(list)
 sampleNameList = list()
 for countMtx in countMtxFiles:
     sampleName = os.path.split(countMtx)[-1].replace('.'+args.identity+'.results', '')
-    if bool(args.grep):
-        if bool(regex.search(sampleName)) is False:
-            continue
+    if bool(regex):
+        if kept:
+            if bool(regex.search(sampleName)) is False:
+                continue
+        else:
+            if bool(regex.search(sampleName)) is True:
+                continue
     sampleNameList.append(sampleName)
     with open(countMtx, 'r') as f:
         __ = f.readline()
         for line in f:
             row = line.strip().split('\t')
             geneId = row[0]
-            exp_counts = row[4]
-            expDict[geneId].append(exp_counts)
+            abundance = row[abIndex]
+            expDict[geneId].append(abundance)
+            if args.abundance != 'counts':
+                cqv = row[cqvIndex]
+                cqvDict[geneId].append(cqv)
 
 with open (args.output, 'w') as out:
     row = ['gene_id']
     row.extend(sampleNameList)
+    if args.abundance != 'counts':
+        row.extend(list(map(lambda x: x + '_CQV', sampleNameList)))
     out.write('\t'.join(row) + '\n')
     for geneId in sorted(expDict.keys()):
         row = [geneId]
         row.extend(expDict[geneId])
+        if args.abundance != 'counts':
+            row.extend(cqvDict[geneId])
         out.write('\t'.join(row) + '\n')
