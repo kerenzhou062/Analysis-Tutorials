@@ -4,6 +4,7 @@ import sys
 import argparse
 import re
 from glob import glob
+import math
 from collections import defaultdict
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -15,6 +16,9 @@ parser.add_argument('-name', nargs='+', type=str,
                     help='designate result names, work with -file')
 parser.add_argument('-nindex', nargs='+', type=int,
                     help='extract name as sampleName from filename by index ("_" separated)')
+parser.add_argument('-nonLog2', action='store_true',
+                    default=False,
+                    help='convert log2FC to FC')
 parser.add_argument('-grepKept', action='store', type=str,
                     help='regex for keeping files')
 parser.add_argument('-grepExpel', action='store', type=str,
@@ -85,10 +89,13 @@ for i in range(len(deFileList)):
             baseMean = row[1]
             if geneId not in bmDict:
                 bmDict[geneId] = baseMean
-            log2FC = row[2]
+            fc_val = row[2]
+            if (args.nonLog2):
+                fc_val = 2 ** float(fc_val)
+                fc_val = str(round(12.3456, 4))
             pval = '1' if row[4] == 'NA' else row[4]
             adjp = '1' if row[5] == 'NA' else row[5]
-            deDict[geneId][sampleName] = [log2FC, pval, adjp]
+            deDict[geneId][sampleName] = [fc_val, pval, adjp]
 
 with open (args.output, 'w') as out:
     row = ['gene_id', 'baseMean']
