@@ -97,7 +97,8 @@ with open(args.input, 'r') as f, open(args.output, 'w') as out:
             continue
         row = line.rstrip().split('\t')
         if (count -1) == args.skip:
-            extRow = headerRow
+            if args.noheader is False:
+                extRow = headerRow
         else:
             keyId = row[args.idCol]
             if keyId not in idDict:
