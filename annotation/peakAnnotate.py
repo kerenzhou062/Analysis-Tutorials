@@ -194,7 +194,8 @@ def annoPeak(mode, peakBed, annoBed, bf, bF, br, be, bs, annoType):
             annoResList = dnaTssAnnoResList + dnaTtsAnnoResList
     return annoResList
 
-# decode functions
+# decode exon-based fetures, mostly used for peaks call from RNA-related sequencing data
+# like miCLIP, CLIP-seq
 def exonFeatureDecode (bed12Row, peakLocus, distBool=False):
     ## decode bed12 with BedMan.decodeBed12, dispite strand
     ## other-RNA:[[exonL], [intronL]]
@@ -280,7 +281,7 @@ def exonFeatureDecode (bed12Row, peakLocus, distBool=False):
     ## return annoated region information
     return annoFeatureDict
 
-# decode DNA fetures
+# decode gene fetures, mostly used for DNA-related peaks like ChIP-seq
 def geneFeatureDecode (bedAnnoRow, peakLocus, annoType):
     annoFeatureDict = defaultdict(dict)
     strand = bedAnnoRow[5]
