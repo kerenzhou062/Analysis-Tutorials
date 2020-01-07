@@ -48,6 +48,9 @@ parser.add_argument('-kbTTS', action='store', type=str,
 parser.add_argument('--keepName', action='store_true',
                     default=False,
                     help='keep original 4th column in output')
+parser.add_argument('--matchid', action='store_true',
+                    default=False,
+                    help='peak name (4th Col) in 4th of annotation')
 parser.add_argument('-method', action='store', type=str, choices=['center', 'border'],
                     default='border',
                     help='use peak center|border to calculate distance to TSS|TTS')
@@ -192,7 +195,7 @@ def annoPeak(mode, peakBed, annoBed, bf, bF, br, be, bs, annoType):
     return annoResList
 
 # decode functions
-def rnaFeatureDecode (bed12Row, peakLocus, distBool=False):
+def exonFeatureDecode (bed12Row, peakLocus, distBool=False):
     ## decode bed12 with BedMan.decodeBed12, dispite strand
     ## other-RNA:[[exonL], [intronL]]
     ## mRNA:[[exonL], [intronL], [[thickUpL], [thickInL], [thickDownL]]]
@@ -278,7 +281,7 @@ def rnaFeatureDecode (bed12Row, peakLocus, distBool=False):
     return annoFeatureDict
 
 # decode DNA fetures
-def dnaFeatureDecode (bedAnnoRow, peakLocus, annoType):
+def bedFeatureDecode (bedAnnoRow, peakLocus, annoType):
     annoFeatureDict = defaultdict(dict)
     strand = bedAnnoRow[5]
     txInfo = bedAnnoRow[3].split(':')
@@ -469,13 +472,16 @@ for line in mainAnnoResList:
     geneName = txInfo[1]
     geneType = txInfo[2]
     txId = txInfo[3]
+    if args.matchid:
+        if bool(re.search(r'{0}'.format(peakId), bedAnnoRow[3])) is False:
+            continue
     if args.mode == 'RNA':
-        annoFeatureDict = rnaFeatureDecode(bedAnnoRow, peakLocus, distBool=False)
+        annoFeatureDict = exonFeatureDecode(bedAnnoRow, peakLocus, distBool=False)
     else:
         if len(row) == 12:
-            annoFeatureDict = dnaFeatureDecode(bedAnnoRow, peakLocus, 'gene')
+            annoFeatureDict = bedFeatureDecode(bedAnnoRow, peakLocus, 'gene')
         else:
-            annoFeatureDict = rnaFeatureDecode(bedAnnoRow, peakLocus, distBool=True)
+            annoFeatureDict = exonFeatureDecode(bedAnnoRow, peakLocus, distBool=True)
     if peakId in mainAnnoPeakDict:
         if geneId in mainAnnoPeakDict[peakId]:
             mainAnnoPeakDict[peakId][geneId]['feature'].append(annoFeatureDict)
@@ -651,7 +657,7 @@ if bool(args.extraAnno):
                 bedLocus = [int(bedAnnoRow[1]), int(bedAnnoRow[2])]
                 annoFeatureDict['overlapLength'] = BedMan.overlap(bedLocus, peakLocus)
             else:
-                annoFeatureDict = dnaFeatureDecode(bedAnnoRow, peakLocus, extraType)
+                annoFeatureDict = bedFeatureDecode(bedAnnoRow, peakLocus, extraType)
             extraAnnoPeakDict[peakId][extraName] = defaultdict(dict)
             extraAnnoPeakDict[peakId][extraName]['feature'] = annoFeatureDict
             extraAnnoPeakDict[peakId][extraName]['extraAnnoType'] = extraAnnoType
