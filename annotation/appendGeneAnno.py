@@ -90,15 +90,15 @@ if args.noheader is False:
 
 count = 1
 with open(args.input, 'r') as f, open(args.output, 'w') as out:
+    __ = [f.readline() for x in range(args.skip)]
     for line in f:
         if count <= args.skip:
             out.write(line)
             count += 1
             continue
         row = line.rstrip().split('\t')
-        if (count -1) == args.skip:
-            if args.noheader is False:
-                extRow = headerRow
+        if args.noheader is False:
+            extRow = headerRow
         else:
             keyId = row[args.idCol]
             if keyId not in idDict:
