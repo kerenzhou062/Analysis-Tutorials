@@ -50,7 +50,7 @@ parser.add_argument('--keepName', action='store_true',
                     help='keep original 4th column in output')
 parser.add_argument('--matchid', action='store_true',
                     default=False,
-                    help='peak name (4th Col) in 4th of annotation')
+                    help='peak name (4th Col) contained in 4th of annotation')
 parser.add_argument('-method', action='store', type=str, choices=['center', 'border'],
                     default='border',
                     help='use peak center|border to calculate distance to TSS|TTS')
