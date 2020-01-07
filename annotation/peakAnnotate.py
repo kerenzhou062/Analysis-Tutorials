@@ -269,9 +269,10 @@ def exonFeatureDecode (bed12Row, peakLocus, distBool=False):
     ## calculate distance to TSS for DNA mode
     if distBool:
         tss = txStart
+        peakCoor = peakLocus[0]
         if strand == '-':
             tss = txEnd
-        peakCoor = peakLocus[0]
+            peakCoor = peakLocus[1]
         if args.method == 'center':
             peakCoor = int(sum(peakLocus) / 2)
         distance = peakCoor - tss
