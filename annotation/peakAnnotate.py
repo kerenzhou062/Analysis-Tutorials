@@ -62,10 +62,13 @@ parser.add_argument('-ncbiGeneInfo', action='store', type=str,
 parser.add_argument('-name', action='store', type=str,
                     default='peak=',
                     help='prefix for each peak name')
+parser.add_argument('--overwitePri', action='store_true',
+                    default=False,
+                    help='Overwrite priority Feature and GeneClass (-priF & -priG)')
 parser.add_argument('-priF', action='store', type=str,
-                    help="Defined priority of features (eg., \"CDS,5' UTR\")")
+                    help="',' seperated pre-defined priority of features (eg., \"CDS,5' UTR\")")
 parser.add_argument('-priG', action='store', type=str,
-                    help='Defined priority of gene types (eg., "protein-coding,lncRNA")')
+                    help='',' seperated pre-defined priority of gene types (eg., "protein-coding,lncRNA")')
 parser.add_argument('-output', action='store', type=str, required=True,
                     help='output result (coordiantes in 0-base)')
 parser.add_argument('-strand', action='store_true',
@@ -122,13 +125,12 @@ if len(args.extraAnno) != len(args.extraType):
     sys.exit()
 
 # defined priority of features
-if bool(args.priF):
-    priFeatureList = args.priF
+if args.mode == 'RNA':
+    priFeatureList = ['CDS', 'start_codon', 'stop_codon', "5' UTR", "3' UTR", 'Exon', 'Intron']
 else:
-    if args.mode == 'RNA':
-        priFeatureList = ['CDS', 'start_codon', 'stop_codon', "5' UTR", "3' UTR", 'Exon', 'Intron']
-    else:
-        priFeatureList = ["5' UTR", 'start_codon', 'CDS', 'stop_codon', "3' UTR", 'Exon', 'Intron']
+    priFeatureList = ["5' UTR", 'start_codon', 'CDS', 'stop_codon', "3' UTR", 'Exon', 'Intron']
+else:
+    if args.mode == 'DNA':
         mainKbTssList = [0] + sorted(set(kbTssList[0] + kbTssList[1]))
         priTssList = list()
         # format TSS (<=1kb), TSS (1-2kb)
@@ -149,13 +151,32 @@ else:
         priFeatureList = priTssList + priFeatureList + priTtsList
         priFeatureList.append('intergenic')
 
+if bool(args.priF):
+    if args.overwitePri:
+        priFeatureList = args.priF.split(',')
+    else:
+        customList = args.priF.split(',')
+        reorderList = customList
+        for i in priFeatureList:
+            if i not in customList:
+                reorderList.append(i)
+        priFeatureList = reorderList
+
 priFeatureNum = len(priFeatureList)
 
-if bool(args.priG):
-    priGeneClassList = args.priG
-else:
-    priGeneClassList = ['protein_coding', "lncRNA", "TR_gene", 'IG_gene', 'miRNA',\
+priGeneClassList = ['protein_coding', "lncRNA", "TR_gene", 'IG_gene', 'miRNA',\
         'snoRNA', 'rRNA', 'sncRNA', 'pseudogene', 'other']
+if bool(args.priG):
+    if args.overwitePri:
+        priGeneClassList = args.priG.split(',')
+    else:
+        customList = args.priG.split(',')
+        reorderList = customList
+        for i in priGeneClassList:
+            if i not in customList:
+                reorderList.append(i)
+        priGeneClassList = reorderList
+
 priGenetNum = len(priGeneClassList)
 
 # annotate peak in DNA|RNA mode
