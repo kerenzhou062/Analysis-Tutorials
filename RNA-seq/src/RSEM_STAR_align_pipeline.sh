@@ -14,7 +14,7 @@
 # ref:https://github.com/ENCODE-DCC/long-rna-seq-pipeline/blob/master/DAC/STAR_RSEM.sh
 
 # output: all in the working directory, fixed names
-# Aligned.sortedByCoord.out.bam                 # alignments, standard sorted BAM, agreed upon formatting
+# ${sortedGenomeBAM}                 # alignments, standard sorted BAM, agreed upon formatting
 # Log.final.out                                 # mapping statistics to be used for QC, text, STAR formatting
 # Quant.genes.results                           # RSEM gene quantifications, tab separated text, RSEM formatting
 # Quant.isoforms.results                        # RSEM transcript quantifications, tab separated text, RSEM formatting
@@ -37,9 +37,11 @@ function showHelp {
     --read1: fastq of read1 <str>
     --read2: fastq of read2 (not set if single-end) <str>
     --data-type: RNA-seq type, possible values: str_SE str_PE unstr_SE unstr_PE
-    --append-names: set RSEM with --append-names
-    --disable-bw: do not generate bigWig files
-    --zcat-flag: set if the input fastq"
+    --append-names: set RSEM with --append-names <bool>
+    --disable-bw: do not generate bigWig files <str>
+    --skip-mapping: skip reads mapping step <bool>
+    --skip-txsort: skip toTranscriptome.out.bam sorting step <bool>
+    --zcat-flag: set if the input fastq <bool>"
   exit 2;
 }
 
@@ -73,6 +75,8 @@ READ2=""
 APPEND_NAMES=false
 DISABLE_BW=false
 ZCAT_FLAG=false
+SKIP_MAPPING=false
+SKIP_TX_SORT=false
 
 while true; do
   case "$1" in
@@ -89,6 +93,8 @@ while true; do
     --data-type ) DATA_TYPE="$2"; shift 2 ;;
     --append-names ) APPEND_NAMES=true; shift ;;
     --disable-bw ) DISABLE_BW=true; shift ;;
+    --skip-mapping ) SKIP_MAPPING=true; shift ;;
+    --skip-txsort ) SKIP_TX_SORT=true; shift ;;
     --zcat-flag ) ZCAT_FLAG=true; shift ;;
     -- ) shift; break ;;
     * ) break ;;
@@ -145,6 +151,11 @@ echo "MAX_MISMATCH=$MAX_MISMATCH"
 echo "DATA_TYPE=$DATA_TYPE"
 echo "READ1=$READ1"
 echo "READ2=$READ2"
+echo "APPEND_NAMES=$APPEND_NAMES"
+echo "DISABLE_BW=$DISABLE_BW"
+echo "SKIP_MAPPING=$SKIP_MAPPING"
+echo "SKIP_TX_SORT=$SKIP_TX_SORT"
+echo "ZCAT_FLAG=$ZCAT_FLAG"
 echo ""
 
 # executables
@@ -211,9 +222,23 @@ echo -e '@CO\tLIBID:ENCLB175ZZZ
 @CO\tANNID:custom.annotation.${ANNO_NAME}
 @CO\tSPIKEID:ENCFF001RTP VN:Ambion-ERCC Mix, Cat no. 445670' > commentsENCODElong.txt
 
-###### STAR command
-echo $STAR $STARparCommon $STARparRun $STARparBAM $STARparStrand $STARparsMeta
-$STAR $STARparCommon $STARparRun $STARparBAM $STARparStrand $STARparsMeta
+# rename bam
+sortedBAM="${PREFIX}.sortedByCoord.out.bam"
+txBAM="${PREFIX}.toTranscriptome.out.bam"
+
+if $SKIP_MAPPING; then
+  echo "Skip mapping."
+else
+  ###### STAR command
+  echo $STAR $STARparCommon $STARparRun $STARparBAM $STARparStrand $STARparsMeta
+  $STAR $STARparCommon $STARparRun $STARparBAM $STARparStrand $STARparsMeta
+  echo "Finish mapping."
+  echo "Rename output bam..."
+  mv Aligned.sortedByCoord.out.bam ${sortedGenomeBAM}
+  mv Aligned.toTranscriptome.out.bam ${txBAM}
+  echo -e "index ${sortedGenomeBAM}..."
+  samtools index -b ${sortedGenomeBAM}
+fi
 
 if $DISABLE_BW; then
   echo "Skip signal tracks generation."
@@ -223,9 +248,9 @@ else
   # working subdirectory for this STAR run
   mkdir Signal_RAW
   
-  echo "$STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam "
+  echo "$STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} "
   echo "  --outWigType bedGraph $STARparWig --outWigNorm None --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr"
-  $STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam \
+  $STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} \
     --outWigType bedGraph $STARparWig --outWigNorm None --outFileNamePrefix ./Signal_RAW/ --outWigReferencesPrefix chr
   
   echo "Generating bedGraph signal tracks nomalized by RPM..."
@@ -233,9 +258,9 @@ else
   # working subdirectory for this STAR run
   mkdir Signal_RPM
   
-  echo "$STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam "
+  echo "$STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} "
   echo "  --outWigType bedGraph $STARparWig --outWigNorm RPM --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr"
-  $STAR --runMode inputAlignmentsFromBAM   --inputBAMfile Aligned.sortedByCoord.out.bam \
+  $STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} \
     --outWigType bedGraph $STARparWig --outWigNorm RPM --outFileNamePrefix ./Signal_RPM/ --outWigReferencesPrefix chr
   
   echo "Converting bedGraph tracks to bigWig tracks..."
@@ -285,27 +310,34 @@ else
 fi
 ######### RSEM
 
-#### prepare for RSEM: sort transcriptome BAM to ensure the order of the reads, to make RSEM output (not pme) deterministic
-trBAMsortRAM="${MEMORY}G"
-
-echo "Sorting toTranscriptome bam..."
-mv Aligned.toTranscriptome.out.bam Tr.bam 
-
-case "$DATA_TYPE" in
-str_SE|unstr_SE)
-      # single-end data
-      cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | sort -S ${trBAMsortRAM} -T ./ ) | \
-        samtools view -@ ${THREAD} -bS - > Aligned.toTranscriptome.out.bam
-      ;;
-str_PE|unstr_PE)
-      # paired-end data, merge mates into one line before sorting, and un-merge after sorting
-      cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | \
-        awk '{printf "%s", $0 " "; getline; print}' | sort -S ${trBAMsortRAM} -T ./ | tr ' ' '\n' ) | \
-        samtools view -@ $THREAD -bS - > Aligned.toTranscriptome.out.bam
-      ;;
-esac
-
-rm -f Tr.bam
+if $SKIP_TX_SORT; then
+  echo "Skip sort transcriptome BAM."
+else
+  #### prepare for RSEM: sort transcriptome BAM to ensure the order of the reads, to make RSEM output (not pme) deterministic
+  trBAMsortRAM="${MEMORY}G"
+  
+  echo "Sorting toTranscriptome bam..."
+  mv ${txBAM} Tr.bam 
+  
+  case "$DATA_TYPE" in
+  str_SE|unstr_SE)
+        # single-end data
+        cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | sort -S ${trBAMsortRAM} -T ./ ) | \
+          samtools view -@ ${THREAD} -bS - > ${txBAM}
+        ;;
+  str_PE|unstr_PE)
+        # paired-end data, merge mates into one line before sorting, and un-merge after sorting
+        cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | \
+          awk '{printf "%s", $0 " "; getline; print}' | sort -S ${trBAMsortRAM} -T ./ | tr ' ' '\n' ) | \
+          samtools view -@ $THREAD -bS - > ${txBAM}
+        ;;
+  esac
+  
+  rm -f Tr.bam
+  
+  echo -e "index ${txBAM}..."
+  samtools index -b ${txBAM}
+fi
 
 echo "Running RSEM: ${RSEM}..."
 # RSEM parameters: common
@@ -350,7 +382,7 @@ esac
 ###### RSEM command
 echo "$RSEM $RSEMparCommon $RSEMparRun "
 echo "  $RSEMparType Aligned.toTranscriptome.out.bam $RSEM_GENOME_DIR Quant >& Log.rsem"
-$RSEM $RSEMparCommon $RSEMparRun $RSEMparType Aligned.toTranscriptome.out.bam $RSEM_GENOME_DIR Quant >& Log.rsem
+$RSEM $RSEMparCommon $RSEMparRun $RSEMparType ${txBAM} $RSEM_GENOME_DIR Quant >& Log.rsem
 
 ###### RSEM diagnostic plot creation
 # Notes:
@@ -373,7 +405,6 @@ mv Quant.pdf "${PREFIX}.Quant.pdf"
 mv Log.rsem "${PREFIX}.rsem.log"
 mv SJ.out.tab "${PREFIX}.SJ.out.tab"
 
-rename "Aligned." "${PREFIX}." *.bam
 rename "Aligned." "${PREFIX}." *.out
 rename "Log." "${PREFIX}.Log." *.out
 
