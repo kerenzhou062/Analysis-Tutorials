@@ -223,7 +223,7 @@ echo -e '@CO\tLIBID:ENCLB175ZZZ
 @CO\tSPIKEID:ENCFF001RTP VN:Ambion-ERCC Mix, Cat no. 445670' > commentsENCODElong.txt
 
 # rename bam
-sortedBAM="${PREFIX}.sortedByCoord.out.bam"
+sortedGenomeBAM="${PREFIX}.sortedByCoord.out.bam"
 txBAM="${PREFIX}.toTranscriptome.out.bam"
 
 if $SKIP_MAPPING; then
