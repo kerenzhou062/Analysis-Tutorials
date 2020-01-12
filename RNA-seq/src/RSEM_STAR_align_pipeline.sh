@@ -334,9 +334,6 @@ else
   esac
   
   rm -f Tr.bam
-  
-  echo -e "index ${txBAM}..."
-  samtools index -b ${txBAM}
 fi
 
 echo "Running RSEM: ${RSEM}..."
