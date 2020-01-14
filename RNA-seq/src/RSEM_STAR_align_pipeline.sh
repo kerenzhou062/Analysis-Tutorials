@@ -36,7 +36,8 @@ function showHelp {
     --star-genome-dir: STAR genome directory - prepared with RSEM_STAR_prep.sh <str>
     --read1: fastq of read1 <str>
     --read2: fastq of read2 (not set if single-end) <str>
-    --data-type: RNA-seq type, possible values: str_SE str_PE unstr_SE unstr_PE
+    --strandedess: strandedness of the RNA-Seq reads ('none[default]|forward|reverse') <str>
+    --seq-type: RNA-seq type, possible values: PE SE
     --append-names: set RSEM with --append-names <bool>
     --disable-bw: do not generate bigWig files <str>
     --skip-mapping: skip reads mapping step <bool>
@@ -52,8 +53,8 @@ if [[ $# == 0 ]]; then
 fi
 
 TEMP=`getopt -o hp:o:t: --long help,thread:,max-mismatch:,mem:,prefix: \
-  --long rsem-genome-dir:,star-genome-dir:,read1:,read2:,data-type:, \
-  --long append-names,disable-bw,zcat-flag \
+  --long rsem-genome-dir:,star-genome-dir:,read1:,read2:,strandedness:,seq-type:, \
+  --long append-names,disable-bw,skip-mapping,skip-txsort,zcat-flag \
   -- "$@"`
 
 if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
@@ -69,9 +70,10 @@ OUTPUT_DIR=
 STAR_GENOME_DIR=
 RSEM_GENOME_DIR=
 MAX_MISMATCH=0.04
-DATA_TYPE="str_PE"
+SEQ_TYPE="str_PE"
 READ1=
 READ2=""
+STRANDEDNESS="none"
 APPEND_NAMES=false
 DISABLE_BW=false
 ZCAT_FLAG=false
@@ -90,7 +92,8 @@ while true; do
     --mem ) MEMORY="$2"; shift 2 ;;
     --read1 ) READ1="$2"; shift 2 ;;
     --read2 ) READ2="$2"; shift 2 ;;
-    --data-type ) DATA_TYPE="$2"; shift 2 ;;
+    --strandedness ) STRANDEDNESS="$2"; shift 2 ;;
+    --seq-type ) SEQ_TYPE="$2"; shift 2 ;;
     --append-names ) APPEND_NAMES=true; shift ;;
     --disable-bw ) DISABLE_BW=true; shift ;;
     --skip-mapping ) SKIP_MAPPING=true; shift ;;
@@ -109,35 +112,33 @@ if [ -z $READ1 ]; then
   exit 2
 fi
 
-case "$DATA_TYPE" in
-str_SE|str_PE)
-  #Nothing: stranded data
-  ;;
-unstr_SE|unstr_PE)
+case "$SEQ_TYPE" in
+PE|SE)
   #Nothing: stranded data
   ;;
 *)
-  echo "data-type: Wrong! Possible values: str_SE str_PE unstr_SE unstr_PE!"
+  echo "--seq-type: Wrong! Possible values: PE SE!"
   exit 2
   ;;
 esac
 
-case "$DATA_TYPE" in
-str_SE|unstr_SE)
+case "$STRANDEDNESS" in
+none|forward|reverse)
   #Nothing: stranded data
-  READ2=""
   ;;
-str_PE|unstr_PE)
+*)
+  echo "--strandedness: Wrong! Possible values: none forward reverse!"
+  exit 2
+  ;;
+esac
+
+if [[ $SEQ_TYPE == "SE" ]]; then
+  READ2=""
+else
   if [ -z $READ2 ]; then
     echo "--read2: Wrong! read2 NOT found!"
     exit 2
   fi
-  ;;
-esac
-
-if [ -z $OUTPUT_DIR ]; then
-  echo "-o|--output: Wrong! Output directory NOT found!"
-  exit 2
 fi
 
 echo "Running pipleline with following parameters:"
@@ -148,7 +149,7 @@ echo "PREFIX=$PREFIX"
 echo "STAR_GENOME_DIR=$STAR_GENOME_DIR"
 echo "RSEM_GENOME_DIR=$RSEM_GENOME_DIR"
 echo "MAX_MISMATCH=$MAX_MISMATCH"
-echo "DATA_TYPE=$DATA_TYPE"
+echo "SEQ_TYPE=$SEQ_TYPE"
 echo "READ1=$READ1"
 echo "READ2=$READ2"
 echo "APPEND_NAMES=$APPEND_NAMES"
@@ -198,18 +199,13 @@ STARparBAM="--outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM "
 
 # STAR parameters: strandedness, affects bedGraph (wiggle) files and XS tag in BAM 
 
-case "$DATA_TYPE" in
-str_SE|str_PE)
-      #OPTION: stranded data
-      STARparStrand=""
-      STARparWig="--outWigStrand Stranded"
-      ;;
-      #OPTION: unstranded data
-unstr_SE|unstr_PE)
-      STARparStrand="--outSAMstrandField intronMotif"
-      STARparWig="--outWigStrand Unstranded"
-      ;;
-esac
+if [[ $STRANDEDNESS == "none" ]]; then
+  STARparStrand="--outSAMstrandField intronMotif"
+  STARparWig="--outWigStrand Unstranded"
+else
+  STARparStrand=""
+  STARparWig="--outWigStrand Stranded"
+fi
 
 # STAR parameters: metadata
 STARparsMeta="--outSAMheaderCommentFile commentsENCODElong.txt --outSAMheaderHD @HD VN:1.4 SO:coordinate"
@@ -269,36 +265,40 @@ else
   # exclude spikeins
   grep ^chr $STAR_GENOME_DIR/chrNameLength.txt > chrNL.txt
   
-  case "$DATA_TYPE" in
-  str_SE|str_PE)
-        # stranded data
-        str[1]="minus"; str[2]="plus";
-        for istr in 1 2
-        do
-          for imult in Unique UniqueMultiple
-          do
-            ## raw counts 
-            grep ^chr ./Signal_RAW/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
-            $bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.raw.bw
-            ## RPM 
-            grep ^chr ./Signal_RPM/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
-            $bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.rpm.bw
-          done
-        done
-        ;;
-  unstr_SE|unstr_PE)
-        # unstranded data
-        for imult in Unique UniqueMultiple
-        do
-          ## raw counts 
-          grep ^chr ./Signal_RAW/Signal.$imult.str1.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
-          $bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.raw.bw
-          ## RPM 
-          grep ^chr ./Signal_RPM/Signal.$imult.str1.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
-          $bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.rpm.bw
-        done
-        ;;
-  esac
+  if [[ $STRANDEDNESS == "none" ]]; then
+    # unstranded data
+    for imult in Unique UniqueMultiple
+    do
+      ## raw counts 
+      grep ^chr ./Signal_RAW/Signal.$imult.str1.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
+      $bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.raw.bw
+      ## RPM 
+      grep ^chr ./Signal_RPM/Signal.$imult.str1.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
+      $bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.rpm.bw
+    done
+  else
+    # stranded data
+    if [[ STRANDEDNESS == "reverse" ]]; then
+      str[1]="minus";
+      str[2]="plus";
+    else
+      str[1]="plus";
+      str[2]="minus";
+    fi
+    for istr in 1 2
+    do
+      for imult in Unique UniqueMultiple
+      do
+        ## raw counts 
+        grep ^chr ./Signal_RAW/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
+        $bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.raw.bw
+        ## RPM 
+        grep ^chr ./Signal_RPM/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
+        $bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.rpm.bw
+      done
+    done
+  fi
+
   echo "Rename bigWig tracks..."
   rename "Signal." "${PREFIX}." *.bw
   mv Signal_RAW/Log.out "${PREFIX}.Signal.raw.Log.out"
@@ -319,20 +319,17 @@ else
   echo "Sorting toTranscriptome bam..."
   mv ${txBAM} Tr.bam 
   
-  case "$DATA_TYPE" in
-  str_SE|unstr_SE)
-        # single-end data
-        cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | sort -S ${trBAMsortRAM} -T ./ ) | \
-          samtools view -@ ${THREAD} -bS - > ${txBAM}
-        ;;
-  str_PE|unstr_PE)
-        # paired-end data, merge mates into one line before sorting, and un-merge after sorting
-        cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | \
-          awk '{printf "%s", $0 " "; getline; print}' | sort -S ${trBAMsortRAM} -T ./ | tr ' ' '\n' ) | \
-          samtools view -@ $THREAD -bS - > ${txBAM}
-        ;;
-  esac
-  
+  if [[ $SEQ_TYPE == "SE" ]]; then
+    # single-end data
+    cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | sort -S ${trBAMsortRAM} -T ./ ) | \
+      samtools view -@ ${THREAD} -bS - > ${txBAM}
+  else
+    # paired-end data, merge mates into one line before sorting, and un-merge after sorting
+    cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | \
+      awk '{printf "%s", $0 " "; getline; print}' | sort -S ${trBAMsortRAM} -T ./ | tr ' ' '\n' ) | \
+      samtools view -@ $THREAD -bS - > ${txBAM}
+  fi
+  ## delete temp bam
   rm -f Tr.bam
 fi
 
@@ -356,25 +353,19 @@ RSEMparRun=" -p $THREAD --ci-memory ${MEMORY} "
 
 # RSEM parameters: data type dependent
 
-case "$DATA_TYPE" in
-str_SE)
-      #OPTION: stranded single end
-      RSEMparType="--forward-prob 0"
-      ;;
-str_PE)
-      #OPTION: stranded paired end
-      RSEMparType="--paired-end --forward-prob 0"
-      ;;
-unstr_SE)
-      #OPTION: unstranded single end
-      RSEMparType=""
-      ;;
-unstr_PE)
-      #OPTION: unstranded paired end
-      RSEMparType="--paired-end"
-      ;;
-esac
+if [[ $SEQ_TYPE == "PE" ]]; then
+  RSEMparType="--paired-end"
+else
+  RSEMparType=""
+fi
 
+if [[ $STRANDEDNESS == "none" ]]; then
+  RSEMparType="$RSEMparType --strandedness none"
+elif [[ $STRANDEDNESS == "reverse" ]]; then
+  RSEMparType="$RSEMparType --strandedness reverse"
+else
+  RSEMparType="$RSEMparType --strandedness forward"
+fi
 
 ###### RSEM command
 echo "$RSEM $RSEMparCommon $RSEMparRun "
