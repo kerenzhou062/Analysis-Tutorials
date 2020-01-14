@@ -19,7 +19,7 @@
 # Quant.genes.results                           # RSEM gene quantifications, tab separated text, RSEM formatting
 # Quant.isoforms.results                        # RSEM transcript quantifications, tab separated text, RSEM formatting
 # Quant.pdf                                     # RSEM diagnostic plots
-# Signal.{Unique,UniqueMultiple}.strand{+,-}.rpm.bw # 4 bigWig files for stranded data
+# Signal.{Unique,UniqueMultiple}.strand{plus,minus}.rpm.bw # 4 bigWig files for stranded data
 # Signal.{Unique,UniqueMultiple}.unstranded.rpm.bw  # 2 bigWig files for unstranded data
 
 function showHelp {
