@@ -286,6 +286,7 @@ else
       str[1]="plus";
       str[2]="minus";
     fi
+    
     for istr in 1 2
     do
       for imult in Unique UniqueMultiple
