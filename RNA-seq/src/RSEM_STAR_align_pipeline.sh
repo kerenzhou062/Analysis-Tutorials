@@ -23,7 +23,7 @@
 # Signal.{Unique,UniqueMultiple}.unstranded.rpm.bw  # 2 bigWig files for unstranded data
 
 function showHelp {
-  echo -ne "usage: sbatch RSEM_STAR_align_pipeline.sh -n <thread_num> -o <log> --mem <30G> "
+  echo -ne "usage: sbatch RSEM_STAR_align_pipeline.sh -n <thread_num> -o <log> --mem <80G> "
   echo -ne "RSEM_STAR_align_pipeline.sh <options>\n"
   echo -e "options:
     -h | --help: show help information <bool>
@@ -31,7 +31,7 @@ function showHelp {
     -p | --prefix: the output prefix (align) <str>
     -t | --thread: # of cpus <int>
     --max-mismatch: --outFilterMismatchNoverLmax in STAR (0.04) <float>
-    --mem: # of memory used for RSEM --ci-memory [GB] (30) <int>
+    --mem: # of memory used for RSEM --ci-memory [GB] (80) <int>
     --rsem-genome-dir: RSEM genome directory - prepared with RSEM_STAR_prep.sh <str>
     --star-genome-dir: STAR genome directory - prepared with RSEM_STAR_prep.sh <str>
     --read1: fastq of read1 <str>
@@ -64,7 +64,7 @@ eval set -- "$TEMP"
 
 # Initialize variables:
 THREAD=10
-MEMORY="60"
+MEMORY="80"
 PREFIX="align"
 OUTPUT_DIR=
 STAR_GENOME_DIR=
@@ -388,7 +388,7 @@ rm -f *out.bg
 rm -f sig.tmp
 
 echo "Rename outputs..."
-#find . -type f -name "*.rpm.bw" | perl -pe 'print $_; s/Signal/HepG2_control_rep2/' | xargs -n2 mv
+#find . -type f -name "*.rpm.bw" | perl -pe 'print $_; s/regex/string/' | xargs -n2 mv
 mv Quant.genes.results "${PREFIX}.genes.results"
 mv Quant.isoforms.results "${PREFIX}.isoforms.results"
 mv Quant.pdf "${PREFIX}.Quant.pdf"
