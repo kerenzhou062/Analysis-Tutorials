@@ -68,7 +68,7 @@ parser.add_argument('--overwitePri', action='store_true',
 parser.add_argument('-priF', action='store', type=str,
                     help="',' seperated pre-defined priority of features (eg., \"CDS,5' UTR\")")
 parser.add_argument('-priG', action='store', type=str,
-                    help='',' seperated pre-defined priority of gene types (eg., "protein-coding,lncRNA")')
+                    help=",' seperated pre-defined priority of gene types (eg., \"protein-coding,lncRNA\")")
 parser.add_argument('-output', action='store', type=str, required=True,
                     help='output result (coordiantes in 0-base)')
 parser.add_argument('-strand', action='store_true',
