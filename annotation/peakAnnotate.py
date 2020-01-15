@@ -129,27 +129,27 @@ if args.mode == 'RNA':
     priFeatureList = ['CDS', 'start_codon', 'stop_codon', "5' UTR", "3' UTR", 'Exon', 'Intron']
 else:
     priFeatureList = ["5' UTR", 'start_codon', 'CDS', 'stop_codon', "3' UTR", 'Exon', 'Intron']
-else:
-    if args.mode == 'DNA':
-        mainKbTssList = [0] + sorted(set(kbTssList[0] + kbTssList[1]))
-        priTssList = list()
-        # format TSS (<=1kb), TSS (1-2kb)
-        for i in range(len(mainKbTssList)-1):
-            if i == 0:
-                feature = 'TSS (<={0}kb)'.format(mainKbTssList[1])
-            else:
-                feature = 'TSS ({0}-{1}kb)'.format(mainKbTssList[i], mainKbTssList[i+1])
-            priTssList.append(feature)
-        mainKbTtsList = [0] + sorted(set(kbTtsList[0] + kbTtsList[1]))
-        priTtsList = list()
-        for i in range(len(mainKbTtsList)-1):
-            if i == 0:
-                feature = 'TTS (<={0}kb)'.format(mainKbTtsList[1])
-            else:
-                feature = 'TTS ({0}-{1}kb)'.format(mainKbTtsList[i], mainKbTtsList[i+1])
-            priTtsList.append(feature)
-        priFeatureList = priTssList + priFeatureList + priTtsList
-        priFeatureList.append('intergenic')
+
+if args.mode == 'DNA':
+    mainKbTssList = [0] + sorted(set(kbTssList[0] + kbTssList[1]))
+    priTssList = list()
+    # format TSS (<=1kb), TSS (1-2kb)
+    for i in range(len(mainKbTssList)-1):
+        if i == 0:
+            feature = 'TSS (<={0}kb)'.format(mainKbTssList[1])
+        else:
+            feature = 'TSS ({0}-{1}kb)'.format(mainKbTssList[i], mainKbTssList[i+1])
+        priTssList.append(feature)
+    mainKbTtsList = [0] + sorted(set(kbTtsList[0] + kbTtsList[1]))
+    priTtsList = list()
+    for i in range(len(mainKbTtsList)-1):
+        if i == 0:
+            feature = 'TTS (<={0}kb)'.format(mainKbTtsList[1])
+        else:
+            feature = 'TTS ({0}-{1}kb)'.format(mainKbTtsList[i], mainKbTtsList[i+1])
+        priTtsList.append(feature)
+    priFeatureList = priTssList + priFeatureList + priTtsList
+    priFeatureList.append('intergenic')
 
 if bool(args.priF):
     if args.overwitePri:
