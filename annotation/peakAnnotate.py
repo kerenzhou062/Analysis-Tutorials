@@ -129,8 +129,6 @@ if args.mode == 'RNA':
     priFeatureList = ['CDS', 'start_codon', 'stop_codon', "5' UTR", "3' UTR", 'Exon', 'Intron']
 else:
     priFeatureList = ["5' UTR", 'start_codon', 'CDS', 'stop_codon', "3' UTR", 'Exon', 'Intron']
-
-if args.mode == 'DNA':
     mainKbTssList = [0] + sorted(set(kbTssList[0] + kbTssList[1]))
     priTssList = list()
     # format TSS (<=1kb), TSS (1-2kb)
