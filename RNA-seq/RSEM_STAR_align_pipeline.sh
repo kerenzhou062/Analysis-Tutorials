@@ -2,10 +2,10 @@
 #SBATCH --job-name=RSEM_STAR_align_pipeline    # Job name
 #SBATCH --mail-type=END,FAIL          # Mail events (NONE, BEGIN, END, FAIL, ALL)
 #SBATCH --mail-user=kzhou@coh.org     # Where to send mail 
-#SBATCH -n 10                          # Number of cores
+#SBATCH -n 8                          # Number of cores
 #SBATCH -N 1-1                        # Min - Max Nodes
 #SBATCH -p all                        # default queue is all if you don't specify
-#SBATCH --mem=60G                      # Amount of memory in GB
+#SBATCH --mem=80G                      # Amount of memory in GB
 #SBATCH --time=120:10:00               # Time limit hrs:min:sec
 #SBATCH --output=RSEM_STAR_align_pipeline.log               # Time limit hrs:min:sec
 
@@ -42,6 +42,7 @@ function showHelp {
     --disable-bw: do not generate bigWig files <str>
     --skip-mapping: skip reads mapping step <bool>
     --skip-txsort: skip toTranscriptome.out.bam sorting step <bool>
+    --skip-rsem: skip RSEM expression calculating step <bool>
     --zcat-flag: set if the input fastq <bool>"
   exit 2;
 }
@@ -54,7 +55,7 @@ fi
 
 TEMP=`getopt -o hp:o:t: --long help,thread:,max-mismatch:,mem:,prefix: \
   --long rsem-genome-dir:,star-genome-dir:,read1:,read2:,strandedness:,seq-type:, \
-  --long append-names,disable-bw,skip-mapping,skip-txsort,zcat-flag \
+  --long append-names,disable-bw,skip-mapping,skip-txsort,skip-rsem,zcat-flag \
   -- "$@"`
 
 if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
@@ -79,6 +80,7 @@ DISABLE_BW=false
 ZCAT_FLAG=false
 SKIP_MAPPING=false
 SKIP_TX_SORT=false
+SKIP_RSEM=false
 
 while true; do
   case "$1" in
@@ -98,6 +100,7 @@ while true; do
     --disable-bw ) DISABLE_BW=true; shift ;;
     --skip-mapping ) SKIP_MAPPING=true; shift ;;
     --skip-txsort ) SKIP_TX_SORT=true; shift ;;
+    --skip-rsem ) SKIP_RSEM=true; shift ;;
     --zcat-flag ) ZCAT_FLAG=true; shift ;;
     -- ) shift; break ;;
     * ) break ;;
@@ -335,51 +338,55 @@ else
   rm -f Tr.bam
 fi
 
-echo "Running RSEM: ${RSEM}..."
-# RSEM parameters: common
-## --estimate-rspd enabls RSEM to learn from data how the reads are distributed across a transcript. 
-## The learned statistics can help us assess if any positional biases are shown in the data.
-## The --calc-ci option tells RSEM to calculate credibility intervals and CQV values for each isoform / gene
-## The coefficient of quartile variation (CQV), which is a robust way to measure 
-## the ratio between standard deviation and mean.
-## Small CQV(0.05) means that we have enough reads to produce a good estimate
-if $APPEND_NAMES; then
-  RSEMparCommon="--bam --append-names --estimate-rspd  --calc-ci --no-bam-output --seed 12345"
+if $SKIP_RSEM; then
+  echo "Skip RSEM expression calculation."
 else
-  RSEMparCommon="--bam --estimate-rspd  --calc-ci --no-bam-output --seed 12345"
+  echo "Running RSEM: ${RSEM}..."
+  # RSEM parameters: common
+  ## --estimate-rspd enabls RSEM to learn from data how the reads are distributed across a transcript. 
+  ## The learned statistics can help us assess if any positional biases are shown in the data.
+  ## The --calc-ci option tells RSEM to calculate credibility intervals and CQV values for each isoform / gene
+  ## The coefficient of quartile variation (CQV), which is a robust way to measure 
+  ## the ratio between standard deviation and mean.
+  ## Small CQV(0.05) means that we have enough reads to produce a good estimate
+  if $APPEND_NAMES; then
+    RSEMparCommon="--bam --append-names --estimate-rspd  --calc-ci --no-bam-output --seed 12345"
+  else
+    RSEMparCommon="--bam --estimate-rspd  --calc-ci --no-bam-output --seed 12345"
+  fi
+  
+  mb_memory=$((MEMORY*1000))
+  # RSEM parameters: run-time, number of threads and RAM in MB
+  RSEMparRun=" -p $THREAD --ci-memory ${MEMORY} "
+  
+  # RSEM parameters: data type dependent
+  
+  if [[ $SEQ_TYPE == "PE" ]]; then
+    RSEMparType="--paired-end"
+  else
+    RSEMparType=""
+  fi
+  
+  if [[ $STRANDEDNESS == "none" ]]; then
+    RSEMparType="$RSEMparType --strandedness none"
+  elif [[ $STRANDEDNESS == "reverse" ]]; then
+    RSEMparType="$RSEMparType --strandedness reverse"
+  else
+    RSEMparType="$RSEMparType --strandedness forward"
+  fi
+  
+  ###### RSEM command
+  echo "$RSEM $RSEMparCommon $RSEMparRun "
+  echo "  $RSEMparType Aligned.toTranscriptome.out.bam $RSEM_GENOME_DIR Quant >& Log.rsem"
+  $RSEM $RSEMparCommon $RSEMparRun $RSEMparType ${txBAM} $RSEM_GENOME_DIR Quant >& Log.rsem
+  
+  ###### RSEM diagnostic plot creation
+  # Notes:
+  # 1. rsem-plot-model requires R (and the Rscript executable)
+  # 2. This command produces the file Quant.pdf, which contains multiple plots
+  echo "rsem-plot-model Quant Quant.pdf"
+  rsem-plot-model Quant Quant.pdf
 fi
-
-mb_memory=$((MEMORY*1000))
-# RSEM parameters: run-time, number of threads and RAM in MB
-RSEMparRun=" -p $THREAD --ci-memory ${MEMORY} "
-
-# RSEM parameters: data type dependent
-
-if [[ $SEQ_TYPE == "PE" ]]; then
-  RSEMparType="--paired-end"
-else
-  RSEMparType=""
-fi
-
-if [[ $STRANDEDNESS == "none" ]]; then
-  RSEMparType="$RSEMparType --strandedness none"
-elif [[ $STRANDEDNESS == "reverse" ]]; then
-  RSEMparType="$RSEMparType --strandedness reverse"
-else
-  RSEMparType="$RSEMparType --strandedness forward"
-fi
-
-###### RSEM command
-echo "$RSEM $RSEMparCommon $RSEMparRun "
-echo "  $RSEMparType Aligned.toTranscriptome.out.bam $RSEM_GENOME_DIR Quant >& Log.rsem"
-$RSEM $RSEMparCommon $RSEMparRun $RSEMparType ${txBAM} $RSEM_GENOME_DIR Quant >& Log.rsem
-
-###### RSEM diagnostic plot creation
-# Notes:
-# 1. rsem-plot-model requires R (and the Rscript executable)
-# 2. This command produces the file Quant.pdf, which contains multiple plots
-echo "rsem-plot-model Quant Quant.pdf"
-rsem-plot-model Quant Quant.pdf
 
 ## deleting temp files
 echo "Deleting temp files..."
