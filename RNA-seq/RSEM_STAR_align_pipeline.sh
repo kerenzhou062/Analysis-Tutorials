@@ -283,7 +283,7 @@ else
     done
   else
     # stranded data
-    if [[ STRANDEDNESS == "reverse" ]]; then
+    if [[ $STRANDEDNESS == "reverse" ]]; then
       str[1]="minus";
       str[2]="plus";
     else
