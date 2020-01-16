@@ -313,6 +313,8 @@ else
   echo "Deleting bedGraph tracks..."
   rm -rf ./Signal_RAW
   rm -rf ./Signal_RPM
+  rm -f *out.bg
+  rm -f sig.tmp
 fi
 ######### RSEM
 
@@ -392,8 +394,6 @@ fi
 ## deleting temp files
 echo "Deleting temp files..."
 rm -rf _STARtmp
-rm -f *out.bg
-rm -f sig.tmp
 
 echo "Rename outputs..."
 #find . -type f -name "*.rpm.bw" | perl -pe 'print $_; s/regex/string/' | xargs -n2 mv
