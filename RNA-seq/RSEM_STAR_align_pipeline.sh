@@ -284,11 +284,11 @@ else
   else
     # stranded data
     if [[ $STRANDEDNESS == "reverse" ]]; then
-      str[1]="minus";
-      str[2]="plus";
+      str[1]="neg";
+      str[2]="pos";
     else
-      str[1]="plus";
-      str[2]="minus";
+      str[1]="pos";
+      str[2]="neg";
     fi
     
     for istr in 1 2
