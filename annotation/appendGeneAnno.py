@@ -28,6 +28,9 @@ parser.add_argument('-skip', action='store', type=int,
 parser.add_argument('-noheader', action='store_true',
                     default=False,
                     help='no header line insert')
+parser.add_argument('-onlyName', action='store_true',
+                    default=False,
+                    help='append gene_name only')
 parser.add_argument('-ncbiGeneInfo', action='store', type=str,
                     help='*.gene_info file downloaded from NCBI')
 parser.add_argument('-output', action='store', type=str, required=True,
@@ -87,7 +90,8 @@ if args.noheader is False:
         headerRow = ['GeneName', 'Synonyms', 'Description', 'GeneType', 'GeneClass']
     else:
         headerRow = ['GeneId', 'Synonyms', 'Description', 'GeneName', 'GeneType', 'GeneClass', 'TxName', 'TxType']
-
+    if args.onlyName:
+        headerRow = ['GeneName']
 count = 1
 with open(args.input, 'r') as f, open(args.output, 'w') as out:
     __ = [f.readline() for x in range(args.skip)]
@@ -103,24 +107,28 @@ with open(args.input, 'r') as f, open(args.output, 'w') as out:
                 idDict[keyId]['geneType'] = 'na'
                 idDict[keyId]['txName'] = 'na'
                 idDict[keyId]['txType'] = 'na'
-            geneName = idDict[keyId]['geneName']
-            geneType = idDict[keyId]['geneType']
-            geneClass = geneClassDict[geneType] if (geneType in geneClassDict) else 'Unkown'
-            if args.idType == 'gene':
-                geneId = keyId
+            if args.onlyName:
+                geneName = idDict[keyId]['geneName']
+                extRow = [geneName]
             else:
-                geneId = idDict[keyId]['geneId']
-            keyIdNoVer = geneId.split('.')[0]
-            if keyIdNoVer in ncbiGeneInfoDict:
-                synonyms, description = ncbiGeneInfoDict[keyIdNoVer]
-            else:
-                synonyms, description = ['na', 'na']
-            if args.idType == 'gene':
-                extRow = [geneName, synonyms, description, geneType, geneClass]
-            else:
-                txName = idDict[keyId]['txName']
-                txType = idDict[keyId]['txType']
-                extRow = [geneId, geneName, synonyms, description, geneType, geneClass, txName, txType]
+                geneName = idDict[keyId]['geneName']
+                geneType = idDict[keyId]['geneType']
+                geneClass = geneClassDict[geneType] if (geneType in geneClassDict) else 'Unkown'
+                if args.idType == 'gene':
+                    geneId = keyId
+                else:
+                    geneId = idDict[keyId]['geneId']
+                keyIdNoVer = geneId.split('.')[0]
+                if keyIdNoVer in ncbiGeneInfoDict:
+                    synonyms, description = ncbiGeneInfoDict[keyIdNoVer]
+                else:
+                    synonyms, description = ['na', 'na']
+                if args.idType == 'gene':
+                    extRow = [geneName, synonyms, description, geneType, geneClass]
+                else:
+                    txName = idDict[keyId]['txName']
+                    txType = idDict[keyId]['txType']
+                    extRow = [geneId, geneName, synonyms, description, geneType, geneClass, txName, txType]
         if len(row) <= (args.inCol + 1) or args.inCol == -1:
             row.extend(extRow)
         else:
