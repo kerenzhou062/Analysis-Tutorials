@@ -92,12 +92,8 @@ count = 1
 with open(args.input, 'r') as f, open(args.output, 'w') as out:
     __ = [f.readline() for x in range(args.skip)]
     for line in f:
-        if count <= args.skip:
-            out.write(line)
-            count += 1
-            continue
         row = line.rstrip().split('\t')
-        if args.noheader is False:
+        if args.noheader is False and count == 1:
             extRow = headerRow
         else:
             keyId = row[args.idCol]
