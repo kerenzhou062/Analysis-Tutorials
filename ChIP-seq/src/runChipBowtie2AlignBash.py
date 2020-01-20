@@ -837,8 +837,7 @@ with open(runSbatchScript, 'w') as sbatchO:
                     s1T2cLogFileName = '_'.join(
                         ['runEncodeChipBowtie2Qc',
                             baseExpName + '.s1To2cg.log'])
-                    s1T2cLogFilePath = os.path.join(
-                        basepath, 'runBash', 'log', s1T2cLogFileName)
+                    s1T2cLogFilePath = os.path.join(logDir, s1T2cLogFileName)
                     sbatchS1To2cgCont = sbatchS1To2cgTemplate.format(**vars())
                     sbatchS1To2cg.write(sbatchS1To2cgCont)
                     os.chmod(sbatchS1To2cgScript, 0o755)
@@ -857,8 +856,7 @@ with open(runSbatchScript, 'w') as sbatchO:
                 step2fCommand = step2fBothCommand.format(**vars())
                 s2dTo2fLogFileName = '_'.join(
                     ['runEncodeChipBowtie2Qc', baseExpName + '.s2dTo2f.log'])
-                s2dTo2fLogFilePath = os.path.join(
-                    basepath, 'runBash', 'log', s2dTo2fLogFileName)
+                s2dTo2fLogFilePath = os.path.join(logDir, s2dTo2fLogFileName)
                 sbatchS2dTo2fCont = sbatchS2dTo2fTemplate.format(**vars())
                 sbatchS2dTo2f.write(sbatchS2dTo2fCont)
                 os.chmod(sbatchS1To2cgScript, 0o755)
