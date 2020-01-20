@@ -37,6 +37,18 @@ parser.add_argument('-grepKept', action='store', type=str,
                     help='regex for keeping files')
 parser.add_argument('-grepExpel', action='store', type=str,
                     help='regex for filtering files')
+parser.add_argument('-alignment', action='store', type=str,
+                    default='alignment',
+                    help='alignment result directory')
+parser.add_argument('-bash', action='store', type=str,
+                    default='runBash',
+                    help='runBash directory')
+parser.add_argument('-log', action='store', type=str,
+                    default='log',
+                    help='log directory of runBash')
+parser.add_argument('-peak', action='store', type=str,
+                    default='peak',
+                    help='peak results directory')
 parser.add_argument('-maxPeak', action='store', type=str,
                     default='300000', help='-maxPeak parameter (SPP)')
 parser.add_argument('-memory', action='store', type=str,
@@ -107,10 +119,26 @@ if bool(regex):
 else:
     fastqList = fastqRawList
 
-mainAlignDir = os.path.join(basepath, 'alignment')
-mainPeakDir = os.path.join(basepath, 'peak')
-bashDir = os.path.join(basepath, 'runBash')
-logDir = os.path.join(bashDir, 'log')
+if args.alignment == 'alignment':
+    mainAlignDir = os.path.join(basepath, 'alignment')
+else:
+    mainAlignDir = os.path.realpath(args.alignment)
+
+if args.peak == 'peak':
+    mainPeakDir = os.path.join(basepath, 'peak')
+else:
+    mainPeakDir = os.path.realpath(args.peak)
+
+if args.bash == 'runBash':
+    bashDir = os.path.join(basepath, 'runBash')
+else:
+    bashDir = os.path.realpath(args.bash)
+
+if args.log == 'log':
+    logDir = os.path.join(bashDir, 'log')
+else:
+    logDir = os.path.realpath(args.log)
+
 os.makedirs(logDir, exist_ok=True)
 os.makedirs(mainPeakDir, exist_ok=True)
 
