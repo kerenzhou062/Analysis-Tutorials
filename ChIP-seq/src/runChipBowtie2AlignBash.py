@@ -28,6 +28,12 @@ parser.add_argument('-input', action='store', type=str,
 parser.add_argument('-alignment', action='store', type=str,
                     default='alignment',
                     help='alignment result directory')
+parser.add_argument('-bash', action='store', type=str,
+                    default='runBash',
+                    help='runBash directory')
+parser.add_argument('-log', action='store', type=str,
+                    default='log',
+                    help='log directory of runBash')
 parser.add_argument('-index', action='store', type=str,
                     default='hg38',
                     help='bowtie2 genome index (prefix or file)')
@@ -62,8 +68,18 @@ basepath = os.path.realpath(args.input)
 extsList = ["*.fastq", '*.fq', '*.fastq.gz', '*.fq.gz']
 fastqList = sorted(
     [f for ext in extsList for f in glob(os.path.join(basepath, ext))])
-bashDir = os.path.join(basepath, 'runBash')
-logDir = os.path.join(bashDir, 'log')
+
+if args.bash == 'runBash':
+    bashDir = os.path.join(basepath, 'runBash')
+else:
+    bashDir = os.path.realpath(args.bash)
+
+if args.log == 'log':
+    logDir = os.path.join(bashDir, 'log')
+else:
+    logDir = os.path.realpath(args.log)
+
+os.makedirs(bashDir, exist_ok=True)
 os.makedirs(logDir, exist_ok=True)
 
 readLen = 0
@@ -115,6 +131,8 @@ if args.alignment == 'alignment':
     mainAlignDir = os.path.join(basepath, 'alignment')
 else:
     mainAlignDir = os.path.realpath(args.alignment)
+
+os.makedirs(mainAlignDir, exist_ok=True)
 
 # ================================
 # step template
