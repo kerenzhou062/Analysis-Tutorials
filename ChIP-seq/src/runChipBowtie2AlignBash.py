@@ -13,27 +13,38 @@ from PubAlbum import Anno
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-blacklist', action='store', type=str,
-                    default='hg38', help='blacklist for genome: (prefix or file)')
+                    default='hg38',
+                    help='blacklist for genome: (prefix or file)')
 parser.add_argument('-cpu', action='store', type=str,
-                    default='10', help='threads used for bowtie2')
+                    default='10',
+                    help='threads used for bowtie2')
 parser.add_argument('-fasta', action='store', type=str,
-                    default='hg38', help='fasta for genome: (prefix or file)')
+                    default='hg38', 
+                    help='fasta for genome: (prefix or file)')
 parser.add_argument('-input', action='store', type=str,
-                    default='./', help='input fastq directory \
+                    default='./', 
+                    help='input fastq directory \
                     (eg. HepG2_CTCF_KD_IP_rep1_run1_2.fastq)')
+parser.add_argument('-alignment', action='store', type=str,
+                    default='alignment',
+                    help='alignment result directory')
 parser.add_argument('-index', action='store', type=str,
-                    default='hg38', help='bowtie2 genome index (prefix or file)')
+                    default='hg38',
+                    help='bowtie2 genome index (prefix or file)')
 parser.add_argument('-memory', action='store', type=str,
-                    default='50G', help='memory used for sbatch')
+                    default='50G',
+                    help='memory used for sbatch')
 parser.add_argument('-part', action='store', type=str,
-                    default='all', help='partition of slurm server')
+                    default='all',
+                    help='partition of slurm server')
 parser.add_argument('-quality', action='store', type=str,
-                    default='30', help='quality for filtering fastq')
+                    default='30',
+                    help='quality for filtering fastq')
 
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
-    print("Running runChipSeBowtie2AlignBash.py \
-        with defaultdict parameters...")
+    parser.print_help()
+    parser.exit()
 
 # public arguments
 threadNum = args.cpu
@@ -100,7 +111,10 @@ trim = 50
 if readLen < trim:
     trim = readLen
 
-mainAlignDir = os.path.join(basepath, 'alignment')
+if args.alignment == 'alignment':
+    mainAlignDir = os.path.join(basepath, 'alignment')
+else:
+    mainAlignDir = os.path.realpath(args.alignment)
 
 # ================================
 # step template
