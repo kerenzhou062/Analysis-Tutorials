@@ -21,9 +21,6 @@ parser.add_argument('-control', action='store', type=str,
 parser.add_argument('-cpu', action='store', type=int,
                     default=10, help='threads used for \
                     callMacs2Parallel.py|callEncodeIdrParallel.py')
-parser.add_argument('-dtype', action='store', type=str,
-                    choices=['narrowPeak','broadPeak'],
-                    default='narrowPeak', help='--input-file-type parameter (idr)')
 parser.add_argument('-extsize', action='store', type=int,
                     help='--extsize parameter (macs2, histone:147)')
 parser.add_argument('-gsize', action='store', type=str,
@@ -72,7 +69,6 @@ if len(sys.argv[1:]) == 0:
 
 # public arguments
 threadNum = args.cpu
-dtype = args.dtype
 maxPeak = args.maxPeak
 gsize = args.gsize
 idrThresh = args.idrThresh
@@ -308,7 +304,6 @@ EXTSIZE="{extsize}"
 SHIFT="{shift}"
 CHRSIZE="{chrsize}"
 
-DTYPE="{dtype}"
 RANK="{rank}"
 
 echo "Change wd directory to ${{MAIN_PEAK_DIR}}"
@@ -331,7 +326,7 @@ callMacs2Parallel.py -cpu ${{THREADS}} \\
   -name ${{NAME}} \\
   -output ${{OUTPUT}} \\
   -other "${{OTHER}}" \\
-  -dtype ${{DTYPE}} \\
+  -dtype"narrowPeak" \\
   -rank ${{RANK}}
 
 echo "Peak-calling done..."
@@ -373,7 +368,6 @@ IDR_SAMPLE="{idrSampleStr}"
 PEAKLIST="{idrPeaklistStr}"
 IDR_PREFIX="{idrPrefixStr}"
 IDR_OUTPUT="{idrOutputStr}"
-DTYPE="{dtype}"
 IDR_THRESH="{idrThresh}"
 RANK="{rank}"
 
@@ -382,7 +376,7 @@ callEncodeIdrParallel.py -cpu ${{THREADS}} \\
   -sample "${{IDR_SAMPLE}}" \\
   -peaklist ${{PEAKLIST}} \\
   -blacklist ${{BLACKLIST}} \\
-  -dtype ${{DTYPE}} \\
+  -dtype "narrowPeak" \\
   -output ${{IDR_OUTPUT}} \\
   -prefix ${{IDR_PREFIX}} \\
   -thresh ${{IDR_THRESH}} \\
@@ -398,13 +392,12 @@ echo "Running IDR on broad peaks..."
 IDR_BROAD_SAMPLE="{idrBroadSampleStr}"
 BROAD_PEAKLIST="{idrBroadPeaklistStr}"
 IDR_BROAD_OUTPUT="{idrBroadOutputStr}"
-DTYPE="broadPeak"
 
 callEncodeIdrParallel.py -cpu ${{THREADS}} \\
   -sample "${{IDR_BROAD_SAMPLE}}" \\
   -peaklist ${{BROAD_PEAKLIST}} \\
   -blacklist ${{BLACKLIST}} \\
-  -dtype ${{DTYPE}} \\
+  -dtype "broadPeak" \\
   -output ${{IDR_BROAD_OUTPUT}} \\
   -prefix ${{IDR_PREFIX}} \\
   -thresh ${{IDR_THRESH}} \\
@@ -476,15 +469,15 @@ with open(runSbatchScript, 'w') as sbatchO:
         idrPeaklistDirList.append(pooledRepDir)
         idrPrefixList.append(pooledRepName + '_withPooledPr')
         idrOuputDirList.append(pooledRepDir + '_withPooledPr')
-        ### generate final pairs
+        ### generate final pairs, narrowPeak
         idrSampleList = list()
         for i in range(len(idrSampleNameList)):
             sample = ' '.join(list(map(lambda x: 
-                os.path.join(idrSampleDirList[i][x], idrSampleNameList[i][x] + '_peaks.' + dtype), 
+                os.path.join(idrSampleDirList[i][x], idrSampleNameList[i][x] + '_peaks.narrowPeak'), 
                 range(len(idrSampleNameList[i])))))
             idrSampleList.append(sample)
         idrPeaklistList = list(map(lambda x: 
-            os.path.join(idrPeaklistDirList[x], idrPeaklistNameList[x] + '_peaks.' + dtype), 
+            os.path.join(idrPeaklistDirList[x], idrPeaklistNameList[x] + '_peaks.narrowPeak'), 
             range(len(idrPeaklistNameList))))
         idrOuputList = list(map(lambda x:x.replace('/narrow/', '/idr_narrow/'), idrOuputDirList))
         idrSampleStr = ','.join(idrSampleList)
