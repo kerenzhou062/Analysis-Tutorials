@@ -128,6 +128,7 @@ if readLen < trim:
     trim = readLen
 
 if args.alignment == 'alignment':
+    print(mainAlignDir)
     mainAlignDir = os.path.join(basepath, 'alignment')
 else:
     mainAlignDir = os.path.realpath(args.alignment)
