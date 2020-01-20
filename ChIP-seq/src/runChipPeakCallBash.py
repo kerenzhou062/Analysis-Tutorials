@@ -33,6 +33,10 @@ parser.add_argument('-input', action='store', type=str,
                     (eg. HepG2_CTCF_control_IP_rep1_run1_1.fastq)')
 parser.add_argument('-idrThresh', action='store', type=float,
                     default=0.05, help='--soft-idr-threshold parameter (idr)')
+parser.add_argument('-grepKept', action='store', type=str,
+                    help='regex for keeping files')
+parser.add_argument('-grepExpel', action='store', type=str,
+                    help='regex for filtering files')
 parser.add_argument('-maxPeak', action='store', type=str,
                     default='300000', help='-maxPeak parameter (SPP)')
 parser.add_argument('-memory', action='store', type=str,
@@ -51,7 +55,8 @@ parser.add_argument('-shift', action='store', type=str,
 
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
-    print("Running runChipPeakCallBash.py with defaultdict parameters...")
+    parser.print_help()
+    parser.exit()
 
 # public arguments
 threadNum = args.cpu
@@ -76,8 +81,32 @@ tagAlignPoolPr2App = '.pooled.pr2.tagAlign.gz'
 tagAlignPoolApp = '.pooled.tagAlign.gz'
 
 # file pattern: HepG2_CTCF_knockdown_IP_rep1_run1_1.fastq, HepG2_CTCF_knockdown_IP_rep1_run1_2.fastq
+##public arguments
+if bool(args.grepKept):
+    kept = True
+    regex = re.compile(r'{0}'.format(args.grepKept))
+elif bool(args.grepExpel):
+    kept = False
+    regex = re.compile(r'{0}'.format(args.grepExpel))
+else:
+    regex = False
+
 extsList = ["*.fastq", '*.fq', '*.fastq.gz', '*.fq.gz']
-fastqList = sorted([f for ext in extsList for f in glob(os.path.join(basepath, ext))])
+fastqRawList = sorted([f for ext in extsList for f in glob(os.path.join(basepath, ext))])
+
+fastqList = list()
+if bool(regex):
+    for fastq in fastqRawList:
+        basename = os.path.basename(fastq)
+        if kept:
+            if bool(regex.search(basename)) is True:
+                fastqList.append(fastq)
+        else:
+            if bool(regex.search(basename)) is False:
+                fastqList.append(fastq)
+else:
+    fastqList = fastqRawList
+
 mainAlignDir = os.path.join(basepath, 'alignment')
 mainPeakDir = os.path.join(basepath, 'peak')
 bashDir = os.path.join(basepath, 'runBash')
