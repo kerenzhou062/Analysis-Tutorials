@@ -5,6 +5,7 @@ import argparse
 import re
 from glob import glob
 from collections import defaultdict
+from copy import copy
 import datetime
 from PubAlbum import Anno
 
@@ -181,6 +182,7 @@ if args.control:
     #like HepG2_input
     exp = args.control
     pubConDict['basename'] = exp
+    pubConNum = len(expDict[exp]['input'])
     for rep in sorted(expDict[exp]['input']):
         repPrefix = '_'.join([exp, 'input', rep])
         pubConDict['tagAlignFinal'].append(repPrefix + tagAlignFinalApp)
@@ -191,8 +193,10 @@ if args.control:
     pubConDict['pooled'].append(exp + '_input' + tagAlignPoolPr2App)
 else:
     for exp in expList:
+        #like HepG2_input
         if exp.find('input') > 0:
             pubConDict['basename'] = exp
+            pubConNum = len(expDict[exp]['input'])
             for rep in sorted(expDict[exp]['input']):
                 repPrefix = '_'.join([exp, 'input', rep])
                 pubConDict['tagAlignFinal'].append(repPrefix + tagAlignFinalApp)
@@ -211,9 +215,11 @@ for exp in expList:
     if exp not in expLinkDict:
         expLinkDict[exp] = defaultdict(list)
     ipList = sorted(expDict[exp].keys())
-    conExp = pubConDict['basename']
+    if len(ipList) == 1 and ipList[0] == 'input':
+        continue
     # get information from IP
     repList = sorted(expDict[exp]['IP'])
+    repNum = len(repList)
     expLinkDict[exp]['name'].extend(list(map(lambda x:'_'.join([exp, x, 'final']), repList)))
     expLinkDict[exp]['name'].extend(list(map(lambda x:'_'.join([exp, x, 'pr1']), repList)))
     expLinkDict[exp]['name'].extend(list(map(lambda x:'_'.join([exp, x, 'pr2']), repList)))
@@ -231,7 +237,15 @@ for exp in expList:
     outputList.append(os.path.join( "${MAIN_PEAK_DIR}", exp, 'narrow', exp+'_pr1_pooled'))
     outputList.append(os.path.join( "${MAIN_PEAK_DIR}", exp, 'narrow', exp+'_pr2_pooled'))
     expLinkDict[exp]['output'] = outputList
+    conExp = '_'.join([exp, 'input'])
     for ip in ipList:
+        if ip == 'input':
+            inputRepList = expDict[exp]['input']
+            if len(inputRepList) < repNum:
+                extraNum = repNum - len(inputRepList)
+                extraList = [inputRepList[i] for i in range(extraNum)]
+                inputRepList.extend(extraList)
+                repList = inputRepList
         repList = sorted(expDict[exp][ip])
         # order: final, pr1, pr2, pooled
         ipTagAlignList = list(map(lambda x:os.path.join( "${MAIN_ALIGN_DIR}", exp, ip, \
@@ -244,15 +258,25 @@ for exp in expList:
         ipTagAlignList.append(os.path.join( "${MAIN_ALIGN_DIR}", exp, ip, exp+'_'+ip+tagAlignPoolPr1App))
         ipTagAlignList.append(os.path.join( "${MAIN_ALIGN_DIR}", exp, ip, exp+'_'+ip+tagAlignPoolPr2App))
         expLinkDict[exp][ip] = ipTagAlignList
-    if len(ipList) > 1:
-        conExp = '_'.join([exp, 'input'])
-    else:
+    if len(ipList) == 1:
+        if pubConNum < repNum:
+            extraNum = repNum - pubConNum
+            tagAlignFinalList = copy(pubConDict['tagAlignFinal'])
+            tagAlignFinalList.extend([tagAlignFinalList[i] for i in range(extraNum)])
+            repPr1List = copy(pubConDict['repPr1'])
+            repPr1List.extend([repPr1List[i] for i in range(extraNum)])
+            repPr2List = copy(pubConDict['repPr2'])
+            repPr2List.extend([repPr2List[i] for i in range(extraNum)])
+        else:
+            tagAlignFinalList = copy(pubConDict['tagAlignFinal'])
+            repPr1List = copy(pubConDict['repPr1'])
+            repPr2List = copy(pubConDict['repPr2'])
         inputList = list(map(lambda x:os.path.join( "${MAIN_ALIGN_DIR}", 
-            conExp, 'input', x ), pubConDict['tagAlignFinal']))
+            conExp, 'input', x ), tagAlignFinalList))
         inputList.extend(list(map(lambda x:os.path.join( "${MAIN_ALIGN_DIR}", 
-            conExp, 'input', x ), pubConDict['repPr1'])))
+            conExp, 'input', x ), repPr1List)))
         inputList.extend(list(map(lambda x:os.path.join( "${MAIN_ALIGN_DIR}", 
-            conExp, 'input', x ), pubConDict['repPr2'])))
+            conExp, 'input', x ), repPr2List)))
         inputList.extend(list(map(lambda x:os.path.join( "${MAIN_ALIGN_DIR}", 
             conExp, 'input', x ), pubConDict['pooled'])))
         expLinkDict[exp]['input'] = inputList
@@ -326,7 +350,7 @@ callMacs2Parallel.py -cpu ${{THREADS}} \\
   -name ${{NAME}} \\
   -output ${{OUTPUT}} \\
   -other "${{OTHER}}" \\
-  -dtype"narrowPeak" \\
+  -dtype "narrowPeak" \\
   -rank ${{RANK}}
 
 echo "Peak-calling done..."
