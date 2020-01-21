@@ -11,9 +11,9 @@ import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-data', action='store', type=str,
-                    help='gtf annotation build or file (eg. hg38v31)')
+                    help='GC_BIAS_LOG')
 parser.add_argument('-prefix', action='store', type=str,
-                    help='input bam directory (HepG2_shWTAP_IP_rep1.sorted.bam)')
+                    help='output prefix')
 
 args = parser.parse_args()
 
