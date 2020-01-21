@@ -347,11 +347,13 @@ step2bBothCommand = '''
 #### for both PE and SE samples
 # Trim R1 fastq to {trim}bp
 echo "Starting trimming fastq..."
-
+TRIM_TEMP_FASTQ="${{prefix}}.trim.tmp.fastq"
 TRIM_OFPREFIX="${{prefix}}.trim"
 TRIMMED_FASTQ_R1="${{TRIM_OFPREFIX}}.fastq.gz"
+zcat -f ${{fastqR1}} > ${{$TRIM_TEMP_FASTQ}}
+python $(which trimfastq.py) ${{$TRIM_TEMP_FASTQ}} {trim} | gzip -nc > ${{TRIMMED_FASTQ_R1}}
 
-python $(which trimfastq.py) ${{fastqR1}} {trim} | gzip -nc > ${{TRIMMED_FASTQ_R1}}
+rm -f ${{$TRIM_TEMP_FASTQ}}
 
 # Align $TRIMMED_FASTQ_R1 (not paired) with bowtie2 (step 1a SE) and use it for filtering
 # step (1b) and then get $FILT_BAM_FILE (not the deduped $FINAL_BAM_FILE), which is
@@ -802,7 +804,7 @@ with open(runSbatchScript, 'w') as sbatchO:
                         ipDict[rep]['2'] = '$BASE/' + ipDict[rep]['2'][0]
                 else:
                     if len(runFileList) > 1:
-                        catFastq = '${prefix}' + '.fastq'
+                        catFastq = '${prefix}' + '{fqExt}'.format(**vars())
                         fastqRuns = ' '.join(
                             list(map(lambda x: '$BASE/' + x,
                                      sorted(ipDict[rep][pairedNum1]))))
