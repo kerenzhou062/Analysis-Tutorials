@@ -259,6 +259,7 @@ for exp in expList:
         ipTagAlignList.append(os.path.join( "${MAIN_ALIGN_DIR}", exp, ip, exp+'_'+ip+tagAlignPoolPr2App))
         expLinkDict[exp][ip] = ipTagAlignList
     if len(ipList) == 1:
+        conExp = pubConDict['basename']
         if pubConNum < repNum:
             extraNum = repNum - pubConNum
             tagAlignFinalList = copy(pubConDict['tagAlignFinal'])
@@ -280,7 +281,6 @@ for exp in expList:
         inputList.extend(list(map(lambda x:os.path.join( "${MAIN_ALIGN_DIR}", 
             conExp, 'input', x ), pubConDict['pooled'])))
         expLinkDict[exp]['input'] = inputList
-
 
 # ================================
 #sbatch
