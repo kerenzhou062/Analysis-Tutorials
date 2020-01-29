@@ -11,7 +11,7 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 parser.add_argument('-anno', action='store', type=str, required=True,
                     help='Gene annotation file in bed12 format (main annotation) \
                     (4th column [gene_id:gene_name:gene_type:tx_id:tx_name:tx_type])')
-parser.add_argument('-geneClassFile', action='store', type=str, required=True,
+parser.add_argument('-geneClassFile', action='store', type=str,
                     help='geneType-geneClass pairwise file')
 parser.add_argument('-input', action='store', type=str, required=True,
                     help='input peak file (bed6 or bed6+)')
@@ -31,6 +31,9 @@ parser.add_argument('-noheader', action='store_true',
 parser.add_argument('-onlyName', action='store_true',
                     default=False,
                     help='append gene_name only')
+parser.add_argument('-nover', action='store_true',
+                    default=False,
+                    help='remove gene version')
 parser.add_argument('-ncbiGeneInfo', action='store', type=str,
                     help='*.gene_info file downloaded from NCBI')
 parser.add_argument('-output', action='store', type=str, required=True,
@@ -42,13 +45,14 @@ if len(sys.argv[1:]) == 0:
     parser.exit()
 
 # built up gene-type pairwise relationships
-geneClassDict = defaultdict(dict)
-with open(args.geneClassFile) as f:
-    for line in f:
-        row = line.strip().split('\t')
-        mainType = row[0]
-        geneType = row[1]
-        geneClassDict[geneType] = mainType
+if args.onlyName is False:
+    geneClassDict = defaultdict(dict)
+    with open(args.geneClassFile) as f:
+        for line in f:
+            row = line.strip().split('\t')
+            mainType = row[0]
+            geneType = row[1]
+            geneClassDict[geneType] = mainType
 
 # built up gene-info pairwise relationships, if args.ncbiGeneInfo
 ncbiGeneInfoDict = defaultdict(dict)
@@ -79,6 +83,8 @@ with open(args.anno) as f:
             keyId = txInfo[0]
         else:
             keyId = txInfo[3]
+        if args.nover:
+            keyId = keyId.split('.')[0]
         idDict[keyId]['geneId'] = txInfo[0]
         idDict[keyId]['geneName'] = txInfo[1]
         idDict[keyId]['geneType'] = txInfo[2]
@@ -101,6 +107,8 @@ with open(args.input, 'r') as f, open(args.output, 'w') as out:
             extRow = headerRow
         else:
             keyId = row[args.idCol]
+            if args.nover:
+                keyId = keyId.split('.')[0]
             if keyId not in idDict:
                 idDict[keyId]['geneId'] = 'na'
                 idDict[keyId]['geneName'] = 'na'
