@@ -741,7 +741,7 @@ if bool(args.extraAnno):
 headerRow = list()
 if len(peakHeaderRow) != peakColNum:
     peakHeaderRow = ['peakCol'+str(i+1) for i in range(peakColNum)]
-peakHeaderRow.append('peakLength')
+peakHeaderRow.append('PeakLength')
 headerRow.extend(peakHeaderRow)
 mainHeaderRow = ["GeneId", "GeneName",  "Synonyms", "Description", "GeneType", \
     "GeneClass", "TxId", "TxName", "TxType", "Feature"]
