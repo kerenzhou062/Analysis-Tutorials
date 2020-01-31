@@ -62,6 +62,15 @@ def runMacs2(ip, control, name, other, output,
         {other} > {logFile} 2>&1'.format(**vars())
     subprocess.run(macs2Command, shell=True)
 
+    # delete treat_pileup.bdg and control_lambda.bdg 
+    # for pseudo-replicates
+    # keep bdg files for pooled and true replicates
+    # for macs2-bdfdiff analysis
+    if bool(re.search(r'(pr[12])|(pr[12]_pooled)', name)):
+        prefix = '{output}/{name}'.format(**vars())
+        os.remove('{0}_treat_pileup.bdg'.format(prefix))
+        os.remove('{0}_control_lambda.bdg'.format(prefix))
+
     # sort -S {sortMem}% peaks by signal.value | -log10(p-value) | -log10(p-value)
     peakFile = os.path.join(output, name + '_peaks.{0}'.format(dtype))
     broadFlag = False
@@ -76,7 +85,8 @@ def runMacs2(ip, control, name, other, output,
     subprocess.run(sortCommand, shell=True)
 
     # generate signal track
-    if broadFlag is False:
+    # skip generate signal track: broad peak or pseudo-replicates
+    if broadFlag is False and bool(re.search(r'(pr[12])|(pr[12]_pooled)', name)) is False:
         prefix = '{output}/{name}'.format(**vars())
         signalCommand = 'macs2 bdgcmp -t {prefix}_treat_pileup.bdg \
             -c {prefix}_control_lambda.bdg \
@@ -106,11 +116,6 @@ def runMacs2(ip, control, name, other, output,
         subprocess.run(convertCommand, shell=True)
         os.remove('{0}.fc.signal.bedgraph'.format(prefix))
         os.remove('{0}.fc.signal.sorted.bedgraph'.format(prefix))
-        # keep bdg files of pooled and true replicates
-        # for macs2-bdfdiff analysis
-        if bool(re.search(r'pr', name, re.IGNORECASE)):
-            os.remove('{0}_treat_pileup.bdg'.format(prefix))
-            os.remove('{0}_control_lambda.bdg'.format(prefix))
 
         # generate count signal track
         # postive strand
