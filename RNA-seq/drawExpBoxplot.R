@@ -44,6 +44,26 @@ LoadPacakge <- function(name) {
   cat(paste("Load package: ", name, ".\n", sep="\t"))
 }
 
+plotGeneCount <- function(geneName, pdfName) {
+  pdf(pdfName, paper="a4r")
+  selectData <- expData[expData[args$targetCol] == geneName,]
+  pd = position_dodge(width = 0.5)
+  plot <- ggplot(selectData, aes_string(x=args$xaxis, y=args$yaxis, fill=args$xaxis)) +
+    stat_boxplot(geom="errorbar", position=pd, width=0.2) +
+    geom_boxplot() + 
+    geom_jitter(position=position_jitter(width=0.1, height=0.1)) + 
+    theme(axis.text.x = element_text(angle=80, hjust=1, vjust=0.98)) +
+    labs(y = paste("Expression Level: ", args$prefix), x = "")
+  ## add significance level
+  if (args$refgroup != 'none') {
+    plot <- plot + 
+      stat_compare_means(method = args$method, ref.group = args$refgroup, 
+          label = "p.signif" )
+  }
+  print(plot)
+  garbage <- dev.off()
+}
+
 # parsing arguments
 args <- getopt(command)
 
@@ -68,26 +88,6 @@ suppressMessages(library('ggpubr'))
 
 LoadPacakge('ggplot2')
 LoadPacakge('ggpubr')
-
-plotGeneCount <- function(geneName, pdfName) {
-  pdf(pdfName, paper="a4r")
-  selectData <- expData[expData[args$targetCol] == geneName,]
-  pd = position_dodge(width = 0.5)
-  plot <- ggplot(selectData, aes_string(x=args$xaxis, y=args$yaxis, fill=args$xaxis)) +
-    stat_boxplot(geom="errorbar", position=pd, width=0.2) +
-    geom_boxplot() + 
-    geom_jitter(position=position_jitter(width=0.1, height=0.1)) + 
-    theme(axis.text.x = element_text(angle=80, hjust=1, vjust=0.98)) +
-    labs(y = paste("Expression Level: ", args$prefix), x = "")
-  ## add significance level
-  if (args$refgroup != 'none') {
-    plot <- plot + 
-      stat_compare_means(method = args$method, ref.group = args$refgroup, 
-          label = "p.signif" )
-  }
-  print(plot)
-  garbage <- dev.off()
-}
 
 # split target name into vector
 geneList <- unlist(strsplit(args$target, ","))
