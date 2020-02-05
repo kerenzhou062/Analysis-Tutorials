@@ -15,7 +15,6 @@ BASE=/net/isi-dcnl/ifs/user_data/JJChen_Grp/zhoukr/project/zhhchen/tet1/rna_seq/
 LOG_DIR="$BASE/log"
 ALIGNMENT_DIR="$BASE/alignment"
 DESEQ2_DIR="$BASE/DESeq2"
-EXP_DIR="$BASE/expression"
 SCRIPT="$BASE/scripts"
 ## genome
 PUBLIC_BASE="/net/isi-dcnl/ifs/user_data/JJChen_Grp/zhoukr/public/genome"
@@ -80,12 +79,3 @@ sampleEvaluate.R --counts BCells.genes.matrix --sampleMtx BCells.all.sample.matr
 ## run DESeq2Time.R with all samples
 
 $SCRIPT/DESeq2Time.R
-
-cd $EXP_DIR
-
-buildExpMatrix.py -input $ALIGNMENT_DIR -output BCells.genes.tpm.matrix -abundance TPM
-buildExpMatrix.py -input $ALIGNMENT_DIR -output BCells.genes.fpkm.matrix -abundance FPKM
-geneExpToLong.py -input BCells.genes.tpm.matrix -matrix BCells.all.sample.matrix -output BCells.genes.tpm.long.matrix
-geneExpToLong.py -input BCells.genes.fpkm.matrix -matrix BCells.all.sample.matrix -output BCells.genes.fpkm.long.matrix
-
-$SCRIPT/GeneExp2Time.R

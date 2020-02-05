@@ -17,4 +17,4 @@ function matrixToRun {
   done < $SAMPLE_MATRIX
 }
 
-matrixToRun $BASE/sample.matrix
+matrixToRun $BASE/sample.multipleRun.matrix
