@@ -6,6 +6,7 @@ command =  matrix(c(
     "help",         "h",   0,  "logical",     "Show help information",
     "gzip",         "z",   0,  "logical",     "the --input matrix is gzip",
     "input",        "i",   1,  "character",   "input expression matrix (long)",
+    "method",       "m",   1,  "character",   "statistic method for comparing means [wilcox.test|t.test]",
     "output",       "o",   1,  "character",   "output directory",
     "prefix",       "p",   1,  "character",   "{target}.{prefix}.pdf",
     "refgroup",     "r",   1,  "character",   "column name of reference group",
@@ -56,6 +57,7 @@ ShowHelp(args$output, '-o|--output')
 
 # default values
 if ( is.null(args$gzip) ) { args$gzip = FALSE }
+if ( is.null(args$method) ) { args$method = "wilcox.test" }
 if ( is.null(args$prefix) ) { args$prefix = 'FPKM' }
 if ( is.null(args$refgroup) ) { args$refgroup = 'none' }
 if ( is.null(args$output) ) { args$output = './' }
@@ -80,7 +82,7 @@ plotGeneCount <- function(geneName, pdfName) {
   ## add significance level
   if (args$refgroup != 'none') {
     plot <- plot + 
-      stat_compare_means(method = "wilcox.test", ref.group = args$refgroup, 
+      stat_compare_means(method = args$method, ref.group = args$refgroup, 
           label = "p.signif" )
   }
   print(plot)
