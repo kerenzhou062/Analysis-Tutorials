@@ -40,6 +40,7 @@ function showHelp {
     --seq-type: RNA-seq type, possible values: PE SE
     --append-names: set RSEM with --append-names <bool>
     --disable-bw: do not generate bigWig files <str>
+    --disable-empty: do not delete whole folder before running <bool>
     --skip-mapping: skip reads mapping step <bool>
     --skip-txsort: skip toTranscriptome.out.bam sorting step <bool>
     --skip-rsem: skip RSEM expression calculating step <bool>
@@ -55,7 +56,7 @@ fi
 
 TEMP=`getopt -o hp:o:t: --long help,thread:,max-mismatch:,mem:,prefix: \
   --long rsem-genome-dir:,star-genome-dir:,read1:,read2:,strandedness:,seq-type:, \
-  --long append-names,disable-bw,skip-mapping,skip-txsort,skip-rsem,zcat-flag \
+  --long append-names,disable-bw,disable-empty,skip-mapping,skip-txsort,skip-rsem,zcat-flag \
   -- "$@"`
 
 if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
@@ -77,6 +78,7 @@ READ2=""
 STRANDEDNESS="none"
 APPEND_NAMES=false
 DISABLE_BW=false
+DISABLE_EMPTY=false
 ZCAT_FLAG=false
 SKIP_MAPPING=false
 SKIP_TX_SORT=false
@@ -98,6 +100,7 @@ while true; do
     --seq-type ) SEQ_TYPE="$2"; shift 2 ;;
     --append-names ) APPEND_NAMES=true; shift ;;
     --disable-bw ) DISABLE_BW=true; shift ;;
+    --disable-empty ) DISABLE_EMPTY=true; shift ;;
     --skip-mapping ) SKIP_MAPPING=true; shift ;;
     --skip-txsort ) SKIP_TX_SORT=true; shift ;;
     --skip-rsem ) SKIP_RSEM=true; shift ;;
@@ -158,6 +161,7 @@ echo "READ2=$READ2"
 echo "APPEND_NAMES=$APPEND_NAMES"
 echo "STRANDEDNESS=$STRANDEDNESS"
 echo "DISABLE_BW=$DISABLE_BW"
+echo "DISABLE_EMPTY=$DISABLE_EMPTY"
 echo "SKIP_MAPPING=$SKIP_MAPPING"
 echo "SKIP_TX_SORT=$SKIP_TX_SORT"
 echo "SKIP_RSEM=$SKIP_RSEM"
@@ -165,9 +169,8 @@ echo "ZCAT_FLAG=$ZCAT_FLAG"
 echo ""
 
 # executables
-STAR=STAR                             
-RSEM=rsem-calculate-expression        
-bedGraphToBigWig=bedGraphToBigWig
+STAR=STAR
+RSEM=rsem-calculate-expression
 
 zcatCommand=""
 if $ZCAT_FLAG; then
@@ -177,8 +180,10 @@ fi
 if [[ ! -d $OUTPUT_DIR ]]; then
   mkdir -p $OUTPUT_DIR
 else
-  rm -rf $OUTPUT_DIR
-  mkdir -p $OUTPUT_DIR
+  if [[ ! $DISABLE_EMPTY ]]; then
+    rm -rf $OUTPUT_DIR
+    mkdir -p $OUTPUT_DIR
+  fi
 fi
 
 cd $OUTPUT_DIR
@@ -275,11 +280,11 @@ else
     for imult in Unique UniqueMultiple
     do
       ## raw counts 
-      grep ^chr ./Signal_RAW/Signal.$imult.str1.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
-      $bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.raw.bw
+      grep ^chr ./Signal_RAW/Signal.$imult.str1.out.bg | LC_COLLATE=C sort -S 90% -k1,1 -k2,2n > sig.tmp
+      bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.raw.bw
       ## RPM 
-      grep ^chr ./Signal_RPM/Signal.$imult.str1.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
-      $bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.rpm.bw
+      grep ^chr ./Signal_RPM/Signal.$imult.str1.out.bg | LC_COLLATE=C sort -S 90% -k1,1 -k2,2n > sig.tmp
+      bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.rpm.bw
     done
   else
     # stranded data
@@ -296,10 +301,10 @@ else
       for imult in Unique UniqueMultiple
       do
         ## raw counts 
-        grep ^chr ./Signal_RAW/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
+        grep ^chr ./Signal_RAW/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -S 90% -k1,1 -k2,2n > sig.tmp
         $bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.raw.bw
         ## RPM 
-        grep ^chr ./Signal_RPM/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -k1,1 -k2,2n > sig.tmp
+        grep ^chr ./Signal_RPM/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -S 90% -k1,1 -k2,2n > sig.tmp
         $bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.rpm.bw
       done
     done
@@ -313,8 +318,6 @@ else
   echo "Deleting bedGraph tracks..."
   rm -rf ./Signal_RAW
   rm -rf ./Signal_RPM
-  rm -f *out.bg
-  rm -f sig.tmp
 fi
 ######### RSEM
 
@@ -322,19 +325,18 @@ if $SKIP_TX_SORT; then
   echo "Skip sort transcriptome BAM."
 else
   #### prepare for RSEM: sort transcriptome BAM to ensure the order of the reads, to make RSEM output (not pme) deterministic
-  trBAMsortRAM="${MEMORY}G"
   
   echo "Sorting toTranscriptome bam..."
   mv ${txBAM} Tr.bam 
   
   if [[ $SEQ_TYPE == "SE" ]]; then
     # single-end data
-    cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | sort -S ${trBAMsortRAM} -T ./ ) | \
+    cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | sort -S 90% -T ./ ) | \
       samtools view -@ ${THREAD} -bS - > ${txBAM}
   else
     # paired-end data, merge mates into one line before sorting, and un-merge after sorting
     cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | \
-      awk '{printf "%s", $0 " "; getline; print}' | sort -S ${trBAMsortRAM} -T ./ | tr ' ' '\n' ) | \
+      awk '{printf "%s", $0 " "; getline; print}' | sort -S 90% -T ./ | tr ' ' '\n' ) | \
       samtools view -@ $THREAD -bS - > ${txBAM}
   fi
   ## delete temp bam
@@ -394,6 +396,8 @@ fi
 ## deleting temp files
 echo "Deleting temp files..."
 rm -rf _STARtmp
+rm -f *out.bg
+rm -f sig.tmp
 
 echo "Rename outputs..."
 #find . -type f -name "*.rpm.bw" | perl -pe 'print $_; s/regex/string/' | xargs -n2 mv
