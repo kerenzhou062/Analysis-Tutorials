@@ -13,7 +13,7 @@ parser.add_argument('-input', action='store', type=str,
 parser.add_argument('-mode', action='store', type=str,
                     help='primary|mature mode')
 parser.add_argument('-output', action='store', type=str,
-                    help='output bed')
+                    help='output gtf')
 
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
@@ -50,7 +50,7 @@ with open(args.input, 'r') as f, open(args.output, 'w') as out:
         row = line.strip().split('\t')
         feature = row[2]
         chrom = row[0]
-        start = str(int(row[3]) - 1)
+        start = row[3]
         end = row[4]
         strand = row[6]
         attTempDict = defaultdict(dict)

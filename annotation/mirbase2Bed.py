@@ -10,8 +10,9 @@ from collections import defaultdict
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-input', action='store', type=str,
                      help='input GFF3 file')
-parser.add_argument('--tx', action='store_true',
-                    default=False, help='turn on transcript isoform mode')
+parser.add_argument('-mode', action='store', type=str,
+                    choices=['primary', 'mature'], 
+                    help='primary|mature mode')
 parser.add_argument('-output', action='store', type=str,
                     help='output bed')
 
@@ -37,16 +38,13 @@ with open(args.input, 'r') as f, open(args.output, 'w') as out:
             infoDict[key] = value
         # output
         col4th = ''
-        if args.tx:
-            if feature == 'miRNA':
-                geneId = infoDict['Derives_from']
-                txID = infoDict['ID']
-                txName = infoDict['Name']
-                col4th = ':'.join([txID, txName, geneId, feature])
-            else:
-                priTxID = infoDict['ID']
-                priTxName = infoDict['Name']
-                col4th = ':'.join([priTxID, priTxName, 'NA', feature])
+        if args.mode == 'mature':
+            if feature == 'miRNA_primary_transcript':
+                continue
+            geneId = infoDict['Derives_from']
+            txID = infoDict['ID']
+            txName = infoDict['Name']
+            col4th = ':'.join([txID, txName, geneId, feature])
         else:
             if feature == 'miRNA':
                 continue
