@@ -177,11 +177,11 @@ if $ZCAT_FLAG; then
   zcatCommand="--readFilesCommand zcat"
 fi
 
-if [[ ! -d $OUTPUT_DIR ]]; then
+if [[ $SET_EMPTY = "true" ]]; then
+  rm -rf $OUTPUT_DIR
   mkdir -p $OUTPUT_DIR
 else
-  if [[ $SET_EMPTY = "true" ]]; then
-    rm -rf $OUTPUT_DIR
+  if [[ ! -d $OUTPUT_DIR ]]; then
     mkdir -p $OUTPUT_DIR
   fi
 fi
