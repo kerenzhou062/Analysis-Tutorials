@@ -43,8 +43,8 @@ if [[ $# == 0 ]]; then
   exit 2
 fi
 
-TEMP=`getopt -o hf:t: --long help,thread:,fasta:,gtf: \
-  --long rsem-genome-dir:,star-genome-dir:,spike-fa:,overhang: \
+TEMP=`getopt -o hf:t:, --long help,thread:,fasta:,gtf:, \
+  --long rsem-genome-dir:,star-genome-dir:,spike-fa:,overhang:, \
   -- "$@"`
 
 if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi

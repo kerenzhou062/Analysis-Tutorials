@@ -54,9 +54,9 @@ if [[ $# == 0 ]]; then
   exit 2
 fi
 
-TEMP=`getopt -o hp:o:t: --long help,thread:,max-mismatch:,mem:,prefix: \
+TEMP=`getopt -o hp:o:t:, --long help,thread:,max-mismatch:,mem:,prefix:, \
   --long rsem-genome-dir:,star-genome-dir:,read1:,read2:,strandedness:,seq-type:, \
-  --long append-names,disable-bw,set-empty,skip-mapping,skip-txsort,skip-rsem,zcat-flag \
+  --long append-names,disable-bw,set-empty,skip-mapping,skip-txsort,skip-rsem,zcat-flag, \
   -- "$@"`
 
 if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
