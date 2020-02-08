@@ -53,10 +53,10 @@ then
   exit 2
 fi
 
-TEMP=`getopt -o hb:e:g:i:m:o:p:q:t: --long help,skip-mapping,skip-pooling,skip-calling \
-  --long keep-tmp-fastq,skip-PCR-am \
-  --long input:,thread:,output:,exp-prefix:,pool-prefix:,index:,min-length:,dbkey:,joinWrapper-loc: \
-  --long longest-bed:,full-bed:,repeat-bed:,barcode-length:,fasta:,quality:,mkr:,motif:,mtag: \
+TEMP=`getopt -o hb:e:g:i:m:o:p:q:t:, --long help,skip-mapping,skip-pooling,skip-calling, \
+  --long keep-tmp-fastq,skip-PCR-am, \
+  --long input:,thread:,output:,exp-prefix:,pool-prefix:,index:,min-length:,dbkey:,joinWrapper-loc:, \
+  --long longest-bed:,full-bed:,repeat-bed:,barcode-length:,fasta:,quality:,mkr:,motif:,mtag:, \
   -- "$@"`
 
 
@@ -358,7 +358,6 @@ fi
 if $SKIP_POOLING; then
   echo "Skip pooling."
 else
-  echo $REP;
   cd $MAP_DIR
   declare -a colorArr
   colorArr=("153,0,0" "153,76,0" "76,153,0" "0,76,153" "76,0,153" "153,76,0" "0,153,153")
@@ -367,14 +366,14 @@ else
     rep=$i
     colorIndex=$((i-1))
     color="${colorArr[$colorIndex]}"
-    if (( $REP > 1 )); then
+    if (( $REP_NUM > 1 )); then
       bed2rgb.pl -v -col $color ${EXP_PREFIX}${rep}.tag.uniq.bed ${EXP_PREFIX}${rep}.tag.uniq.rgb.bed
     else
       bed2rgb.pl -v -col $color ${EXP_PREFIX}.tag.uniq.bed ${EXP_PREFIX}.tag.uniq.rgb.bed
     fi
   done
 
-  if (( $REP > 1 )); then
+  if (( $REP_NUM > 1 )); then
     cat ${EXP_PREFIX}*.tag.uniq.rgb.bed > ${POOL_PREFIX}.pool.tag.uniq.rgb.bed
     cat ${EXP_PREFIX}*.tag.uniq.mutation.txt > ${POOL_PREFIX}.pool.tag.uniq.mutation.txt
   else

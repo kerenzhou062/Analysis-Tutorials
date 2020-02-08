@@ -46,10 +46,10 @@ if [[ $# == 0 ]]; then
   exit 2
 fi
 
-TEMP=`getopt -o hb:e:g:i:o:p:t: --long help,skip-mapping,skip-calling \
-  --long bowtie,STAR,PCR,keep-tmp-fastq \
-  --long input:,thread:,output:,exp-prefix:,pool-prefix:,index: \
-  --long longest-bed:,full-bed:,gtf:,repeat-bed:,barcode-length:,fasta: \
+TEMP=`getopt -o hb:e:g:i:o:p:t:, --long help,skip-mapping,skip-calling, \
+  --long bowtie,STAR,PCR,keep-tmp-fastq, \
+  --long input:,thread:,output:,exp-prefix:,pool-prefix:,index:, \
+  --long longest-bed:,full-bed:,gtf:,repeat-bed:,barcode-length:,fasta:, \
   -- "$@"`
 
 if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
