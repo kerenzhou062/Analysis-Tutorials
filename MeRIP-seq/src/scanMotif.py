@@ -29,6 +29,7 @@ parser.add_argument('-output', action='store', type=str, required=True,
 parser.add_argument('-keep', action='store_true',
                     default=False, help='keep duplicate output records')
 parser.add_argument('-tag', action='store', type=int, required=True,
+                    default=0,
                     help='tagged position in motif \
                     (eg. 3 for tagging A in RRACH)')
 
@@ -82,6 +83,10 @@ motifLength = len(args.motif)
 
 if bool(which('bedtools')) is False:
     print('Error: bedtools missing in path!')
+    sys.exit()
+
+if args.tag > motifLength and args.tag < 0:
+    print('Error: -tag larger than -motif!')
     sys.exit()
 
 # program start
@@ -143,6 +148,10 @@ getfastaCommand = 'bedtools getfasta -fi {fasta} \
 bedFasta = bytes.decode(subprocess.check_output(
     getfastaCommand, shell=True)).split('\n')
 
+tagMapDict = dict()
+tagMapDict['+'] = args.tag - 1
+tagMapDict['-'] = motifLength - args.tag
+
 recordDict = defaultdict(dict)
 with open(args.output, 'w') as out:
     row = ['#chrom', 'tagStart', 'tagEnd', 'motif-id', '1-based position',
@@ -167,29 +176,34 @@ with open(args.output, 'w') as out:
             strand = chromMapDict[key]['strand']
             for i in range(len(startList)):
                 matchEnd = startList[i] + motifLength
-                if strand == '+':
-                    motifStart = posMapDict[key][startList[i]]
-                else:
-                    matchStart = seqLength - startList[i] - motifLength
-                    motifStart = posMapDict[key][matchStart]
-                motifEnd = motifStart + motifLength
+                startFaPos = startList[i]
+                endFaPos = startList[i] + motifLength - 1
+                motifGStart = posMapDict[key][startFaPos]
+                motifGEnd = posMapDict[key][endFaPos] + 1
                 motifSeq = seqUpper[startList[i]:matchEnd]
                 motifSeqMask = seq[startList[i]:matchEnd]
-                if strand == '+':
-                    tagStart = motifStart + args.tag - 1
+                ## output
+                if args.tag == 0:
+                    motifName = '|'.join(
+                        [name, chrom, start, end, strand, str(i + 1)])
+                    row = [chrom, motifGStart, motifGEnd, motifName, '0',
+                           strand, chrom, start, end,
+                           motifSeq, motifSeqMask]
                 else:
-                    tagStart = motifStart + motifLength - args.tag
-                tagEnd = tagStart + 1
-                ## record coordinates
-                record = '\t'.join([chrom, str(tagStart), str(tagEnd), strand])
-                if record not in recordDict:
-                    recordDict[record] = 1
-                else:
-                    if args.keep is False:
-                        continue
-                tagName = '|'.join(
-                    [name, chrom, start, end, strand, str(i + 1)])
-                row = [chrom, tagStart, tagEnd, tagName, tagEnd,
-                       strand, chrom, motifStart, motifEnd,
-                       motifSeq, motifSeqMask]
+                    ## determin tag position
+                    tagStartFaPos = startFaPos + tagMapDict[strand]
+                    tagStart = posMapDict[key][tagStartFaPos]
+                    tagEnd = tagStart + 1
+                    ## record coordinates
+                    record = '\t'.join([chrom, str(tagStart), str(tagEnd), strand])
+                    if record not in recordDict:
+                        recordDict[record] = 1
+                    else:
+                        if args.keep is False:
+                            continue
+                    tagName = '|'.join(
+                        [name, chrom, start, end, strand, str(i + 1)])
+                    row = [chrom, tagStart, tagEnd, tagName, tagEnd,
+                           strand, chrom, motifGStart, motifGEnd,
+                           motifSeq, motifSeqMask]
                 out.write('\t'.join(map(str, row)) + '\n')
