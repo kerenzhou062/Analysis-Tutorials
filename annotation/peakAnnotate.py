@@ -120,6 +120,12 @@ except ValueError as e:
     sys.stderr.write('Incorrect -kbTTS!')
     sys.exit()
 
+if args.extraAnno is None:
+    extraAnnoLen = 0
+
+if args.extraType is None:
+    extraTypeLen = 0
+
 if len(args.extraAnno) != len(args.extraType):
     sys.stderr.write('Incorrect -extraAnno and -extraType!')
     sys.exit()
