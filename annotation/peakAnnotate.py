@@ -130,7 +130,7 @@ if args.extraType is None:
 else:
     extraTypeLen = len(args.extraType)
 
-if len(extraAnnoLen) != len(args.extraType):
+if len(extraAnnoLen) != len(extraTypeLen):
     sys.stderr.write('Incorrect -extraAnno and -extraType!')
     sys.exit()
 
@@ -769,8 +769,8 @@ else:
     extraHeaderRow.append('ExtraOverlapLength')
 
 headerRow.extend(mainHeaderRow)
-if bool(args.extraAnno):
-    headerRow.extend(extraHeaderRow)
+headerRow.extend(extraHeaderRow)
+
 ## construct output contents
 outputRowList = [headerRow]
 for peakId in peakIdList:
