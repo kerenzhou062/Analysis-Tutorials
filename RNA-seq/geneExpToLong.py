@@ -41,6 +41,7 @@ sampleList = sorted(sampleDict.keys())
 expDict = defaultdict(dict)
 with open(args.input, 'r') as f:
     allSampleList = f.readline().strip().split('\t')[args.sampleCol:]
+    allSampleList = list(filter(lambda x:(bool(re.search(r'_CQV$', x)) is False), allSampleList))
     expLength = len(allSampleList)
     indexList = list()
     for i in range(expLength):
