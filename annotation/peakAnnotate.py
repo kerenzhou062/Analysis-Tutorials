@@ -130,7 +130,7 @@ if args.extraType is None:
 else:
     extraTypeLen = len(args.extraType)
 
-if len(extraAnnoLen) != len(extraTypeLen):
+if extraAnnoLen != extraTypeLen:
     sys.stderr.write('Incorrect -extraAnno and -extraType!')
     sys.exit()
 
