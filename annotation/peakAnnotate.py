@@ -122,11 +122,15 @@ except ValueError as e:
 
 if args.extraAnno is None:
     extraAnnoLen = 0
+else:
+    extraAnnoLen = len(args.extraAnno)
 
 if args.extraType is None:
     extraTypeLen = 0
+else:
+    extraTypeLen = len(args.extraType)
 
-if len(args.extraAnno) != len(args.extraType):
+if len(extraAnnoLen) != len(args.extraType):
     sys.stderr.write('Incorrect -extraAnno and -extraType!')
     sys.exit()
 
