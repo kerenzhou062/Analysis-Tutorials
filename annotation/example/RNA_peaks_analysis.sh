@@ -67,8 +67,8 @@ function peakFeatureStats {
           feature=$(NF-10);
         }
         featureArr[feature]+=1
+        sum += 1
       }
-      sum += 1
     }
     END{
       for(i=1;i<=asorti(featureArr,key);i++){
@@ -107,8 +107,8 @@ function peakGeneTypeStats {
           }
         }
         geneTypeArr[geneType]+=1
+        sum += 1
       }
-      sum += 1
     }
     END{
       for(i=1;i<=asorti(geneTypeArr,key);i++){

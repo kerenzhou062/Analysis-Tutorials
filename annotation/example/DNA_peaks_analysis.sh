@@ -74,8 +74,8 @@ function FeatureStats {
             feature=mainFeature;
           }
           featureArr[feature]+=1
+          sum += 1
         }
-        sum += 1
       }
       END{
         for(i=1;i<=asorti(featureArr,key);i++){
@@ -136,8 +136,8 @@ function GeneTypeStats {
             geneType=mainGeneClass;
           }
           geneTypeArr[geneType]+=1
+          sum += 1;
         }
-        sum += 1;
       }
       END{
         for(i=1;i<=asorti(geneTypeArr,key);i++){
