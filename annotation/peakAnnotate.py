@@ -395,7 +395,7 @@ bF = '-F ' + args.bF if bool(args.bF) else ''
 br = '-r ' + args.br if bool(args.br) else ''
 be = '-e ' + args.be if bool(args.be) else ''
 
-# construct bed6 from input
+# re-construct bed6 from input
 peakIdList = list()
 count = 1
 skipList = list()
@@ -504,7 +504,8 @@ for line in mainAnnoResList:
     geneType = txInfo[2]
     txId = txInfo[3]
     if args.matchid:
-        if bool(re.search(r'{0}'.format(peakId), bedAnnoRow[3])) is False:
+        originalPeakId = peakInfoDict[peakId][3]
+        if bool(re.search(r'{0}'.format(originalPeakId), bedAnnoRow[3])) is False:
             continue
     if args.mode == 'RNA':
         annoFeatureDict = exonFeatureDecode(bedAnnoRow, peakLocus, distBool=False)
@@ -769,7 +770,8 @@ else:
     extraHeaderRow.append('ExtraOverlapLength')
 
 headerRow.extend(mainHeaderRow)
-headerRow.extend(extraHeaderRow)
+if bool(args.extraAnno):
+    headerRow.extend(extraHeaderRow)
 
 ## construct output contents
 outputRowList = [headerRow]
@@ -891,7 +893,6 @@ for peakId in peakIdList:
             else:
                 appendRow = ['na' for i in range(12)]
                 appendRow[10] = str(1e10)
-            mainAnnoRow[-1] = str(-1)
         appendRow[4] = 'intergenic'
         appendRow[5] = 'intergenic'
         appendRow[8] = 'intergenic'
