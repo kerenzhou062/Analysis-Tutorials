@@ -230,7 +230,7 @@ echo -e '@CO\tLIBID:ENCLB175ZZZ
 
 # rename bam
 sortedGenomeBAM="${PREFIX}.genome.sorted.bam"
-txBAM="${PREFIX}.transcript.sorted.bam"
+sortedTxBAM="${PREFIX}.transcript.sorted.bam"
 
 if $SKIP_MAPPING; then
   echo "Skip mapping."
@@ -241,7 +241,7 @@ else
   echo "Finish mapping."
   echo "Rename output bam..."
   mv Aligned.sortedByCoord.out.bam ${sortedGenomeBAM}
-  mv Aligned.toTranscriptome.out.bam ${txBAM}
+  mv Aligned.toTranscriptome.out.bam ${sortedTxBAM}
   echo -e "index ${sortedGenomeBAM}..."
   samtools index -b ${sortedGenomeBAM}
 fi
@@ -327,17 +327,17 @@ else
   #### prepare for RSEM: sort transcriptome BAM to ensure the order of the reads, to make RSEM output (not pme) deterministic
   
   echo "Sorting toTranscriptome bam..."
-  mv ${txBAM} Tr.bam 
+  mv ${sortedTxBAM} Tr.bam 
   
   if [[ $SEQ_TYPE == "SE" ]]; then
     # single-end data
     cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | sort -S 90% -T ./ ) | \
-      samtools view -@ ${THREAD} -bS - > ${txBAM}
+      samtools view -@ ${THREAD} -bS - > ${sortedTxBAM}
   else
     # paired-end data, merge mates into one line before sorting, and un-merge after sorting
     cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | \
       awk '{printf "%s", $0 " "; getline; print}' | sort -S 90% -T ./ | tr ' ' '\n' ) | \
-      samtools view -@ $THREAD -bS - > ${txBAM}
+      samtools view -@ $THREAD -bS - > ${sortedTxBAM}
   fi
   ## delete temp bam
   rm -f Tr.bam
@@ -383,7 +383,7 @@ else
   ###### RSEM command
   echo "$RSEM $RSEMparCommon $RSEMparRun "
   echo "  $RSEMparType Aligned.toTranscriptome.out.bam $RSEM_GENOME_DIR Quant >& Log.rsem"
-  $RSEM $RSEMparCommon $RSEMparRun $RSEMparType ${txBAM} $RSEM_GENOME_DIR Quant >& Log.rsem
+  $RSEM $RSEMparCommon $RSEMparRun $RSEMparType ${sortedTxBAM} $RSEM_GENOME_DIR Quant >& Log.rsem
   
   ###### RSEM diagnostic plot creation
   # Notes:
