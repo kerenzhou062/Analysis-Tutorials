@@ -180,6 +180,14 @@ with open(args.output, 'w') as out:
                 endFaPos = startList[i] + motifLength - 1
                 motifGStart = posMapDict[key][startFaPos]
                 motifGEnd = posMapDict[key][endFaPos] + 1
+                tagStartFaPos = startFaPos + args.tag - 1
+                if strand == '-':
+                    tagStartFaPos = startFaPos + args.tag - 1
+                    tagStartFaPos = seqLength - 1 - tagStartFaPos
+                    startFaPos = seqLength - 1 - startFaPos
+                    endFaPos = seqLength - 1 - endFaPos
+                    motifGStart = posMapDict[key][endFaPos]
+                    motifGEnd = posMapDict[key][startFaPos] + 1
                 motifSeq = seqUpper[startList[i]:matchEnd]
                 motifSeqMask = seq[startList[i]:matchEnd]
                 ## output
@@ -191,7 +199,6 @@ with open(args.output, 'w') as out:
                            motifSeq, motifSeqMask]
                 else:
                     ## determin tag position
-                    tagStartFaPos = startFaPos + tagMapDict[strand]
                     tagStart = posMapDict[key][tagStartFaPos]
                     tagEnd = tagStart + 1
                     ## record coordinates
