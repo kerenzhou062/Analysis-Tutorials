@@ -72,7 +72,7 @@ OUTPUT_DIR=
 STAR_GENOME_DIR=
 RSEM_GENOME_DIR=
 MAX_MISMATCH=0.04
-SEQ_TYPE="str_PE"
+SEQ_TYPE=
 READ1=
 READ2=""
 STRANDEDNESS="none"
@@ -229,8 +229,8 @@ echo -e '@CO\tLIBID:ENCLB175ZZZ
 @CO\tSPIKEID:ENCFF001RTP VN:Ambion-ERCC Mix, Cat no. 445670' > commentsENCODElong.txt
 
 # rename bam
-sortedGenomeBAM="${PREFIX}.sortedByCoord.out.bam"
-txBAM="${PREFIX}.toTranscriptome.out.bam"
+sortedGenomeBAM="${PREFIX}.genome.sorted.bam"
+txBAM="${PREFIX}.transcript.sorted.bam"
 
 if $SKIP_MAPPING; then
   echo "Skip mapping."
