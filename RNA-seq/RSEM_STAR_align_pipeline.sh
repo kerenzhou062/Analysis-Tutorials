@@ -168,10 +168,6 @@ echo "SKIP_RSEM=$SKIP_RSEM"
 echo "ZCAT_FLAG=$ZCAT_FLAG"
 echo ""
 
-# executables
-STAR=STAR
-RSEM=rsem-calculate-expression
-
 zcatCommand=""
 if $ZCAT_FLAG; then
   zcatCommand="--readFilesCommand zcat"
@@ -236,12 +232,14 @@ if $SKIP_MAPPING; then
   echo "Skip mapping."
 else
   ###### STAR command
-  echo $STAR $STARparCommon $STARparRun $STARparBAM $STARparStrand $STARparsMeta
-  $STAR $STARparCommon $STARparRun $STARparBAM $STARparStrand $STARparsMeta
+  echo "STAR $STARparCommon $STARparRun $STARparBAM $STARparStrand $STARparsMeta"
+  STAR $STARparCommon $STARparRun $STARparBAM $STARparStrand $STARparsMeta
+
   echo "Finish mapping."
   echo "Rename output bam..."
   mv Aligned.sortedByCoord.out.bam ${sortedGenomeBAM}
   mv Aligned.toTranscriptome.out.bam ${sortedTxBAM}
+
   echo -e "index ${sortedGenomeBAM}..."
   samtools index -b ${sortedGenomeBAM}
 fi
@@ -254,9 +252,9 @@ else
   # working subdirectory for this STAR run
   mkdir Signal_RAW
   
-  echo "$STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} "
+  echo "STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} "
   echo "  --outWigType bedGraph $STARparWig --outWigNorm None --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr"
-  $STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} \
+  STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} \
     --outWigType bedGraph $STARparWig --outWigNorm None --outFileNamePrefix ./Signal_RAW/ --outWigReferencesPrefix chr
   
   echo "Generating bedGraph signal tracks nomalized by RPM..."
@@ -264,9 +262,9 @@ else
   # working subdirectory for this STAR run
   mkdir Signal_RPM
   
-  echo "$STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} "
+  echo "STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} "
   echo "  --outWigType bedGraph $STARparWig --outWigNorm RPM --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr"
-  $STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} \
+  STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} \
     --outWigType bedGraph $STARparWig --outWigNorm RPM --outFileNamePrefix ./Signal_RPM/ --outWigReferencesPrefix chr
   
   echo "Converting bedGraph tracks to bigWig tracks..."
@@ -302,10 +300,10 @@ else
       do
         ## raw counts 
         grep ^chr ./Signal_RAW/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -S 90% -k1,1 -k2,2n > sig.tmp
-        $bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.raw.bw
+        bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.raw.bw
         ## RPM 
         grep ^chr ./Signal_RPM/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -S 90% -k1,1 -k2,2n > sig.tmp
-        $bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.rpm.bw
+        bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.rpm.bw
       done
     done
   fi
@@ -381,9 +379,9 @@ else
   fi
   
   ###### RSEM command
-  echo "$RSEM $RSEMparCommon $RSEMparRun "
-  echo "  $RSEMparType Aligned.toTranscriptome.out.bam $RSEM_GENOME_DIR Quant >& Log.rsem"
-  $RSEM $RSEMparCommon $RSEMparRun $RSEMparType ${sortedTxBAM} $RSEM_GENOME_DIR Quant >& Log.rsem
+  echo "rsem-calculate-expression $RSEMparCommon $RSEMparRun "
+  echo "  $RSEMparType ${sortedTxBAM} $RSEM_GENOME_DIR Quant >& Log.rsem"
+  rsem-calculate-expression $RSEMparCommon $RSEMparRun $RSEMparType ${sortedTxBAM} $RSEM_GENOME_DIR Quant >& Log.rsem
   
   ###### RSEM diagnostic plot creation
   # Notes:
@@ -412,7 +410,7 @@ rename "Log." "${PREFIX}.Log." *.out
 
 getStarMapStats.py -input "${PREFIX}.Log.final.out" -output "${PREFIX}.map.stats.matrix"
 
-drawPiecChart.R --input "${PREFIX}.map.stats.matrix" --output "${PREFIX}.map.stats.pdf" \
+drawPieChart.R --input "${PREFIX}.map.stats.matrix" --output "${PREFIX}.map.stats.pdf" \
   --title "Genome Mapping Statistics" --label type --value count
 
 echo "RSEM_STAR pipeline done."
