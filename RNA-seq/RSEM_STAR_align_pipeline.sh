@@ -42,7 +42,7 @@ function showHelp {
     --disable-bw: do not generate bigWig files <str>
     --set-empty: delete whole folder before running <bool>
     --skip-mapping: skip reads mapping step <bool>
-    --skip-txsort: skip toTranscriptome.out.bam sorting step <bool>
+    --skip-txsort: skip *transcript.sorted.bam sorting step <bool>
     --skip-rsem: skip RSEM expression calculating step <bool>
     --zcat-flag: set if the input fastq <bool>"
   exit 2;
@@ -409,5 +409,10 @@ mv SJ.out.tab "${PREFIX}.SJ.out.tab"
 
 rename "Aligned." "${PREFIX}." *.out
 rename "Log." "${PREFIX}.Log." *.out
+
+getStarMapStats.py -input "${PREFIX}.Log.final.out" -output "${PREFIX}.map.stats.matrix"
+
+drawPiecChart.R --input "${PREFIX}.map.stats.matrix" --output "${PREFIX}.map.stats.pdf" \
+  --title "Genome Mapping Statistics" --label type --value count
 
 echo "RSEM_STAR pipeline done."
