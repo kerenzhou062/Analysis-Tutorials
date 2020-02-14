@@ -299,10 +299,10 @@ else
       for imult in Unique UniqueMultiple
       do
         ## raw counts 
-        grep ^chr ./Signal_RAW/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -S 90% -k1,1 -k2,2n > sig.tmp
+        grep ^chr ./Signal_RAW/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -S 80% -k1,1 -k2,2n > sig.tmp
         bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.raw.bw
         ## RPM 
-        grep ^chr ./Signal_RPM/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -S 90% -k1,1 -k2,2n > sig.tmp
+        grep ^chr ./Signal_RPM/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -S 80% -k1,1 -k2,2n > sig.tmp
         bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.rpm.bw
       done
     done
@@ -324,17 +324,17 @@ if $SKIP_TX_SORT; then
 else
   #### prepare for RSEM: sort transcriptome BAM to ensure the order of the reads, to make RSEM output (not pme) deterministic
   
-  echo "Sorting toTranscriptome bam..."
+  echo "Sorting transcript.sorted bam..."
   mv ${sortedTxBAM} Tr.bam 
   
   if [[ $SEQ_TYPE == "SE" ]]; then
     # single-end data
-    cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | sort -S 90% -T ./ ) | \
+    cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | sort -S 80% -T ./ ) | \
       samtools view -@ ${THREAD} -bS - > ${sortedTxBAM}
   else
     # paired-end data, merge mates into one line before sorting, and un-merge after sorting
     cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | \
-      awk '{printf "%s", $0 " "; getline; print}' | sort -S 90% -T ./ | tr ' ' '\n' ) | \
+      awk '{printf "%s", $0 " "; getline; print}' | sort -S 80% -T ./ | tr ' ' '\n' ) | \
       samtools view -@ $THREAD -bS - > ${sortedTxBAM}
   fi
   ## delete temp bam
