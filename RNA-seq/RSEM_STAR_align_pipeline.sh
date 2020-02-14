@@ -360,7 +360,7 @@ else
   
   mb_memory=$((MEMORY*1000))
   # RSEM parameters: run-time, number of threads and RAM in MB
-  RSEMparRun=" -p $THREAD --ci-memory ${MEMORY} "
+  RSEMparRun=" -p $THREAD --ci-memory ${mb_memory} "
   
   # RSEM parameters: data type dependent
   
