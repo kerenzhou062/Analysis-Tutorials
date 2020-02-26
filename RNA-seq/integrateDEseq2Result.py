@@ -4,7 +4,6 @@ import sys
 import argparse
 import re
 from glob import glob
-import math
 from collections import defaultdict
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -92,14 +91,17 @@ for i in range(len(deFileList)):
             fc_val = row[2]
             if (args.nonLog2):
                 fc_val = 2 ** float(fc_val)
-                fc_val = str(round(12.3456, 4))
+                fc_val = str(round(fc_val, 4))
             pval = '1' if row[4] == 'NA' else row[4]
             adjp = '1' if row[5] == 'NA' else row[5]
             deDict[geneId][sampleName] = [fc_val, pval, adjp]
 
 with open (args.output, 'w') as out:
     row = ['gene_id', 'baseMean']
-    row.extend(['log2FC_' + x for x in sampleNameList])
+    if (args.nonLog2) :
+        row.extend(['FC_' + x for x in sampleNameList])
+    else:
+        row.extend(['log2FC_' + x for x in sampleNameList])
     row.extend(['pval_' + x for x in sampleNameList])
     row.extend(['adjp_' + x for x in sampleNameList])
     out.write('\t'.join(row) + '\n')

@@ -278,10 +278,10 @@ else
     for imult in Unique UniqueMultiple
     do
       ## raw counts 
-      grep ^chr ./Signal_RAW/Signal.$imult.str1.out.bg | LC_COLLATE=C sort -S 90% -k1,1 -k2,2n > sig.tmp
+      grep ^chr ./Signal_RAW/Signal.$imult.str1.out.bg | LC_COLLATE=C sort -S 10G -k1,1 -k2,2n > sig.tmp
       bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.raw.bw
       ## RPM 
-      grep ^chr ./Signal_RPM/Signal.$imult.str1.out.bg | LC_COLLATE=C sort -S 90% -k1,1 -k2,2n > sig.tmp
+      grep ^chr ./Signal_RPM/Signal.$imult.str1.out.bg | LC_COLLATE=C sort -S 10G -k1,1 -k2,2n > sig.tmp
       bedGraphToBigWig sig.tmp chrNL.txt  Signal.$imult.unstranded.rpm.bw
     done
   else
@@ -299,10 +299,10 @@ else
       for imult in Unique UniqueMultiple
       do
         ## raw counts 
-        grep ^chr ./Signal_RAW/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -S 80% -k1,1 -k2,2n > sig.tmp
+        grep ^chr ./Signal_RAW/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -S 10G -k1,1 -k2,2n > sig.tmp
         bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.raw.bw
         ## RPM 
-        grep ^chr ./Signal_RPM/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -S 80% -k1,1 -k2,2n > sig.tmp
+        grep ^chr ./Signal_RPM/Signal.$imult.str${istr}.out.bg | LC_COLLATE=C sort -S 10G -k1,1 -k2,2n > sig.tmp
         bedGraphToBigWig sig.tmp  chrNL.txt Signal.$imult.${str[istr]}.rpm.bw
       done
     done
@@ -329,12 +329,12 @@ else
   
   if [[ $SEQ_TYPE == "SE" ]]; then
     # single-end data
-    cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | sort -S 80% -T ./ ) | \
+    cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | sort -S 10G -T ./ ) | \
       samtools view -@ ${THREAD} -bS - > ${sortedTxBAM}
   else
     # paired-end data, merge mates into one line before sorting, and un-merge after sorting
     cat <( samtools view -H Tr.bam ) <( samtools view -@ ${THREAD} Tr.bam | \
-      awk '{printf "%s", $0 " "; getline; print}' | sort -S 80% -T ./ | tr ' ' '\n' ) | \
+      awk '{printf "%s", $0 " "; getline; print}' | sort -S 10G -T ./ | tr ' ' '\n' ) | \
       samtools view -@ $THREAD -bS - > ${sortedTxBAM}
   fi
   ## delete temp bam

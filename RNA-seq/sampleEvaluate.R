@@ -117,8 +117,6 @@ if ( is.null(args$poiHeatmap) ) { args$glmPca = FALSE }
 if ( is.null(args$prefix) ) { args$prefix = 'result' }
 if ( is.null(args$output) ) { args$output = './' }
 if ( is.null(args$keepSpike) ) { args$keepSpike = FALSE }
-if ( is.null(args$autoBatch) ) { args$autoBatch = FALSE }
-if ( is.null(args$ruvgCount) ) { args$ruvgCount = 5 }
 
 # load arguments
 geneCountMtx <- args$counts
@@ -162,7 +160,7 @@ if(! keepSpike){
   cts <- cts[genes,]
 }
 
-designFormula <- as.formula(paste("~ ", design1, sep=" "))
+designFormula <- as.formula(paste("~ ", design1, sep=""))
 
 dds <- DESeqDataSetFromMatrix(countData = cts,
                               colData = colData,
@@ -170,9 +168,9 @@ dds <- DESeqDataSetFromMatrix(countData = cts,
 
 featureData <- data.frame(gene=rownames(cts))
 mcols(dds) <- DataFrame(mcols(dds), featureData)
+
 # runing DESeq
 dds <- DESeq(dds, test=test)
-
 
 # use the Poisson Distance to calculate sample distance 
 suppressMessages(library("pheatmap"))
