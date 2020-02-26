@@ -24,7 +24,7 @@ parser.add_argument('-be', action='store', type=str,
                     help='bedtools: -e')
 parser.add_argument('-codon', action='store', type=str,
                     help='<int#1,int#2>#1 bp upstream and #2 bp downstream start/stop codon as their feature')
-parser.add_argument('--disablePeakUniq', action='store_true',
+parser.add_argument('--keepAll', action='store_true',
                     default=False,
                     help='output multiple records for same peak')
 parser.add_argument('-extraAnno', nargs='*', type=str,
@@ -199,7 +199,6 @@ def annoPeak(mode, peakBed, annoBed, bf, bF, br, be, bs, annoType):
                 -wa -wb {bf} {bF} {br} {be}'.format(**vars())
             annoResList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
         else:
-            annoExtBedTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
             ## extract TSS
             awkCommand = 'awk \'BEGIN{OFS="\t";FS="\t"}{if($6=="+"){\
                 print($1,$2,$2+1,$4":TSS:"$2,$5,$6)}else{print($1,$3-1,$3,$4":TSS:"$3-1,$5,$6)}}\' ' + annoBed
@@ -427,7 +426,6 @@ with open(args.input, 'r') as f, open(peakBed6Tmp.name, 'w') as temp:
         bed6Line = '\t'.join(row[:6]) + '\n'
         temp.write(bed6Line)
         count += 1
-peakBed6Tmp.seek(0)
 
 # running main annotation
 mainAnnoResList = annoPeak('RNA', peakBed6Tmp.name, mainAnno, bf, bF, br, be, bs, 'gene')
@@ -569,12 +567,15 @@ for peakId in mainAnnoPeakDict.keys():
         txId = txList[label]
         geneFeatureDict[geneId]['txId'] = txId
         txType = txDict[txId]['txType']
+        geneType = txDict[txId]['geneType']
         geneFeatureDict[geneId]['txName'] = txDict[txId]['txName']
         geneFeatureDict[geneId]['txType'] = txType
         geneFeatureDict[geneId]['geneName'] = txDict[txId]['geneName']
-        geneFeatureDict[geneId]['geneType'] = txDict[txId]['geneType']
+        geneFeatureDict[geneId]['geneType'] = geneType
         if txType in geneClassDict:
             geneFeatureDict[geneId]['geneClass'] = geneClassDict[txType]
+        elif geneType in geneClassDict:
+            geneFeatureDict[geneId]['geneClass'] = geneClassDict[geneType]
         else:
             geneFeatureDict[geneId]['geneClass'] = 'other'
         ## get final feature
@@ -586,7 +587,7 @@ for peakId in mainAnnoPeakDict.keys():
         else:
             geneFeatureDict[geneId]['distance'] = annoFeatureDictList[label]['distance']
     ## store final annotation as dict
-    if args.disablePeakUniq:
+    if args.keepAll:
         annoPeakDict[peakId]['mainAnno'] = geneFeatureDict
     else:
         ## make meta-gene unique
@@ -696,7 +697,7 @@ if bool(args.extraAnno):
     ## make peak-gene uniq
     ## order by extraAnnoType, max(overlapLength)|(distance)
     for peakId in extraAnnoPeakDict.keys():
-        if args.disablePeakUniq:
+        if args.keepAll:
             annoPeakDict[peakId]['extraAnno'] = extraAnnoPeakDict[peakId]
         else:
             tempDict = extraAnnoPeakDict[peakId]
