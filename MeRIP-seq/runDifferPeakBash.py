@@ -34,7 +34,7 @@ parser.add_argument('-output', action='store', type=str,
                     default='./',
                     help='output folder')
 parser.add_argument('-package', action='store', type=str,
-                    choices=['exomepeak', 'QNB'],
+                    choices=['exomePeak', 'QNB'],
                     default='QNB',
                     help='package for detection of differential methylated peaks')
 parser.add_argument('-prefix', action='store', type=str,
@@ -42,6 +42,9 @@ parser.add_argument('-prefix', action='store', type=str,
 parser.add_argument('-script', action='store', type=str,
                     default='./',
                     help='directory for storing scripts')
+parser.add_argument('--rdata', action='store_true',
+                    default=False,
+                    help='load exomePeakRes.RData from output directory instead')
 parser.add_argument('-treat', action='store', type=str,
                     required=True,
                     help='keyword for treatment samples')
@@ -97,6 +100,11 @@ for bamFile in bamFiles:
         else:
             treatBamDict['input'].append(bamFile)
 
+if args.rdata:
+    rdata = 'TRUE'
+else:
+    rdata = 'FALSE'
+
 qnbRTemplate = '''#!/usr/bin/env Rscript
 #QNB Script
 #R script
@@ -115,15 +123,8 @@ getCounts <- function(bamList, peak, exonRangesObj, countsObj) {{
   for (i in 1:length(bamList)) {{
     bam <- bamList[i]
     aligns <- readGAlignments(bam)
-    para <- ScanBamParam(what="mapq")
-    mapq <- scanBam(bam, param=para)[[1]][[1]]
-    # filter reads with mapq smaller than 30.
-    mapq[is.na(mapq)] <- 255  # Note: mapq "NA" means mapq = 255
-    IDKeep <- (mapq >30)
-    filtered <- aligns[IDKeep]
-    id <- countOverlaps(filtered,exonRangesObj)
-    txFilteredAligns <- filtered[id>0]
-    #counts <- countOverlaps(peak, filtered)
+    id <- countOverlaps(aligns,exonRangesObj)
+    txFilteredAligns <- aligns[id>0]
     countsObj[,i] <- countOverlaps(peak, txFilteredAligns)
   }}
   return(countsObj)
@@ -145,16 +146,20 @@ IP_BAM <- c({controlIpBams}, {treadIpBams})
 INPUT_BAM <- c({controlInputBams}, {treadInputBams})
 
 # running exomePeak
-res = exomepeak(GENE_ANNO_GTF=GENE_ANNO_GTF, IP_BAM=IP_BAM, INPUT_BAM=INPUT_BAM)
-
-save(res,file='exomePeakRes.RData')
+rdataFlag <- {rdata}
+if (isTRUE(rdataFlag)) {{
+  load("exomePeakRes.RData")
+}}else{{
+  res <- exomepeak(GENE_ANNO_GTF=GENE_ANNO_GTF, IP_BAM=IP_BAM, INPUT_BAM=INPUT_BAM)
+  save(res, file='exomePeakRes.RData')
+}}
 
 #get reads count
-peak=res$all_peaks
-untreated_ip=matrix(0,nrow=length(peak),ncol=length(UNTREATED_IP_BAM))
-untreated_input=matrix(0,nrow=length(peak),ncol=length(UNTREATED_INPUT_BAM))
-treated_ip=matrix(0,nrow=length(peak),ncol=length(TREATED_IP_BAM))
-treated_input=matrix(0,nrow=length(peak),ncol=length(TREATED_INPUT_BAM))
+peak <- res$all_peaks
+untreated_ip <- matrix(0,nrow=length(peak),ncol=length(UNTREATED_IP_BAM))
+untreated_input <- matrix(0,nrow=length(peak),ncol=length(UNTREATED_INPUT_BAM))
+treated_ip <- matrix(0,nrow=length(peak),ncol=length(TREATED_IP_BAM))
+treated_input <- matrix(0,nrow=length(peak),ncol=length(TREATED_INPUT_BAM))
 
 txdb <- makeTxDbFromGFF(file=GENE_ANNO_GTF, format="gtf")
 exonRanges <- exonsBy(txdb, "tx")
@@ -176,17 +181,13 @@ treated_input <- getCounts(TREATED_INPUT_BAM, peak, exonRanges, treated_input)
 #differential RNA methylation analysis
 result = qnbtest(untreated_ip, treated_ip, untreated_input, treated_input)
 
-##rename and remove files
+##paste files
 setwd(resDir)
 
-file.rename("./exomePeak_output/con_sig_diff_peak.bed", "./{prefix}.con_sig_diff_peak.bed")
-file.rename("./exomePeak_output/con_sig_diff_peak.xls", "./{prefix}.con_sig_diff_peak.xls")
-file.rename("./exomePeak_output/diff_peak.bed", "./{prefix}.diff_peak.bed")
-file.rename("./exomePeak_output/diff_peak.xls", "./{prefix}.diff_peak.xls")
-file.rename("./exomePeak_output/sig_diff_peak.bed", "./{prefix}.sig_diff_peak.bed")
-file.rename("./exomePeak_output/sig_diff_peak.xls", "./{prefix}.sig_diff_peak.xls")
-file.rename("./exomePeak_output/exomePeak.Rdata", "./{prefix}.exomePeak.Rdata")
-file.remove("./exomePeak_output")
+allPeakFile <- "exomePeak_output/peak.xls"
+qnbResult <- "dif_meth.xls"
+awkMain <- '{{if(FNR==1){{$0=gensub(/"/,"","g",$0)}}print}}'
+system(paste("paste", "-d", "$'\\t'", allPeakFile, qnbResult, "|", "awk", "'", awkMain, "'", ">", "{prefix}.diff.xls", sep=" "))
 
 sessionInfo()
 '''
@@ -204,10 +205,10 @@ setwd(base)
 GENE_ANNO_GTF = "{gtf}"
 # differential peak calling
 
-IP_BAM=c({controlIpBams}),
-INPUT_BAM=c({controlInputBams}),
-TREATED_IP_BAM=c({treadIpBams}),
-TREATED_INPUT_BAM=c({treadInputBams}))
+IP_BAM=c({controlIpBams})
+INPUT_BAM=c({controlInputBams})
+TREATED_IP_BAM=c({treadIpBams})
+TREATED_INPUT_BAM=c({treadInputBams})
 
 resDir = file.path('{output}', '{prefix}')
 dir.create(resDir, showWarnings = FALSE)
@@ -218,12 +219,12 @@ result = exomepeak(GENE_ANNO_GTF=GENE_ANNO_GTF,
     TREATED_IP_BAM=TREATED_IP_BAM, TREATED_INPUT_BAM=TREATED_INPUT_BAM)
 
 ##rename and remove files
-file.rename("./exomePeak_output/con_sig_diff_peak.bed", "./{prefix}.con_sig_diff_peak.bed")
-file.rename("./exomePeak_output/con_sig_diff_peak.xls", "./{prefix}.con_sig_diff_peak.xls")
-file.rename("./exomePeak_output/diff_peak.bed", "./{prefix}.diff_peak.bed")
-file.rename("./exomePeak_output/diff_peak.xls", "./{prefix}.diff_peak.xls")
-file.rename("./exomePeak_output/sig_diff_peak.bed", "./{prefix}.sig_diff_peak.bed")
-file.rename("./exomePeak_output/sig_diff_peak.xls", "./{prefix}.sig_diff_peak.xls")
+file.rename("./exomePeak_output/con_sig_peak.bed", "./{prefix}.con_sig_peak.bed")
+file.rename("./exomePeak_output/con_sig_peak.xls", "./{prefix}.con_sig_peak.xls")
+file.rename("./exomePeak_output/peak.bed", "./{prefix}.peak.bed")
+file.rename("./exomePeak_output/peak.xls", "./{prefix}.peak.xls")
+file.rename("./exomePeak_output/sig_peak.bed", "./{prefix}.sig_peak.bed")
+file.rename("./exomePeak_output/sig_peak.xls", "./{prefix}.sig_peak.xls")
 file.rename("./exomePeak_output/exomePeak.Rdata", "./{prefix}.exomePeak.Rdata")
 file.remove("./exomePeak_output")
 
