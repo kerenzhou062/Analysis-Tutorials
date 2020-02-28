@@ -73,7 +73,7 @@ with open(args.treat, 'r') as f, open(treatPeakTmp.name, 'w') as temp:
         row = line.strip().split('\t')
         if float(row[12]) > pval:
             continue
-        if float(row[13]) > pval:
+        if float(row[13]) > fdr:
             continue
         if float(row[14]) < fold:
             continue
@@ -92,8 +92,8 @@ for line in controlUniqPeakList:
     if bool(line) is False:
         continue
     row = line.strip().split('\t')
-    pvalLog = "-100"
-    fdrLog = "-100"
+    pvalLog = row[12]
+    fdrLog = row[13]
     log2fc = "-99"
     row = row + [fdrLog, pvalLog, log2fc]
     combineRow.append(row)
@@ -102,8 +102,8 @@ for line in treatUniqPeakList:
     if bool(line) is False:
         continue
     row = line.strip().split('\t')
-    pvalLog = "-100"
-    fdrLog = "-100"
+    pvalLog = row[12]
+    fdrLog = row[13]
     log2fc = "99"
     row = row + [fdrLog, pvalLog, log2fc]
     combineRow.append(row)
