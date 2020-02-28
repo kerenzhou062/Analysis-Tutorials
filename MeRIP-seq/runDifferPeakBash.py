@@ -219,13 +219,12 @@ result = exomepeak(GENE_ANNO_GTF=GENE_ANNO_GTF,
     TREATED_IP_BAM=TREATED_IP_BAM, TREATED_INPUT_BAM=TREATED_INPUT_BAM)
 
 ##rename and remove files
-file.rename("./exomePeak_output/con_sig_peak.bed", "./{prefix}.con_sig_peak.bed")
-file.rename("./exomePeak_output/con_sig_peak.xls", "./{prefix}.con_sig_peak.xls")
-file.rename("./exomePeak_output/peak.bed", "./{prefix}.peak.bed")
-file.rename("./exomePeak_output/peak.xls", "./{prefix}.peak.xls")
-file.rename("./exomePeak_output/sig_peak.bed", "./{prefix}.sig_peak.bed")
-file.rename("./exomePeak_output/sig_peak.xls", "./{prefix}.sig_peak.xls")
-file.rename("./exomePeak_output/exomePeak.Rdata", "./{prefix}.exomePeak.Rdata")
+file.rename("./exomePeak_output/con_sig_diff_peak.bed", "./{prefix}.con_sig_diff_peak.bed")
+file.rename("./exomePeak_output/con_sig_diff_peak.xls", "./{prefix}.con_sig_diff_peak.xls")
+file.rename("./exomePeak_output/diff_peak.bed", "./{prefix}.diff_peak.bed")
+file.rename("./exomePeak_output/diff_peak.xls", "./{prefix}.diff_peak.xls")
+file.rename("./exomePeak_output/sig_diff_peak.bed", "./{prefix}.sig_diff_peak.bed")
+file.rename("./exomePeak_output/sig_diff_peak.xls", "./{prefix}.sig_diff_peak.xls")
 file.remove("./exomePeak_output")
 
 sessionInfo()
@@ -262,7 +261,7 @@ with open(runRScript, 'w') as runRScriptO:
         runRScriptO.write(exompeakRTemplate.format(**vars()))
 os.chmod(runRScript, 0o755)
 
-runBashScript = os.path.join(script, prefix + ".DifferPeak.sh")
+runBashScript = os.path.join(script, prefix + ".{package}.DifferPeak.sh".format(**vars()))
 with open(runBashScript, 'w') as runBashScriptO:
     runBashScriptO.write(sbatchTemplate.format(**vars()))
 
