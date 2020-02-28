@@ -6,7 +6,6 @@ import re
 from glob import glob
 from collections import defaultdict
 from itertools import combinations
-from PubAlbum import Anno
 
 #usage: runExomePeakBash.py or runExomePeakBash.py <bam dir>
 
@@ -24,6 +23,8 @@ parser.add_argument('-log', action='store', type=str,
                     help='log directory')
 parser.add_argument('-memory', action='store', type=str,
                     default='50G', help='memory used for sbatch')
+parser.add_argument('-allRep', action='store_true',
+                    default=False, help='run with only on all relicates')
 parser.add_argument('-output', action='store', type=str,
                     default='./',
                     help='output folder')
@@ -136,17 +137,20 @@ with open(runBashScript, 'w') as runBashScriptO:
         if len(IPRepList) == len(inputRepList):
             repDict = defaultdict(dict)
             for rep in IPRepList:
-                repNum = re.findall(r'rep(\w+)', rep)[0]
+                repNum = int(re.findall(r'rep(\w+)', rep)[0])
                 repDict[repNum]['IP'] = bamDict[baseExpName]['IP'][rep]
                 repDict[repNum]['input'] = bamDict[baseExpName]['input'][rep]
             repNumList = sorted(repDict.keys())
             combinList = list()
             #generate combinations: [('1',), ('2',), ('1', '2')]
-            for i in list(range(1, len(repNumList)+1)):
-                combinList.extend(list(combinations(repNumList, i)))
+            if args.allRep:
+                combinList.append(set(repNumList))
+            else:
+                for i in list(range(1, len(repNumList)+1)):
+                    combinList.extend(list(combinations(repNumList, i)))
             for combin in combinList:
                 combin = list(combin)
-                combinName = '-'.join(combin)
+                combinName = '-'.join(map(str, combin))
                 #HepG2_control_exomePeak_rep_1
                 rScriptBasename = '_'.join([baseExpName, 'rep' + combinName])
                 rScript = os.path.join(bashDir, rScriptBasename+'.r')
