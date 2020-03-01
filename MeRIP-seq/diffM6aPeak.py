@@ -3,6 +3,7 @@ import os
 import sys
 import argparse
 import re
+from glob import glob
 from collections import defaultdict
 import tempfile
 import subprocess
@@ -33,13 +34,51 @@ parser.add_argument('-q', '--fdr', action='store', type=float,
 parser.add_argument('-o', '--output', action='store', type=str,
                     required=True,
                     help='the output peak.custom.diff.xls')
+parser.add_argument('--grepKept', action='store', type=str,
+                    help='regex for keeping files')
+parser.add_argument('--grepExpel', action='store', type=str,
+                    help='regex for filtering files')
+parser.add_argument('--bamdir', action='store', type=str,
+                    help='input sorted bam directory')
+parser.add_argument('--cntbam', action='store', type=str,
+                    help='keyword for bams of control samples')
+parser.add_argument('--trtbam', action='store', type=str,
+                    help='keyword for bams of treatment samples')
 
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
     parser.print_help()
     parser.exit()
 
+def buildBamDict(filter, bamFileList):
+    bamDict = defaultdict(list)
+    bamRegex = re.compile(r'{0}'.format(filter))
+    for bamFile in bamFileList:
+        fileName = os.path.split(bamFile)[-1]
+        if bool(regex):
+            if kept:
+                if bool(regex.search(fileName)) is False:
+                    continue
+            else:
+                if bool(regex.search(fileName)) is True:
+                    continue
+        if bool(bamRegex.search(fileName)) is True:
+            if re.search(r'IP', fileName, flags=re.IGNORECASE):
+                bamDict['IP'].append(bamFile)
+            else:
+                bamDict['input'].append(bamFile)
+    return bamDict
+
 ##public arguments
+if bool(args.grepKept):
+    kept = True
+    regex = re.compile(r'{0}'.format(args.grepKept))
+elif bool(args.grepExpel):
+    kept = False
+    regex = re.compile(r'{0}'.format(args.grepExpel))
+else:
+    regex = False
+
 if bool(args.diff):
     if args.package == 'QNB':
         pvalDiff = args.pval
@@ -87,7 +126,7 @@ treatUniqPeakList = bytes.decode(subprocess.check_output(command, shell=True)).s
 controlPeakTmp.close()
 treatPeakTmp.close()
 
-combineRow = [nameRow]
+combineRow = list()
 for line in controlUniqPeakList:
     if bool(line) is False:
         continue
@@ -140,6 +179,76 @@ if bool(args.diff):
             if float(row[16]) <= pvalDiff and float(row[15]) <= fdrDiff:
                 combineRow.append(row)
 
-with open(args.output, 'w') as out:
-    for row in combineRow:
-        out.write('\t'.join(row) + '\n')
+if bool(args.bamdir):
+    cntBamDict = defaultdict(list)
+    trtBamDict = defaultdict(list)
+    bamFileList = sorted(glob(os.path.join(args.bamdir, '**', '*.bam'), recursive=True))
+    if bool(args.cntbam):
+        cntBamDict = buildBamDict(args.cntbam, bamFileList)
+    if bool(args.trtbam):
+        trtBamDict = buildBamDict(args.trtbam, bamFileList)
+
+    peakTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+    peakIdList = list()
+    peakReadsDict = defaultdict(dict)
+    with open(peakTmp.name, 'w') as temp:
+        for i in range(len(combineRow)):
+            row = combineRow[i]
+            row[3] = '|'.join([row[3], str(i)])
+            peakReadsDict[row[3]]['row'] = row
+            peakReadsDict[row[3]]['reads'] = defaultdict(int)
+            peakIdList.append(row[3])
+            temp.write('\t'.join(row) + '\n')
+
+    bamFileList = cntBamDict['IP'] + cntBamDict['input']  + trtBamDict['IP'] + trtBamDict['input']
+    for i in range(len(bamFileList)):
+        bamFile = bamFileList[i]
+        gsizeTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+        command = 'samtools idxstats {} | cut -f 1 '.format(bamFile)
+        chromLineList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
+        chromLineList = list(filter(lambda x: (bool(x) and x != '*'), chromLineList))
+        with open(gsizeTmp.name, 'w') as temp:
+            for line in chromLineList:
+                row = line.strip().split('\t')
+                temp.write('\t'.join([row[0], '1']) + '\n')
+        sortPeakTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+        command = 'bedtools sort -i {} -g {} > {}'.format(peakTmp.name, gsizeTmp.name, sortPeakTmp.name)
+        __ = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
+        command = 'bedtools intersect -a {} -b {} -g {} -split -sorted -s -wa -c'.format(sortPeakTmp.name, bamFile, gsizeTmp.name)
+        peakReadsList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
+        peakReadsList = list(filter(lambda x:bool(x), peakReadsList))
+        for line in peakReadsList:
+            row = line.strip().split('\t')
+            peakId = row[3]
+            readsNum = row[-1]
+            peakReadsDict[peakId]['reads'][bamFile] = int(readsNum)
+        gsizeTmp.close()
+        sortPeakTmp.close()
+    peakTmp.close()
+    bamList = [cntBamDict['IP'], cntBamDict['input'], trtBamDict['IP'], trtBamDict['input']]
+    nameList = ['realFC', 'cntIpAve', 'cntInputAve', 'trtIpAve', 'trtInputAve']
+    with open(args.output, 'w') as out:
+        nameRow = nameRow + nameList
+        out.write('\t'.join(nameRow) + '\n')
+        for peakId in peakIdList:
+            peakRow = peakReadsDict[peakId]['row']
+            peakRow[3] = peakRow[3].split('|')[0]
+            valueList = ['NA' for i in range(4)]
+            tempDict = peakReadsDict[peakId]['reads']
+            for i in range(len(bamList)):
+                if bool(bamList[i]):
+                    valueList[i] = sum(map(lambda x: tempDict[x], bamList[i])) / len(bamList[i])
+            if 'NA' in valueList:
+                realFC = 'NA'
+            else:
+                realFC = (valueList[2] + 1) /(valueList[3] + 1) * (valueList[1] + 1) / (valueList[0] + 1)
+                realLog2FC = '{0:.3f}'.format(math.log(realFC, 2))
+            valueRow = [realLog2FC] + valueList
+            valueRow = list(map(str, valueRow))
+            row = peakRow + valueRow
+            out.write('\t'.join(row) + '\n')
+else:
+    with open(args.output, 'w') as out:
+        out.write('\t'.join(nameRow) + '\n')
+        for row in combineRow:
+            out.write('\t'.join(row) + '\n')
