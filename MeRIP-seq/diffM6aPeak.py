@@ -226,7 +226,7 @@ if bool(args.bamdir):
         sortPeakTmp.close()
     peakTmp.close()
     bamList = [cntBamDict['IP'], cntBamDict['input'], trtBamDict['IP'], trtBamDict['input']]
-    nameList = ['realFC', 'cntIpAve', 'cntInputAve', 'trtIpAve', 'trtInputAve']
+    nameList = ['real.diff.log2.fc', 'cntIpAve', 'cntInputAve', 'trtIpAve', 'trtInputAve']
     with open(args.output, 'w') as out:
         nameRow = nameRow + nameList
         out.write('\t'.join(nameRow) + '\n')
@@ -242,9 +242,9 @@ if bool(args.bamdir):
                 realFC = 'NA'
             else:
                 realFC = (valueList[2] + 1) /(valueList[3] + 1) * (valueList[1] + 1) / (valueList[0] + 1)
-                realLog2FC = '{0:.3f}'.format(math.log(realFC, 2))
+                realLog2FC = math.log(realFC, 2)
             valueRow = [realLog2FC] + valueList
-            valueRow = list(map(str, valueRow))
+            valueRow = list(map(lambda x: str('{0:.2f}'.format(x)), valueRow))
             row = peakRow + valueRow
             out.write('\t'.join(row) + '\n')
 else:
