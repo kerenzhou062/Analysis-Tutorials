@@ -193,9 +193,9 @@ if( args$batchMethod == "spikeins" ){
   colData <- pData(spikeNorSet)
 
   if (!is.null(args$selectCol)) {
-    designFormula <- as.formula(paste("~ W1 +", design, '+', design, ':', selectCol, sep=" "))
+    designFormula <- as.formula(paste("~ W_1 +", design, '+', design, ':', selectCol, sep=" "))
   }else{
-    designFormula <- as.formula(paste("~ W1 +", design, sep=" "))
+    designFormula <- as.formula(paste("~ W_1 +", design, sep=" "))
   }
 }else{
   ## filter out spike-ins if --keepSpike set
