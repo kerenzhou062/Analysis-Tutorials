@@ -345,9 +345,9 @@ if bool(args.bamdir):
             realLog2FC = 'NA'
         else:
             realFC = (valueList[2] + 1) /(valueList[3] + 1) * (valueList[1] + 1) / (valueList[0] + 1)
-            realLog2FC = math.log(realFC, 2)
+            realLog2FC = '{0:.2f}'.format(math.log(realFC, 2))
+        valueList = list(map(lambda x: '{0:.2f}'.format(x), valueList))
         valueRow = [realLog2FC] + valueList
-        valueRow = list(map(lambda x: str('{0:.2f}'.format(x)), valueRow))
         peakDict[peakId]['reads'] = valueRow
 
 with open(args.output, 'w') as out:
