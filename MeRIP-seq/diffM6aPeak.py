@@ -167,6 +167,7 @@ treatUniqPeakList = bytes.decode(subprocess.check_output(command, shell=True)).s
 controlPeakTmp.close()
 treatPeakTmp.close()
 
+# identify uniquely represented peaks in control or treat groups
 combineRow = list()
 for line in controlUniqPeakList:
     if bool(line) is False:
@@ -188,6 +189,7 @@ for line in treatUniqPeakList:
     row = row + [fdrLog, pvalLog, log2fc]
     combineRow.append(row)
 
+# combine with QNB or exomePeak results
 if bool(args.diff):
     combinePeakTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
     diffPeakTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
@@ -258,6 +260,7 @@ if bool(args.degMtx):
                 padj = '{0:.2e}'.format(float(row[-1]))
             deGeneDict[geneId] = [log2fc, padj]
 
+# prepare peak dictionary
 peakIdList = list()
 peakDict = defaultdict(dict)
 for i in range(len(combineRow)):
