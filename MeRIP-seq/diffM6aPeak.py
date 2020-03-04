@@ -55,6 +55,10 @@ parser.add_argument('--cntKey', action='store', type=str,
                     help='keyword for names of control samples')
 parser.add_argument('--trtKey', action='store', type=str,
                     help='keyword for names of treatment samples')
+parser.add_argument('--estimate', action='store', type=str,
+                    choices=['counts', 'RPM'],
+                    default='RPM',
+                    help='estimate method for reads from --bamdir')
 
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
@@ -83,13 +87,21 @@ def buildBamDict(filter, bamFileList):
 def runPeakBamRead(peakReadDict, peakFile, bamFile, strand):
     ## get chromosome names from bam.bai
     gsizeTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
-    command = 'samtools idxstats {} | cut -f 1 '.format(bamFile)
-    chromLineList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
-    chromLineList = list(filter(lambda x: (bool(x) and x != '*'), chromLineList))
+    command = 'samtools idxstats {}'.format(bamFile)
+    idxstatsList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
+    idxstatsList = list(filter(lambda x: (bool(x) and x != '*'), idxstatsList))
+    mappedReadsNum = 0
     with open(gsizeTmp.name, 'w') as temp:
-        for line in chromLineList:
+        for line in idxstatsList:
+            if bool(line) is False:
+                continue
             row = line.strip().split('\t')
-            temp.write('\t'.join([row[0], '1']) + '\n')
+            chrom = row[0]
+            if re.match(r'ERCC', chrom):
+                continue
+            chromLen = row[1]
+            mappedReadsNum += int(row[2])
+            temp.write('\t'.join([chrom, chromLen]) + '\n')
     ## sort peaks by chromosome
     sortPeakTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
     command = 'bedtools sort -i {} -g {} > {}'.format(peakFile, gsizeTmp.name, sortPeakTmp.name)
@@ -107,7 +119,7 @@ def runPeakBamRead(peakReadDict, peakFile, bamFile, strand):
         peakId = row[3]
         readsNum = row[-1]
         # the effective way to update nested dict
-        add = {bamFile: int(readsNum)}
+        add = {bamFile: [int(readsNum), mappedReadsNum]}
         peakReadDict[peakId] = dict(peakReadDict[peakId], **add)
 
 ##public arguments
@@ -252,12 +264,12 @@ if bool(args.degMtx):
         for line in f:
             row = line.strip().split('\t')
             geneId = row[0].split('.')[0]
-            log2fc = '{0:.2f}'.format(float(row[2]))
+            log2fc = '{0:.4f}'.format(float(row[2]))
             padj = row[-1]
             if padj == 'NA':
                 padj = '1'
             else:
-                padj = '{0:.2e}'.format(float(row[-1]))
+                padj = '{0:.3e}'.format(float(row[-1]))
             deGeneDict[geneId] = [log2fc, padj]
 
 # prepare peak dictionary
@@ -275,9 +287,9 @@ for i in range(len(combineRow)):
     if bool(expDict):
         expList = ['NA', 'NA']
         if 'cnt' in expDict[geneId]:
-            expList[0] = '{0:.2f}'.format(expDict[geneId]['cnt'])
+            expList[0] = '{0:.4f}'.format(expDict[geneId]['cnt'])
         if 'trt' in expDict[geneId]:
-            expList[1] = '{0:.2f}'.format(expDict[geneId]['trt'])
+            expList[1] = '{0:.4f}'.format(expDict[geneId]['trt'])
         peakDict[peakId]['exp'] = expList
     else:
         peakDict[peakId]['degene'] = list()
@@ -297,6 +309,8 @@ if bool(args.bamdir):
         try:
             thread = int(os.environ['SLURM_JOB_CPUS_PER_NODE'].split('(')[0]) * int(os.environ['SLURM_JOB_NUM_NODES'])
         except KeyError as e:
+            thread = os.cpu_count()
+        else:
             thread = os.cpu_count()
     else:
         thread = args.thread
@@ -340,15 +354,19 @@ if bool(args.bamdir):
         valueList = ['NA' for i in range(4)]
         for i in range(4):
             if bool(bamList[i]):
-                valueList[i] = sum(map(lambda x: peakReadDict[peakId][x], bamList[i])) / len(bamList[i])
+                if args.estimate == 'counts':
+                    valueList[i] = sum(map(lambda x: peakReadDict[peakId][x][0], bamList[i])) / len(bamList[i])
+                else:
+                    sumPerMillion = 10**6 / sum(map(lambda x: peakReadDict[peakId][x][1], bamList[i]))
+                    valueList[i] = sum(map(lambda x: peakReadDict[peakId][x][0] * sumPerMillion, bamList[i]))
         if 'NA' in valueList:
             realLog2FC = 'NA'
         else:
             realFC = (valueList[2] + 1) /(valueList[3] + 1) * (valueList[1] + 1) / (valueList[0] + 1)
-            realLog2FC = '{0:.2f}'.format(math.log(realFC, 2))
+            realLog2FC = '{0:.4f}'.format(math.log(realFC, 2))
         for i in range(4):
             if valueList[i] != 'NA':
-                valueList[i] = lambda x: '{0:.2f}'.format(valueList[i])
+                valueList[i] = '{0:.4f}'.format(valueList[i])
         valueRow = [realLog2FC] + valueList
         peakDict[peakId]['reads'] = valueRow
 
