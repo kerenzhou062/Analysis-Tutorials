@@ -8,6 +8,7 @@ from collections import defaultdict
 import tempfile
 import subprocess
 import math
+from multiprocessing import Pool, Manager
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-c', '--control', action='store', type=str,
@@ -34,16 +35,26 @@ parser.add_argument('-q', '--fdr', action='store', type=float,
 parser.add_argument('-o', '--output', action='store', type=str,
                     required=True,
                     help='the output peak.custom.diff.xls')
+parser.add_argument('-s', '--strand', action='store', type=str,
+                    choices=['unstrand', 'reverse', 'forward'],
+                    default='reverse',
+                    help='library protocols(reverse:fr-firstrand, forward:fr-secondstrand)')
+parser.add_argument('--thread', action='store', type=int,
+                    help='The number of threads used with --bamdir, run in parallel')
+parser.add_argument('--expMtx', action='store', type=str,
+                    help='The expression matrix from buildExpMatrix.py')
+parser.add_argument('--degMtx', action='store', type=str,
+                    help='The differentially expressed gene matrix from DESeq2Gene.R')
 parser.add_argument('--grepKept', action='store', type=str,
                     help='regex for keeping files')
 parser.add_argument('--grepExpel', action='store', type=str,
                     help='regex for filtering files')
 parser.add_argument('--bamdir', action='store', type=str,
                     help='input sorted bam directory')
-parser.add_argument('--cntbam', action='store', type=str,
-                    help='keyword for bams of control samples')
-parser.add_argument('--trtbam', action='store', type=str,
-                    help='keyword for bams of treatment samples')
+parser.add_argument('--cntKey', action='store', type=str,
+                    help='keyword for names of control samples')
+parser.add_argument('--trtKey', action='store', type=str,
+                    help='keyword for names of treatment samples')
 
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
@@ -68,6 +79,36 @@ def buildBamDict(filter, bamFileList):
             else:
                 bamDict['input'].append(bamFile)
     return bamDict
+
+def runPeakBamRead(peakReadDict, peakFile, bamFile, strand):
+    ## get chromosome names from bam.bai
+    gsizeTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+    command = 'samtools idxstats {} | cut -f 1 '.format(bamFile)
+    chromLineList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
+    chromLineList = list(filter(lambda x: (bool(x) and x != '*'), chromLineList))
+    with open(gsizeTmp.name, 'w') as temp:
+        for line in chromLineList:
+            row = line.strip().split('\t')
+            temp.write('\t'.join([row[0], '1']) + '\n')
+    ## sort peaks by chromosome
+    sortPeakTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+    command = 'bedtools sort -i {} -g {} > {}'.format(peakFile, gsizeTmp.name, sortPeakTmp.name)
+    __ = subprocess.check_output(command, shell=True)
+    ## intersect peaks with sorted bam
+    command = 'bedtools intersect -a {} -b {} -g {} -split -sorted {} -wa -c'.format(sortPeakTmp.name, bamFile, gsizeTmp.name, strand)
+    peakReadsList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
+    gsizeTmp.close()
+    sortPeakTmp.close()
+    ## construct peakId-bam-reads
+    for line in peakReadsList:
+        if bool(line) is False:
+            continue
+        row = line.strip().split('\t')
+        peakId = row[3]
+        readsNum = row[-1]
+        # the effective way to update nested dict
+        add = {bamFile: int(readsNum)}
+        peakReadDict[peakId] = dict(peakReadDict[peakId], **add)
 
 ##public arguments
 if bool(args.grepKept):
@@ -179,76 +220,144 @@ if bool(args.diff):
             if float(row[16]) <= pvalDiff and float(row[15]) <= fdrDiff:
                 combineRow.append(row)
 
+# build expression dict
+expSampleDict = defaultdict(list)
+expDict = defaultdict(dict)
+if bool(args.expMtx):
+    with open(args.expMtx, 'r') as f:
+        expNameRow = f.readline().split('\t')
+        rowLength = len(expNameRow)
+        for i in range(1,rowLength):
+            if bool(args.cntKey) and bool(args.trtKey):
+                if bool(re.search(r'{}'.format(args.cntKey), expNameRow[i])):
+                    expSampleDict['cnt'].append(i)
+                if bool(re.search(r'{}'.format(args.trtKey), expNameRow[i])):
+                    expSampleDict['trt'].append(i)
+            else:
+                sys.stderr.write('--cntKey and --trtKey required by --expMtx!')
+                sys.exit()
+        for line in f:
+            row = line.strip().split('\t')
+            geneId = row[0].split('.')[0]
+            expDict[geneId]['cnt'] = sum(map(lambda x: float(row[x]), expSampleDict['cnt'])) / len(expSampleDict['cnt'])
+            expDict[geneId]['trt'] = sum(map(lambda x: float(row[x]), expSampleDict['trt'])) / len(expSampleDict['trt'])
+
+# build differentlly expressed gene dict
+deGeneDict = defaultdict(dict)
+if bool(args.degMtx):
+    with open(args.degMtx, 'r') as f:
+        __ = f.readline()
+        for line in f:
+            row = line.strip().split('\t')
+            geneId = row[0].split('.')[0]
+            log2fc = '{0:.2f}'.format(float(row[2]))
+            padj = row[-1]
+            if padj == 'NA':
+                padj = '1'
+            else:
+                padj = '{0:.2e}'.format(float(row[-1]))
+            deGeneDict[geneId] = [log2fc, padj]
+
+peakIdList = list()
+peakDict = defaultdict(dict)
+for i in range(len(combineRow)):
+    geneId = combineRow[i][3].split('.')[0]
+    combineRow[i][3] = '|'.join([combineRow[i][3], str(i)])
+    peakId = combineRow[i][3]
+    peakDict[peakId]['row'] = combineRow[i]
+    peakIdList.append(peakId)
+    ## initiate bam reads
+    peakDict[peakId]['reads'] = list()
+    ## add expression
+    if bool(expDict):
+        expList = ['NA', 'NA']
+        if 'cnt' in expDict[geneId]:
+            expList[0] = '{0:.2f}'.format(expDict[geneId]['cnt'])
+        if 'trt' in expDict[geneId]:
+            expList[1] = '{0:.2f}'.format(expDict[geneId]['trt'])
+        peakDict[peakId]['exp'] = expList
+    else:
+        peakDict[peakId]['degene'] = list()
+    ## add differential expression
+    if bool(deGeneDict):
+        if geneId not in deGeneDict:
+            peakDict[peakId]['degene'] = ['0', '1']
+        else:
+            peakDict[peakId]['degene'] = deGeneDict[geneId]
+    else:
+        peakDict[peakId]['degene'] = list()
+
 if bool(args.bamdir):
+    ## calculate reads from samples that cover peaks
+    ## innitiate variables
+    if bool(args.thread) is False:
+        try:
+            thread = int(os.environ['SLURM_JOB_CPUS_PER_NODE'].split('(')[0]) * int(os.environ['SLURM_JOB_NUM_NODES'])
+        except KeyError as e:
+            thread = os.cpu_count()
+    else:
+        thread = args.thread
+    ## run in parallel
+    pool = Pool(processes=thread)
+    peakReadDict = Manager().dict()
     cntBamDict = defaultdict(list)
     trtBamDict = defaultdict(list)
+    if args.strand == 'unstrand':
+        strand = ''
+    elif args.strand == 'reverse':
+        strand = '-S'
+    else:
+        strand = '-s'
     bamFileList = sorted(glob(os.path.join(args.bamdir, '**', '*.bam'), recursive=True))
-    if bool(args.cntbam):
-        cntBamDict = buildBamDict(args.cntbam, bamFileList)
-    if bool(args.trtbam):
-        trtBamDict = buildBamDict(args.trtbam, bamFileList)
+    if bool(args.cntKey) and bool(args.trtKey):
+        cntBamDict = buildBamDict(args.cntKey, bamFileList)
+        trtBamDict = buildBamDict(args.trtKey, bamFileList)
+    else:
+        sys.stderr.write('--cntKey and --trtKey required by --bamdir!')
+        sys.exit()
 
     peakTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
-    peakIdList = list()
-    peakReadsDict = defaultdict(dict)
     with open(peakTmp.name, 'w') as temp:
-        for i in range(len(combineRow)):
-            row = combineRow[i]
-            row[3] = '|'.join([row[3], str(i)])
-            peakReadsDict[row[3]]['row'] = row
-            peakReadsDict[row[3]]['reads'] = defaultdict(int)
-            peakIdList.append(row[3])
+        for row in combineRow:
+            peakId = row[3]
+            peakReadDict[peakId] = dict()
             temp.write('\t'.join(row) + '\n')
 
+    ## run peaks-bam-reads in parallel
     bamFileList = cntBamDict['IP'] + cntBamDict['input']  + trtBamDict['IP'] + trtBamDict['input']
-    for i in range(len(bamFileList)):
-        bamFile = bamFileList[i]
-        gsizeTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
-        command = 'samtools idxstats {} | cut -f 1 '.format(bamFile)
-        chromLineList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
-        chromLineList = list(filter(lambda x: (bool(x) and x != '*'), chromLineList))
-        with open(gsizeTmp.name, 'w') as temp:
-            for line in chromLineList:
-                row = line.strip().split('\t')
-                temp.write('\t'.join([row[0], '1']) + '\n')
-        sortPeakTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
-        command = 'bedtools sort -i {} -g {} > {}'.format(peakTmp.name, gsizeTmp.name, sortPeakTmp.name)
-        __ = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
-        command = 'bedtools intersect -a {} -b {} -g {} -split -sorted -s -wa -c'.format(sortPeakTmp.name, bamFile, gsizeTmp.name)
-        peakReadsList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
-        peakReadsList = list(filter(lambda x:bool(x), peakReadsList))
-        for line in peakReadsList:
-            row = line.strip().split('\t')
-            peakId = row[3]
-            readsNum = row[-1]
-            peakReadsDict[peakId]['reads'][bamFile] = int(readsNum)
-        gsizeTmp.close()
-        sortPeakTmp.close()
+    for bamFile in bamFileList:
+        #runPeakBamRead(peakReadDict, peakTmp.name, bamFile, strand)
+        pool.apply_async(runPeakBamRead, args=(peakReadDict, peakTmp.name, bamFile, strand))
+    pool.close()
+    pool.join()
     peakTmp.close()
+    ## calculate real.diff.log2.fc and average reads of samples
     bamList = [cntBamDict['IP'], cntBamDict['input'], trtBamDict['IP'], trtBamDict['input']]
-    nameList = ['real.diff.log2.fc', 'cntIpAve', 'cntInputAve', 'trtIpAve', 'trtInputAve']
-    with open(args.output, 'w') as out:
-        nameRow = nameRow + nameList
-        out.write('\t'.join(nameRow) + '\n')
-        for peakId in peakIdList:
-            peakRow = peakReadsDict[peakId]['row']
-            peakRow[3] = peakRow[3].split('|')[0]
-            valueList = ['NA' for i in range(4)]
-            tempDict = peakReadsDict[peakId]['reads']
-            for i in range(len(bamList)):
-                if bool(bamList[i]):
-                    valueList[i] = sum(map(lambda x: tempDict[x], bamList[i])) / len(bamList[i])
-            if 'NA' in valueList:
-                realFC = 'NA'
-            else:
-                realFC = (valueList[2] + 1) /(valueList[3] + 1) * (valueList[1] + 1) / (valueList[0] + 1)
-                realLog2FC = math.log(realFC, 2)
-            valueRow = [realLog2FC] + valueList
-            valueRow = list(map(lambda x: str('{0:.2f}'.format(x)), valueRow))
-            row = peakRow + valueRow
-            out.write('\t'.join(row) + '\n')
-else:
-    with open(args.output, 'w') as out:
-        out.write('\t'.join(nameRow) + '\n')
-        for row in combineRow:
-            out.write('\t'.join(row) + '\n')
+    for peakId in peakIdList:
+        valueList = ['NA' for i in range(4)]
+        for i in range(4):
+            if bool(bamList[i]):
+                valueList[i] = sum(map(lambda x: peakReadDict[peakId][x], bamList[i])) / len(bamList[i])
+        if 'NA' in valueList:
+            realLog2FC = 'NA'
+        else:
+            realFC = (valueList[2] + 1) /(valueList[3] + 1) * (valueList[1] + 1) / (valueList[0] + 1)
+            realLog2FC = math.log(realFC, 2)
+        valueRow = [realLog2FC] + valueList
+        valueRow = list(map(lambda x: str('{0:.2f}'.format(x)), valueRow))
+        peakDict[peakId]['reads'] = valueRow
+
+with open(args.output, 'w') as out:
+    addNameRow = list()
+    if bool(args.bamdir):
+        nameRow.extend(['real.diff.log2.fc', 'cntIpAve', 'cntInputAve', 'trtIpAve', 'trtInputAve'])
+    if bool(args.expMtx):
+        nameRow.extend(['cntExpAve', 'trtExpAve'])
+    if bool(args.degMtx):
+        nameRow.extend(['DE.log2fc', 'DE.fdr'])
+    out.write('\t'.join(nameRow) + '\n')
+    for peakId in peakIdList:
+        row = peakDict[peakId]['row']
+        row[3] = row[3].split('|')[0]
+        row += peakDict[peakId]['reads'] + peakDict[peakId]['exp'] + peakDict[peakId]['degene']
+        out.write('\t'.join(row) + '\n')
