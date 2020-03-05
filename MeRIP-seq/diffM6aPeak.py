@@ -14,33 +14,38 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 parser.add_argument('-c', '--control', action='store', type=str,
                     required=True,
                     help='peak.xls of control group from exomePeak')
-parser.add_argument('-t', '--treat', action='store', type=str,
-                    required=True,
-                    help='peak.xls of treatment group from exomePeak')
 parser.add_argument('-d', '--diff', action='store', type=str,
                     help='peak.diff.xls from exomePeak or QNB')
 parser.add_argument('--package', action='store', type=str,
                     choices=['exomePeak', 'QNB'],
                     default='QNB',
                     help='package for detection of differential methylated peaks')
-parser.add_argument('-p', '--pval', action='store', type=float,
-                    default=1,
-                    help='cutoff of p-value')
 parser.add_argument('-f', '--fold', action='store', type=float,
                     default=1,
                     help='cutoff of fold_enrchment')
-parser.add_argument('-q', '--fdr', action='store', type=float,
-                    default=1,
-                    help='cutoff of fdr')
 parser.add_argument('-o', '--output', action='store', type=str,
                     required=True,
                     help='the output peak.custom.diff.xls')
+parser.add_argument('-p', '--pval', action='store', type=float,
+                    default=1,
+                    help='cutoff of p-value')
+parser.add_argument('-q', '--fdr', action='store', type=float,
+                    default=1,
+                    help='cutoff of fdr')
 parser.add_argument('-s', '--strand', action='store', type=str,
                     choices=['unstrand', 'reverse', 'forward'],
                     default='reverse',
                     help='library protocols(reverse:fr-firstrand, forward:fr-secondstrand)')
-parser.add_argument('--thread', action='store', type=int,
-                    help='The number of threads used with --bamdir, run in parallel')
+parser.add_argument('-t', '--treat', action='store', type=str,
+                    required=True,
+                    help='peak.xls of treatment group from exomePeak')
+parser.add_argument('--constant', action='store', type=float,
+                    default=0.001,
+                    help='constant value for avoiding 0 division: (IP+c)/(input+c)')
+parser.add_argument('--estimate', action='store', type=str,
+                    choices=['counts', 'RPM'],
+                    default='RPM',
+                    help='estimate method for reads from --bamdir')
 parser.add_argument('--expMtx', action='store', type=str,
                     help='The expression matrix from buildExpMatrix.py')
 parser.add_argument('--degMtx', action='store', type=str,
@@ -55,14 +60,8 @@ parser.add_argument('--cntKey', action='store', type=str,
                     help='keyword for names of control samples')
 parser.add_argument('--trtKey', action='store', type=str,
                     help='keyword for names of treatment samples')
-parser.add_argument('--constant', action='store', type=float,
-                    default=0.001,
-                    help='constant value for avoiding 0 division: (IP+c)/(input+c)')
-parser.add_argument('--estimate', action='store', type=str,
-                    choices=['counts', 'RPM'],
-                    default='RPM',
-                    help='estimate method for reads from --bamdir')
-
+parser.add_argument('--thread', action='store', type=int,
+                    help='The number of threads used with --bamdir, run in parallel')
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
     parser.print_help()
