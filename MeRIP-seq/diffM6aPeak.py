@@ -55,6 +55,9 @@ parser.add_argument('--cntKey', action='store', type=str,
                     help='keyword for names of control samples')
 parser.add_argument('--trtKey', action='store', type=str,
                     help='keyword for names of treatment samples')
+parser.add_argument('--constant', action='store', type=float,
+                    default=0.001,
+                    help='constant value for avoiding 0 division: (IP+c)/(input+c)')
 parser.add_argument('--estimate', action='store', type=str,
                     choices=['counts', 'RPM'],
                     default='RPM',
@@ -362,7 +365,7 @@ if bool(args.bamdir):
         if 'NA' in valueList:
             realLog2FC = 'NA'
         else:
-            realFC = (valueList[2] + 1) /(valueList[3] + 1) * (valueList[1] + 1) / (valueList[0] + 1)
+            realFC = (valueList[2] + args.constant) /(valueList[3] + args.constant) * (valueList[1] + args.constant) / (valueList[0] + args.constant)
             realLog2FC = '{0:.4f}'.format(math.log(realFC, 2))
         for i in range(4):
             if valueList[i] != 'NA':
