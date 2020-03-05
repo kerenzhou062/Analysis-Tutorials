@@ -55,7 +55,7 @@ parser.add_argument('--grepKept', action='store', type=str,
 parser.add_argument('--grepExpel', action='store', type=str,
                     help='Regex expression for filtering bam files')
 parser.add_argument('--bamdir', action='store', type=str,
-                    help='Input directory that contained sorted and indexed bam')
+                    help='Input directory that contained sorted and indexed bam files')
 parser.add_argument('--cntKey', action='store', type=str,
                     help='Keyword for names of control samples')
 parser.add_argument('--trtKey', action='store', type=str,
