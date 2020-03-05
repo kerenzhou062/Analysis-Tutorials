@@ -61,7 +61,7 @@ parser.add_argument('--cntKey', action='store', type=str,
 parser.add_argument('--trtKey', action='store', type=str,
                     help='keyword for names of treatment samples')
 parser.add_argument('--thread', action='store', type=int,
-                    help='The number of threads used with --bamdir, run in parallel')
+                    help='The number of threads used with --bamdir, run in parallel (default is using all cpus)')
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
     parser.print_help()
