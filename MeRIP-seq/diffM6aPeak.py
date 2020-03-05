@@ -239,7 +239,7 @@ expSampleDict = defaultdict(list)
 expDict = defaultdict(dict)
 if bool(args.expMtx):
     with open(args.expMtx, 'r') as f:
-        expNameRow = list(filter(lambda x: bool(re.search(r'_CQV', x)) if False, f.readline().split('\t')))
+        expNameRow = list(filter(lambda x: bool(re.search(r'_CQV', x)) is False, f.readline().split('\t')))
         rowLength = len(expNameRow)
         for i in range(1,rowLength):
             if bool(args.cntKey) and bool(args.trtKey):
