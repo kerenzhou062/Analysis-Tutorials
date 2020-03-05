@@ -13,55 +13,56 @@ from multiprocessing import Pool, Manager
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-c', '--control', action='store', type=str,
                     required=True,
-                    help='peak.xls of control group from exomePeak')
+                    help='M6A peak.xls of control group from exomePeak')
 parser.add_argument('-d', '--diff', action='store', type=str,
-                    help='peak.diff.xls from exomePeak or QNB')
+                    help='Differentially methylated m6A peak.diff.xls from exomePeak or QNB')
 parser.add_argument('--package', action='store', type=str,
                     choices=['exomePeak', 'QNB'],
                     default='QNB',
-                    help='package for detection of differential methylated peaks')
+                    help='Package used for detection of differential methylated peaks')
 parser.add_argument('-f', '--fold', action='store', type=float,
                     default=1,
-                    help='cutoff of fold_enrchment')
+                    help='Cutoff of fold_enrchment')
 parser.add_argument('-o', '--output', action='store', type=str,
                     required=True,
-                    help='the output peak.custom.diff.xls')
+                    help='The output peak.custom.diff.xls')
 parser.add_argument('-p', '--pval', action='store', type=float,
                     default=1,
-                    help='cutoff of p-value')
+                    help='Cutoff of p-value')
 parser.add_argument('-q', '--fdr', action='store', type=float,
                     default=1,
-                    help='cutoff of fdr')
+                    help='Cutoff of fdr')
 parser.add_argument('-s', '--strand', action='store', type=str,
                     choices=['unstrand', 'reverse', 'forward'],
                     default='reverse',
-                    help='library protocols(reverse:fr-firstrand, forward:fr-secondstrand)')
+                    help='Library protocols of bam (reverse:fr-firstrand, forward:fr-secondstrand)')
 parser.add_argument('-t', '--treat', action='store', type=str,
                     required=True,
-                    help='peak.xls of treatment group from exomePeak')
+                    help='M6A peak.xls of treatment group from exomePeak')
 parser.add_argument('--constant', action='store', type=float,
                     default=0.001,
-                    help='constant value for avoiding 0 division: (IP+c)/(input+c)')
+                    help='Constant value for avoiding 0 division: (IP+c)/(input+c)')
 parser.add_argument('--estimate', action='store', type=str,
                     choices=['counts', 'RPM'],
                     default='RPM',
-                    help='estimate method for reads from --bamdir')
+                    help='Estimation method for reads from --bamdir')
 parser.add_argument('--expMtx', action='store', type=str,
                     help='The expression matrix from buildExpMatrix.py')
 parser.add_argument('--degMtx', action='store', type=str,
                     help='The differentially expressed gene matrix from DESeq2Gene.R')
 parser.add_argument('--grepKept', action='store', type=str,
-                    help='regex for keeping files')
+                    help='Regex expression for keeping bam files')
 parser.add_argument('--grepExpel', action='store', type=str,
-                    help='regex for filtering files')
+                    help='Regex expression for filtering bam files')
 parser.add_argument('--bamdir', action='store', type=str,
-                    help='input sorted bam directory')
+                    help='Input directory that contained sorted and indexed bam')
 parser.add_argument('--cntKey', action='store', type=str,
-                    help='keyword for names of control samples')
+                    help='Keyword for names of control samples')
 parser.add_argument('--trtKey', action='store', type=str,
-                    help='keyword for names of treatment samples')
+                    help='Keyword for names of treatment samples')
 parser.add_argument('--thread', action='store', type=int,
                     help='The number of threads used with --bamdir, run in parallel (default is using all cpus)')
+
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
     parser.print_help()
