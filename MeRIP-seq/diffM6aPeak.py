@@ -373,27 +373,28 @@ if bool(args.bamdir):
         else:
             realFC = (valueList[2] + args.constant) /(valueList[3] + args.constant) * (valueList[1] + args.constant) / (valueList[0] + args.constant)
             realLog2FC = '{0:.4f}'.format(math.log(realFC, 2))
-        if geneId not in genePeakKeptDict:
-            genePeakKeptDict[geneId] = defaultdict(list)
-        if realLog2FC == 'NA':
-            genePeakKeptDict[geneId]['peak'].append(peakId)
-        else:
-            geneId = peakDict['gene']
-            if geneId not in genePeakKeptDict:
-                genePeakKeptDict[geneId]['peak'] = [peakId]
-                genePeakKeptDict[geneId]['fc'] = realLog2FC
-            else:
-                if abs(realLog2FC) > abs(genePeakKeptDict[geneId]['fc']):
-                    genePeakKeptDict[geneId]['peak'] = [peakId]
-                    genePeakKeptDict[geneId]['fc'] = realLog2FC
         for i in range(4):
             if valueList[i] != 'NA':
                 valueList[i] = '{0:.4f}'.format(valueList[i])
         valueRow = [realLog2FC] + valueList
         peakDict[peakId]['reads'] = valueRow
+        if args.uniq:
+            if geneId not in genePeakKeptDict:
+                genePeakKeptDict[geneId] = defaultdict(list)
+            if realLog2FC == 'NA':
+                genePeakKeptDict[geneId]['peak'].append(peakId)
+            else:
+                geneId = peakDict['gene']
+                if geneId not in genePeakKeptDict:
+                    genePeakKeptDict[geneId]['peak'] = [peakId]
+                    genePeakKeptDict[geneId]['fc'] = realLog2FC
+                else:
+                    if abs(realLog2FC) > abs(genePeakKeptDict[geneId]['fc']):
+                        genePeakKeptDict[geneId]['peak'] = [peakId]
+                        genePeakKeptDict[geneId]['fc'] = realLog2FC
 
 peakKeptList = list()
-if bool(genePeakKeptDict):
+if args.uniq:
     for geneId in sorted(genePeakKeptDict.keys()):
         peakKeptList.extend(genePeakKeptDict[geneId]['peak'])
 else:
