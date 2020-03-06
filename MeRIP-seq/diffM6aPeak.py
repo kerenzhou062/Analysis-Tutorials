@@ -62,6 +62,9 @@ parser.add_argument('--trtKey', action='store', type=str,
                     help='Keyword for names of treatment samples')
 parser.add_argument('--thread', action='store', type=int,
                     help='The number of threads used with --bamdir, run in parallel (default is using all cpus)')
+parser.add_argument('--uniq', action='store_true',
+                    default=False,
+                    help='Keep only one peak with biggest change if gene has multiple peaks')
 
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
@@ -284,6 +287,7 @@ for i in range(len(combineRow)):
     peakId = combineRow[i][3]
     peakDict[peakId]['row'] = combineRow[i]
     peakIdList.append(peakId)
+    peakDict[peakId]['gene'] = geneId
     ## initiate bam reads
     peakDict[peakId]['reads'] = list()
     ## add expression
@@ -304,6 +308,8 @@ for i in range(len(combineRow)):
             peakDict[peakId]['degene'] = deGeneDict[geneId]
     else:
         peakDict[peakId]['degene'] = list()
+
+genePeakKeptDict = defaultdict(dict)
 
 if bool(args.bamdir):
     ## calculate reads from samples that cover peaks
@@ -367,11 +373,31 @@ if bool(args.bamdir):
         else:
             realFC = (valueList[2] + args.constant) /(valueList[3] + args.constant) * (valueList[1] + args.constant) / (valueList[0] + args.constant)
             realLog2FC = '{0:.4f}'.format(math.log(realFC, 2))
+        if geneId not in genePeakKeptDict:
+            genePeakKeptDict[geneId] = defaultdict(list)
+        if realLog2FC == 'NA':
+            genePeakKeptDict[geneId]['peak'].append(peakId)
+        else:
+            geneId = peakDict['gene']
+            if geneId not in genePeakKeptDict:
+                genePeakKeptDict[geneId]['peak'] = [peakId]
+                genePeakKeptDict[geneId]['fc'] = realLog2FC
+            else:
+                if abs(realLog2FC) > abs(genePeakKeptDict[geneId]['fc']):
+                    genePeakKeptDict[geneId]['peak'] = [peakId]
+                    genePeakKeptDict[geneId]['fc'] = realLog2FC
         for i in range(4):
             if valueList[i] != 'NA':
                 valueList[i] = '{0:.4f}'.format(valueList[i])
         valueRow = [realLog2FC] + valueList
         peakDict[peakId]['reads'] = valueRow
+
+peakKeptList = list()
+if bool(genePeakKeptDict):
+    for geneId in sorted(genePeakKeptDict.keys()):
+        peakKeptList.extend(genePeakKeptDict[geneId]['peak'])
+else:
+    peakKeptList = peakIdList
 
 with open(args.output, 'w') as out:
     addNameRow = list()
@@ -382,7 +408,7 @@ with open(args.output, 'w') as out:
     if bool(args.degMtx):
         nameRow.extend(['DE.log2fc', 'DE.fdr'])
     out.write('\t'.join(nameRow) + '\n')
-    for peakId in peakIdList:
+    for peakId in peakKeptList:
         row = peakDict[peakId]['row']
         row[3] = row[3].split('|')[0]
         row += peakDict[peakId]['reads'] + peakDict[peakId]['exp'] + peakDict[peakId]['degene']
