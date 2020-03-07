@@ -378,7 +378,7 @@ if bool(args.bamdir):
         valueRow = [realLog2FC] + valueList
         peakDict[peakId]['reads'] = valueRow
         if args.uniq:
-            geneId = peakDict['gene']
+            geneId = peakDict[peakId]['gene']
             if geneId not in genePeakKeptDict:
                 genePeakKeptDict[geneId] = defaultdict(list)
             if realLog2FC == 'NA':
@@ -386,11 +386,11 @@ if bool(args.bamdir):
             else:
                 if bool(genePeakKeptDict[geneId]) is False:
                     genePeakKeptDict[geneId]['peak'] = [peakId]
-                    genePeakKeptDict[geneId]['fc'] = realLog2FC
+                    genePeakKeptDict[geneId]['fc'] = float(realLog2FC)
                 else:
-                    if abs(realLog2FC) > abs(genePeakKeptDict[geneId]['fc']):
+                    if abs(float(realLog2FC)) > abs(genePeakKeptDict[geneId]['fc']):
                         genePeakKeptDict[geneId]['peak'] = [peakId]
-                        genePeakKeptDict[geneId]['fc'] = realLog2FC
+                        genePeakKeptDict[geneId]['fc'] = float(realLog2FC)
 
 peakKeptList = list()
 if args.uniq:
