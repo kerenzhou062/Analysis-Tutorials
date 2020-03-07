@@ -310,7 +310,6 @@ for i in range(len(combineRow)):
         peakDict[peakId]['degene'] = list()
 
 genePeakKeptDict = defaultdict(dict)
-
 if bool(args.bamdir):
     ## calculate reads from samples that cover peaks
     ## innitiate variables
@@ -379,13 +378,13 @@ if bool(args.bamdir):
         valueRow = [realLog2FC] + valueList
         peakDict[peakId]['reads'] = valueRow
         if args.uniq:
+            geneId = peakDict['gene']
             if geneId not in genePeakKeptDict:
                 genePeakKeptDict[geneId] = defaultdict(list)
             if realLog2FC == 'NA':
                 genePeakKeptDict[geneId]['peak'].append(peakId)
             else:
-                geneId = peakDict['gene']
-                if geneId not in genePeakKeptDict:
+                if bool(genePeakKeptDict[geneId]) is False:
                     genePeakKeptDict[geneId]['peak'] = [peakId]
                     genePeakKeptDict[geneId]['fc'] = realLog2FC
                 else:
