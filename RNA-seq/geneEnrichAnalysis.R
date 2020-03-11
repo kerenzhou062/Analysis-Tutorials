@@ -12,7 +12,7 @@ command =  matrix(c(
     "item",      "e",  1,   "character",    "Type of item: ENSEMBL|SYMBOL|ENTREZID",
     "max",       "a",  1 ,  "numeric",      "Maximum items in pdf [30]",
     "minGSSize", "n",  1 ,  "numeric",      "Minimal size of genes annotated for testing [10]",
-    "maxGSSize", "z",  1 ,  "numeric",      "Maximal size of genes annotated for testing [500]",
+    "maxGSSize", "x",  1 ,  "numeric",      "Maximal size of genes annotated for testing [500]",
     "nperm",     "r",  1 ,  "numeric",      "Number of permutations (GSEA) [1000]",
     "organism",  "g",  1,   "character",    "Organism: human|mouse",
     "output",    "o",  1,   "character",    "Output directory [./]",
