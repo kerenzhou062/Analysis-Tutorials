@@ -225,7 +225,7 @@ if (args$type == "GO") {
     pvalueCutoff = args$pval,
     pAdjustMethod = "BH",
     qvalueCutoff = args$qval,
-    readable = FALSE
+    readable = TRUE
   )
   ## print to pdf
   pdf(dotplotPdf, paper='a4r', height=0)
