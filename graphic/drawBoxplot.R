@@ -41,7 +41,8 @@ ShowHelp <- function(object, param, reverse=FALSE, bool=FALSE) {
 }
 
 LoadPacakge <- function(name) {
-  cat(paste("Load package: ", name, ".\n", sep="\t"))
+  suppressMessages(library(name, character.only = TRUE))
+  cat(paste("Load package: ", name, ".\n"))
 }
 
 plotGeneCount <- function(geneName, pdfName) {
@@ -50,7 +51,7 @@ plotGeneCount <- function(geneName, pdfName) {
   pd = position_dodge(width = 0.5)
   plot <- ggplot(selectData, aes_string(x=args$xaxis, y=args$yaxis, fill=args$xaxis)) +
     stat_boxplot(geom="errorbar", position=pd, width=0.2) +
-    geom_boxplot() + 
+    geom_boxplot(outlier.shape=NA) + 
     geom_jitter(position=position_jitter(width=0.1, height=0.1)) + 
     theme(axis.text.x = element_text(angle=80, hjust=1, vjust=0.98)) +
     labs(y = paste("Expression Level: ", args$prefix), x = "")
@@ -83,9 +84,6 @@ if ( is.null(args$refgroup) ) { args$refgroup = 'none' }
 if ( is.null(args$output) ) { args$output = './' }
 
 # load libraries
-suppressMessages(library('ggplot2'))
-suppressMessages(library('ggpubr'))
-
 LoadPacakge('ggplot2')
 LoadPacakge('ggpubr')
 

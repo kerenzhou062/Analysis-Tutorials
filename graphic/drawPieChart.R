@@ -36,7 +36,8 @@ ShowHelp <- function(object, param, reverse=FALSE, bool=FALSE) {
 }
 
 LoadPacakge <- function(name) {
-  cat(paste("Load package: ", name, ".\n", sep="\t"))
+  suppressMessages(library(name, character.only = TRUE))
+  cat(paste("Load package: ", name, ".\n"))
 }
 
 # parsing arguments
@@ -53,7 +54,6 @@ if ( is.null(args$title) ) { args$title = "Pie Chart" }
 if ( is.null(args$output) ) { args$output = './piechart.pdf' }
 
 # load libraries
-suppressMessages(library('plotly'))
 LoadPacakge('plotly')
 
 ## read countData from input matrix
