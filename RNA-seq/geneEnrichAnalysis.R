@@ -229,7 +229,7 @@ if (args$type == "GO") {
   )
   ## print to pdf
   pdf(dotplotPdf, paper='a4r', height=0)
-  dotplot(geneEnrich, showCategory = args$max)
+  print(dotplot(geneEnrich, showCategory = args$max))
   garbage <- dev.off()
   WriteText(textFile, geneEnrich)
 }else if (args$type == "KEGG") {
@@ -246,7 +246,7 @@ if (args$type == "GO") {
   )
   ## print to pdf
   pdf(dotplotPdf, paper='a4r', height=0)
-  dotplot(geneEnrich, showCategory = args$max)
+  print(dotplot(geneEnrich, showCategory = args$max))
   garbage <- dev.off()
   WriteText(textFile, geneEnrich)
 }else if (args$type == "GSEA") {
