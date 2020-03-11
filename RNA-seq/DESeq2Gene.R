@@ -52,6 +52,7 @@ ShowHelp <- function(object, param, reverse=FALSE, bool=FALSE) {
 }
 
 LoadPacakge <- function(name) {
+  suppressMessages(library(name, character.only = TRUE))
   cat(paste("Load package: ", name, ".\n"))
 }
 
@@ -112,8 +113,6 @@ if ( is.null(args$ruvgCount) ) { args$ruvgCount = 5 }
 if ( is.null(args$ruvgLogfc) ) { args$ruvgLogfc = 1 }
 if ( is.null(args$ruvgPval) ) { args$ruvgPval = 0.3 }
 # load DESeq2 and perform Differential Analysis
-suppressMessages(library('DESeq2'))
-suppressMessages(library('ggplot2'))
 LoadPacakge('DESeq2')
 LoadPacakge('ggplot2')
 ## load arguments
@@ -175,7 +174,6 @@ if (!is.null(args$selectCol)) {
 if( args$batchMethod == "spikeins" ){
   ## Removing hidden batch effects using spike-in controls by RUVg
   cat('Removing hidden batch effects with spike-ins (RUVg)!\n')
-  suppressMessages(library('RUVSeq'))
   LoadPacakge('RUVSeq')
   ## seperate to genes and spikes
   genes <- rownames(cts)[grep(spiRegex, rownames(cts), invert=TRUE)]
@@ -220,7 +218,6 @@ dds <- DESeq(dds, test=test)
 if (args$batchMethod == 'RUVg') {
   cat('Removing hidden batch effects using RUVg.\n')
   cat('Using empirical control genes by looking at the genes that do not have a small p-value\n')
-  suppressMessages(library('RUVSeq'))
   LoadPacakge('RUVSeq')
   res <- results(dds, contrast=c(design, treat, control))
   ## removing hidden batch effect

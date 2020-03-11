@@ -43,6 +43,7 @@ ShowHelp <- function(object, param, reverse=FALSE, bool=FALSE) {
 }
 
 LoadPacakge <- function(name) {
+  suppressMessages(library(name, character.only = TRUE))
   cat(paste("Load package: ", name, ".\n"))
 }
 
@@ -134,10 +135,9 @@ glmPca <- args$glmPca
 poiHeatmap <- args$poiHeatmap
 
 # load DESeq2
-suppressMessages(library('DESeq2'))
-suppressMessages(library('ggplot2'))
-suppressMessages(library('dplyr'))
-
+LoadPacakge('DESeq2')
+LoadPacakge('ggplot2')
+LoadPacakge('dplyr')
 # With the count matrix, cts, and the sample information, colData
 cts <- as.matrix(read.csv(geneCountMtx, sep="\t", row.names="gene_id"))
 cts <-round(cts, 0)
@@ -173,9 +173,8 @@ mcols(dds) <- DataFrame(mcols(dds), featureData)
 dds <- DESeq(dds, test=test)
 
 # use the Poisson Distance to calculate sample distance 
-suppressMessages(library("pheatmap"))
-suppressMessages(library("RColorBrewer"))
-
+LoadPacakge('pheatmap')
+LoadPacakge('RColorBrewer')
 
 sampleDisPdf <- file.path(output, paste(prefix, ".sd.heatmap.pdf", sep=""))
 if(poiHeatmap) {
