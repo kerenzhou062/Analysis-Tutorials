@@ -8,7 +8,7 @@ command =  matrix(c(
     "dbName",    "d",  1,   "character",    "Used database: org.Hs.eg.db|org.Mm.eg.db",
     "geneset",   "s",  1,   "character",    "geneset (https://www.gsea-msigdb.org/gsea)",
     "gotype",    "y",  1,   "character",    "GO type: ALL|BP|MF|CC",
-    "input",     "i",  1,   "character",    "2-column input file (NO HEADER, 1stCol:gene_id, 2ndCol:value)",
+    "input",     "i",  1,   "character",    "2-column input file (NO HEADER+TAB, 1stCol:gene_id, 2ndCol:value)",
     "item",      "e",  1,   "character",    "Type of item: ENSEMBL|SYMBOL|ENTREZID",
     "max",       "a",  1 ,  "numeric",      "Maximum items in pdf [30]",
     "minGSSize", "n",  1 ,  "numeric",      "Minimal size of genes annotated for testing [10]",
@@ -229,7 +229,7 @@ if (args$type == "GO") {
   )
   ## print to pdf
   pdf(dotplotPdf, paper='a4r', height=0)
-  print(dotplot(geneEnrich, showCategory = args$max))
+  print(dotplot(geneEnrich, showCategory = args$max, font.size = 10))
   garbage <- dev.off()
   WriteText(textFile, geneEnrich)
 }else if (args$type == "KEGG") {
@@ -246,7 +246,7 @@ if (args$type == "GO") {
   )
   ## print to pdf
   pdf(dotplotPdf, paper='a4r', height=0)
-  print(dotplot(geneEnrich, showCategory = args$max))
+  print(dotplot(geneEnrich, showCategory = args$max, font.size = 10))
   garbage <- dev.off()
   WriteText(textFile, geneEnrich)
 }else if (args$type == "GSEA") {
