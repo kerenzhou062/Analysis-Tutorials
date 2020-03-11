@@ -214,10 +214,11 @@ textFile = file.path(args$output, paste(args$prefix, ".geneEnrich.txt", sep=""))
 
 # enrichment analysis
 if (args$type == "GO") {
+  ## run enrichGO
   geneEnrich <- enrichGO(
     gene,
     OrgDb = dbName,
-    ont = args$type,
+    ont = args$gotype,
     keyType = "ENTREZID",
     minGSSize = args$minGSSize,
     maxGSSize = args$maxGSSize,
@@ -232,6 +233,7 @@ if (args$type == "GO") {
   garbage <- dev.off()
   WriteText(textFile, geneEnrich)
 }else if (args$type == "KEGG") {
+  ## run enrichKEGG
   geneEnrich <- enrichKEGG(
     gene,
     keyType = 'kegg',
@@ -251,17 +253,16 @@ if (args$type == "GO") {
   LoadPacakge('dplyr')
   LoadPacakge('msigdf')
   LoadPacakge('enrichplot')
-
+  ## get MSigDB dataset from msigdf
   if (args$organism == 'human' ) {
     gseaMSigDB <- msigdf.human %>% filter(category_code == args$category) %>% select(geneset, symbol) %>% as.data.frame
   }else if (args$organism == 'mouse') {
     gseaMSigDB <- msigdf.mouse %>% filter(category_code == args$category) %>% select(geneset, symbol) %>% as.data.frame
   }
-
   if (! is.null(args$geneset)) {
     gseaMSigDB <- gseaMSigDB[gseaMSigDB$geneset == args$geneset, ]
   }
-
+  ## run GSEA
   geneEnrich <- GSEA(
     geneList,
     nPerm = args$nperm,
@@ -273,7 +274,7 @@ if (args$type == "GO") {
     seed = TRUE,
     by = "DOSE"
   )
-
+  ## print to pdf
   genesetVector <- geneEnrich$ID
   if (length(genesetVector) > 0) {
     dir.create(args$output, showWarnings = FALSE, recursive = TRUE)
