@@ -353,6 +353,7 @@ if (args$type == "GO") {
       PlotSave(gseaplotPdf, p)
     }
     ## print to txt file
+    txtFile = file.path(args$output, paste(args$prefix, ".", args$category, ".geneEnrich.txt", sep=""))
     WriteText(txtFile, geneEnrich, type='GSEA')
   }
 }
