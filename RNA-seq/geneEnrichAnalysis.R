@@ -10,7 +10,7 @@ command =  matrix(c(
     "gotype",    "y",  1,   "character",    "GO type: ALL|BP|MF|CC",
     "input",     "i",  1,   "character",    "2-column input file (NO HEADER+TAB, 1stCol:gene_id, 2ndCol:value)",
     "item",      "e",  1,   "character",    "Type of item: ENSEMBL|SYMBOL|ENTREZID",
-    "max",       "a",  1 ,  "numeric",      "Maximum items in pdf [30]",
+    "max",       "a",  1 ,  "numeric",      "Maximum items in pdf [20]",
     "minGSSize", "n",  1 ,  "numeric",      "Minimal size of genes annotated for testing [10]",
     "maxGSSize", "x",  1 ,  "numeric",      "Maximal size of genes annotated for testing [500]",
     "nperm",     "r",  1 ,  "numeric",      "Number of permutations (GSEA) [1000]",
@@ -115,7 +115,7 @@ if ( is.null(args$qval) ) {
 }
 
 if ( is.null(args$max) ) {
-  args$max <- 30
+  args$max <- 20
 }
 
 if ( is.null(args$minGSSize) ) {
@@ -209,8 +209,13 @@ gene <- names(geneList)
 
 # pdf name
 dotplotPdf = file.path(args$output, paste(args$prefix, ".dotplot.pdf", sep=""))
+ridgeplotPdf = file.path(args$output, paste(args$prefix, ".ridgeplot.pdf", sep=""))
+cnetplotPdf = file.path(args$output, paste(args$prefix, ".cnetplot.pdf", sep=""))
+heatplotPdf = file.path(args$output, paste(args$prefix, ".heatplot.pdf", sep=""))
+emapplot = file.path(args$output, paste(args$prefix, ".emapplot.pdf", sep=""))
+
 #text file
-textFile = file.path(args$output, paste(args$prefix, ".geneEnrich.txt", sep=""))
+txtFile = file.path(args$output, paste(args$prefix, ".geneEnrich.txt", sep=""))
 
 # enrichment analysis
 if (args$type == "GO") {
@@ -231,7 +236,21 @@ if (args$type == "GO") {
   pdf(dotplotPdf, paper='a4r', height=0)
   print(dotplot(geneEnrich, showCategory = args$max, font.size = 10))
   garbage <- dev.off()
-  WriteText(textFile, geneEnrich)
+  ## remove redundent GO terms
+  geneEnrichSimple <- simplify(geneEnrich)
+  pdf(cnetplotPdf, paper='a4r', height=0)
+  print(cnetplot(geneEnrichSimple, foldChange=geneList, circular = TRUE, colorEdge = TRUE, showCategory=args$max))
+  garbage <- dev.off()
+  ## heatmap
+  pdf(heatplotPdf, paper='a4r', height=0)
+  print(heatplot(geneEnrichSimple, foldChange=geneList, showCategory=args$max))
+  garbage <- dev.off()
+  ## emapplot
+  pdf(emapplotPdf, paper='a4r', height=0)
+  print(emapplot(geneEnrichSimple, foldChange=geneList, showCategory=args$max))
+  garbage <- dev.off()
+  ## print to txt file
+  WriteText(txtFile, geneEnrich)
 }else if (args$type == "KEGG") {
   ## run enrichKEGG
   geneEnrich <- enrichKEGG(
@@ -248,7 +267,27 @@ if (args$type == "GO") {
   pdf(dotplotPdf, paper='a4r', height=0)
   print(dotplot(geneEnrich, showCategory = args$max, font.size = 10))
   garbage <- dev.off()
-  WriteText(textFile, geneEnrich)
+  ## run 
+  geneRidge <- gseKEGG(
+    geneList, 
+    nPerm = args$nperm,
+    keyType = 'kegg',
+    minGSSize = args$minGSSize,
+    maxGSSize = args$maxGSSize,
+    organism = organism,
+    pvalueCutoff = args$pval,
+    pAdjustMethod = "BH",
+    seed = TRUE,
+    by = "DOSE"
+  )
+  ## print to pdf
+  if (length(geneRidge$ID) > 0) {
+    pdf(ridgeplotPdf, paper='a4r', height=0)
+    print(ridgeplot(geneRidge))
+    garbage <- dev.off()
+  }
+  ## print to txt file
+  WriteText(txtFile, geneEnrich)
 }else if (args$type == "GSEA") {
   LoadPacakge('dplyr')
   LoadPacakge('msigdf')
@@ -289,6 +328,7 @@ if (args$type == "GO") {
       print(gseaplot2(geneEnrich, geneSetID=i, title = title, base_size=10))
       dev.off()
     }
-    WriteText(textFile, geneEnrich, type='GSEA')
+    ## print to txt file
+    WriteText(txtFile, geneEnrich, type='GSEA')
   }
 }
