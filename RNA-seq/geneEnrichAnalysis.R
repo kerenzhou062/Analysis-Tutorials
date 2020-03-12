@@ -64,11 +64,11 @@ WriteText <- function(file, enrichResult, type=NULL, reverse=FALSE, bool=FALSE) 
   }
 }
 
-PlotSave <- function(filename, object) {
+PlotSave <- function(filename, object, h=9, w=9) {
   suppressMessages(library('ggplot2'))
   ggsave(filename,
-    height = 8,
-    width = 8,
+    height = h,
+    width = w,
     plot = object,
     dpi=300
   )
@@ -223,7 +223,7 @@ dotplotPdf = file.path(args$output, paste(args$prefix, ".dotplot.pdf", sep=""))
 ridgeplotPdf = file.path(args$output, paste(args$prefix, ".ridgeplot.pdf", sep=""))
 cnetplotPdf = file.path(args$output, paste(args$prefix, ".cnetplot.pdf", sep=""))
 heatplotPdf = file.path(args$output, paste(args$prefix, ".heatplot.pdf", sep=""))
-emapplot = file.path(args$output, paste(args$prefix, ".emapplot.pdf", sep=""))
+emapplotPdf = file.path(args$output, paste(args$prefix, ".emapplot.pdf", sep=""))
 
 #text file
 txtFile = file.path(args$output, paste(args$prefix, ".geneEnrich.txt", sep=""))
@@ -250,13 +250,13 @@ if (args$type == "GO") {
   # remove redundent GO terms
   geneEnrichSimple <- simplify(geneEnrich)
   p <- cnetplot(geneEnrichSimple, foldChange=geneList, circular = TRUE, colorEdge = TRUE, showCategory=args$max)
-  PlotSave(cnetplotPdf, p)
+  PlotSave(cnetplotPdf, p, 11, 11)
   ### heatmap
   p <- heatplot(geneEnrichSimple, foldChange=geneList, showCategory=args$max)
-  PlotSave(heatplotPdf, p)
+  PlotSave(heatplotPdf, p, 11, 11)
   ### emapplot
   p <- emapplot(geneEnrichSimple, foldChange=geneList, showCategory=args$max)
-  PlotSave(emapplotPdf, p)
+  PlotSave(emapplotPdf, p, 11, 11)
   # run gseGO
   geneRidge <- gseGO(
     geneList, 
@@ -309,7 +309,7 @@ if (args$type == "GO") {
   ## print to pdf
   if (length(geneRidge$ID) > 0) {
     p <- ridgeplot(geneRidge, showCategory = args$max)
-    PlotSave(ridgeplotPdf, p)
+    PlotSave(ridgeplotPdf, p, 11, 11)
   }
   ## print to txt file
   WriteText(txtFile, geneEnrich)
