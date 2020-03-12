@@ -5,7 +5,6 @@ suppressMessages(library('getopt'))
 command =  matrix(c(
     "help",      "h",  0,   "logical",      "Show help information",
     "category",  "c",  1,   "character",    "hallmark|c2-7 (https://www.gsea-msigdb.org/gsea)",
-    "dbName",    "d",  1,   "character",    "Used database: org.Hs.eg.db|org.Mm.eg.db",
     "geneset",   "s",  1,   "character",    "geneset (https://www.gsea-msigdb.org/gsea)",
     "gotype",    "y",  1,   "character",    "GO type: ALL|BP|MF|CC",
     "input",     "i",  1,   "character",    "2-column input file (NO HEADER+TAB, 1stCol:gene_id, 2ndCol:value)",
