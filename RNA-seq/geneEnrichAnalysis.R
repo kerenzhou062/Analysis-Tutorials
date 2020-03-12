@@ -249,13 +249,13 @@ if (args$type == "GO") {
   # remove redundent GO terms
   geneEnrichSimple <- simplify(geneEnrich)
   p <- cnetplot(geneEnrichSimple, foldChange=geneList, circular = TRUE, colorEdge = TRUE, showCategory=args$max)
-  PlotSave(cnetplotPdf, p, 11, 11)
+  PlotSave(cnetplotPdf, p, 20, 20)
   ### heatmap
   p <- heatplot(geneEnrichSimple, foldChange=geneList, showCategory=args$max)
-  PlotSave(heatplotPdf, p, 11, 11)
+  PlotSave(heatplotPdf, p, 20, 20)
   ### emapplot
   p <- emapplot(geneEnrichSimple, foldChange=geneList, showCategory=args$max)
-  PlotSave(emapplotPdf, p, 11, 11)
+  PlotSave(emapplotPdf, p, 12, 12)
   # run gseGO
   geneRidge <- gseGO(
     geneList, 
@@ -273,7 +273,7 @@ if (args$type == "GO") {
   ## print to pdf
   if (length(geneRidge$ID) > 0) {
     p <- ridgeplot(geneRidge, showCategory=args$max)
-    PlotSave(ridgeplotPdf, p)
+    PlotSave(ridgeplotPdf, p, 11, 11)
   }
   ## print to txt file
   WriteText(txtFile, geneEnrich)
