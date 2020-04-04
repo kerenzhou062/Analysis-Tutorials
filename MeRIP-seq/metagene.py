@@ -93,8 +93,7 @@ def RebuildBed(bedFile, method, extend):
                     row[2] = str(center + extend + 1)
                     lineRow = row[0:3]
                     name = '##'.join([uniqPeakName, '1'])
-                    score = '1'
-                    lineRow.extend([name, score, bedinfo.strand])
+                    lineRow.extend([name, str(bedinfo.score), bedinfo.strand])
                     bedLineRow.append('\t'.join(lineRow))
                 elif method == 'exon':
                     bed12 = bedinfo.decode()
