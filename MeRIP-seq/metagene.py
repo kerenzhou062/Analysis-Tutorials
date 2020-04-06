@@ -9,7 +9,7 @@ from pybedtools import BedTool
 import bedutils
 
 parser = argparse.ArgumentParser(
-    description="This script is used for annotating bed output from convergeAaToSegbedinfo.py",
+    description="This script is used for ploting metagene pattern from bed or bam",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-a', '--anno', action='store', type=str,
                     required=True,
