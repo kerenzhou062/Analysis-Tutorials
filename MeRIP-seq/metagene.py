@@ -435,14 +435,17 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
 if __name__ == '__main__':
     ## judge arguments
     iboolDict = defaultdict(bool)
+    ibool = 0
     if bool(args.bed):
+        ibool += 1
         iboolDict['bed'] = True
     if bool(args.bam):
+        ibool += 1
         iboolDict['bam'] = True
-    if bool(args.bed) and bool(args.bam):
-        iboolDict['both'] = True
-    if iboolDict['both'] is False:
+    if ibool == 0:
         sys.exit('--bed or --bam should be set!')
+    elif ibool == 2:
+        iboolDict['both'] = True
     if iboolDict['both']:
         if len(args.bam) != len(args.bed):
             ssys.exit('--bam and --bed should be matched!')
