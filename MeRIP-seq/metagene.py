@@ -57,7 +57,7 @@ parser.add_argument('-s', '--smooth', action='store', type=str,
 parser.add_argument('-t', '--type', action='store', type=str,
                     choices=['density', 'percentage', 'number'],
                     default='density',
-                    help='The type of output values')
+                    help='The type of output values (always "density" for --bam)')
 parser.add_argument('-w', '--width', action='store', type=int,
                     default=5,
                     help='The span for smooth')
@@ -144,7 +144,7 @@ def RebuildBed(bedFile, method, extend):
     bedLineRow.append('')
     bedlines = '\n'.join(bedLineRow)
     peakBed = BedTool(bedlines, from_string=True).sort()
-    bedDict = {'bedtool':peakBed, 'totalNum':lineNum}
+    bedDict = {'bedtool':peakBed, 'totalNum':lineNum, 'source':'bed'}
     return bedDict
 
 def BamToBed(bam, peakBed, library, paired):
@@ -175,7 +175,7 @@ def BamToBed(bam, peakBed, library, paired):
             kwargs['S'] = False
             kwargs['s'] = False
         bamBed = bamBed.intersect(peakBed, **kwargs)
-    bedDict = {'bedtool':bamBed, 'totalNum':totalReadNum}
+    bedDict = {'bedtool':bamBed, 'totalNum':totalReadNum, 'source':'bam'}
     return bedDict
 
 def AnnoBed12ToBed6(bed12File, geneType, feature, binType, binsize):
@@ -306,6 +306,7 @@ def Smooth(valueList, method, span):
 def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
     inputBed = inputBedDict['bedtool']
     totalPeakNum = inputBedDict['totalNum']
+    bedSource = inputBedDict['source']
     annoBed = annoBedDict['bedtool']
     bed12Dict = annoBedDict['bed12']
     bed6Dict = annoBedDict['bed6']
@@ -410,13 +411,16 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
         binValList = list()
         for binCoord in sorted(binValDict[feature].keys()):
             binSum = binValDict[feature][binCoord]['sum']
-            if args.type == 'density':
-                binPeakNum = len(binValDict[feature][binCoord]['peak'].keys())
-                binVal = binPeakNum / totalPeakNum * 100
-            elif args.type == 'percentage':
-                binVal = binSum / totalPeakNum * 100
+            if bedSource == 'bam':
+                binVal = binSum / totalPeakNum
             else:
-                binVal = binSum
+                if args.type == 'density':
+                    binPeakNum = len(binValDict[feature][binCoord]['peak'].keys())
+                    binVal = binPeakNum / totalPeakNum * 100
+                elif args.type == 'percentage':
+                    binVal = binSum / totalPeakNum * 100
+                else:
+                    binVal = binSum
             binValList.append(binVal)
         smmothBinValList = Smooth(binValList, args.smooth, args.width)
         for binVal in smmothBinValList:
