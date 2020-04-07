@@ -5,6 +5,8 @@ import argparse
 import re
 from collections import defaultdict
 from pybedtools import BedTool
+import subprocess
+import tempfile
 # in-house module
 import bedutils
 
@@ -21,9 +23,6 @@ parser.add_argument('-b', '--bin', action='store', type=str,
 parser.add_argument('-e', '--extend', action='store', type=int,
                     default=0,
                     help='Extend --extend bp around peak center ')
-parser.add_argument('-i', '--input', nargs='+', type=str,
-                    required=True,
-                    help='The input files (bed3, bed6, bed12)')
 parser.add_argument('-f', '--feature', nargs='+', type=str,
                     choices=["coding", "exon", "intron", "full"],
                     default='coding',
@@ -32,17 +31,25 @@ parser.add_argument('-g', '--gene', nargs='+', type=str,
                     choices=["protein_coding", "non_coding", "all"],
                     default='protein_coding',
                     help='The bin features')
+parser.add_argument('-i', '--bed', nargs='+', type=str,
+                    help='The input bed files (bed3, bed6, bed12)')
+parser.add_argument('-k', '--bam', nargs='+', type=str,
+                    help='The input bam files (if --bed set, should be equal to --bed)')
+parser.add_argument('-l', '--library', action='store', type=str,
+                    choices=['unstranded', 'reverse', 'forward'],
+                    default='reverse',
+                    help='The library tye of bam files')
 parser.add_argument('-m', '--method', action='store', type=str,
                     choices=['center', 'interval', 'exon'],
                     default='center',
                     help='The method for calculating bin coverage')
 parser.add_argument('-n', '--name', nargs='+', type=str,
-                    help='The sample name for --input files')
+                    help='The sample name for --bed files')
 parser.add_argument('-o', '--output', action='store', type=str,
                     default="bin.txt",
                     help='The output file')
 parser.add_argument('-p', '--peaknum', action='store', type=int,
-                    help='Set the total number of peaks for --input')
+                    help='Set the total number of peaks for --bed')
 parser.add_argument('-s', '--smooth', action='store', type=str,
                     choices=['none', 'move', 'average'],
                     default='move',
@@ -60,6 +67,9 @@ parser.add_argument('-z', '--size', action='store', type=int,
 parser.add_argument('--matchid', action='store_true',
                     default=False,
                     help='Match input bed name in annotation bed12')
+parser.add_argument('--paired', action='store_true',
+                    default=False,
+                    help='Paired-end for bam files in --bam')
 parser.add_argument('--strand', action='store_true',
                     default=False,
                     help='Only report overlap on the same strand')
@@ -71,6 +81,13 @@ if len(sys.argv[1:]) == 0:
 
 def ExonLenSum(blist):
     return sum(map(lambda x: x[1] - x[0], blist))
+
+def GetSampleName(fileLsit):
+    sampleNameList = list()
+    for file in fileLsit:
+        basename = os.path.splitext(os.path.split(file)[-1])[0]
+        sampleNameList.append(basename)
+    return sampleNameList
 
 def RebuildBed(bedFile, method, extend):
     bedLineRow = list()
@@ -126,7 +143,40 @@ def RebuildBed(bedFile, method, extend):
                 lineNum += 1
     bedLineRow.append('')
     bedlines = '\n'.join(bedLineRow)
-    return [bedlines, lineNum]
+    peakBed = BedTool(bedlines, from_string=True).sort()
+    bedDict = {'bedtool':peakBed, 'totalNum':lineNum}
+    return bedDict
+
+def BamToBed(bam, peakBed, library, paired):
+    bamToBedTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+    if paired is True:
+        command = 'samtools view -bf 66 {0} | bedtools bamtobed -i stdin | '.format(bam)
+        command += 'bedtools sort -i stdin > {0}'.format(bamToBedTemp.name)
+    else:
+        command = 'bedtools bamtobed -i {0} | bedtools sort -i stdin > {1}'.format(bam, bamToBedTemp.name)
+    subprocess.call(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    totalReadNum = 0
+    bedLineRow = list()
+    with open(bamToBedTemp.name, 'r') as f:
+        for line in f:
+            row = line.split('\t')
+            row[3] = '##'.join([row[3], '1'])
+            bedLineRow.append('\t'.join(row))
+            totalReadNum += 1
+    bamToBedTemp.close()
+    bedLineRow.append('\n')
+    bedlines = ''.join(bedLineRow)
+    bamBed = BedTool(bedlines, from_string=True)
+    if peakBed is not None:
+        kwargs = {'nonamecheck':True, 'u':True, "sorted":True, 'S':True, 's':False}
+        if library == 'unstranded':
+            kwargs['S'] = False
+        elif library == 'forward':
+            kwargs['S'] = False
+            kwargs['s'] = False
+        bamBed = bamBed.intersect(peakBed, **kwargs)
+    bedDict = {'bedtool':bamBed, 'totalNum':totalReadNum}
+    return bedDict
 
 def AnnoBed12ToBed6(bed12File, geneType, feature, binType, binsize):
     ## sub main
@@ -217,7 +267,9 @@ def AnnoBed12ToBed6(bed12File, geneType, feature, binType, binsize):
                 fLenPreSum += coord[1] - coord[0]
     bedLineRow.append('')
     bedlines = '\n'.join(bedLineRow)
-    return [bedlines, bed12Dict, bed6Dict, binsizeDict]
+    annoBed = BedTool(bedlines, from_string=True).sort()
+    annoBedDict = {'bedtool':annoBed, 'bed12':bed12Dict, 'bed6':bed6Dict, 'binsize':binsizeDict}
+    return annoBedDict
 
 def Smooth(valueList, method, span):
     def span_ave(vlist, rstart, rend, rlen):
@@ -251,17 +303,16 @@ def Smooth(valueList, method, span):
             smoothValList.append(valueAve)
     return smoothValList
 
-def RunMetagene(inputFile, annoBedDict, args, kwargs):
+def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
+    inputBed = inputBedDict['bedtool']
+    totalPeakNum = inputBedDict['totalNum']
     annoBed = annoBedDict['bedtool']
     bed12Dict = annoBedDict['bed12']
     bed6Dict = annoBedDict['bed6']
     binsizeDict = annoBedDict['binsize']
-    ## rebuild input bed
-    inputBedLines, totalPeakNum = RebuildBed(inputFile, args.method, args.extend)
     if bool(args.peaknum):
         totalPeakNum = args.peaknum
-    ## create bedtool objects
-    inputBed = BedTool(inputBedLines, from_string=True).sort()
+    ## intersect rebuild inputBed and annoBed
     intersect = inputBed.intersect(annoBed, **kwargs)
     interDict = defaultdict(dict)
     interStatsDict = defaultdict(dict)
@@ -290,7 +341,6 @@ def RunMetagene(inputFile, annoBedDict, args, kwargs):
                 interDict[peakName][annoName] = defaultdict(dict)
         interDict[peakName][annoName][childId] = [uniqFeatureName, interStart, interEnd]
         interStatsDict[peakName][annoName] += interLen
-    
     ## determin unique peakName-annoName relationship
     ## intersection lengh -> longest transcript
     peakAnnoPairDict = defaultdict(str)
@@ -312,7 +362,6 @@ def RunMetagene(inputFile, annoBedDict, args, kwargs):
                     annoLen = bed12Dict[annoName][sizeKey]
                     if annoLen > preAnnoLen:
                         peakAnnoPairDict[peakName] = annoName
-    
     ## determin bin value
     binValDict = defaultdict(dict)
     for feature in binsizeDict.keys():
@@ -350,7 +399,6 @@ def RunMetagene(inputFile, annoBedDict, args, kwargs):
                         binCoord = binsizeDict[feature] - 1
                     binValDict[feature][binCoord]['sum'] += 1
                     binValDict[feature][binCoord]['peak'][peakName] += 1
-    
     ## generate final bin-value dict
     interTxNum = len(interTxDict.keys())
     finalBinValDict = defaultdict(dict)
@@ -381,26 +429,58 @@ def RunMetagene(inputFile, annoBedDict, args, kwargs):
 
 # main program
 if __name__ == '__main__':
-    kwargs = {'wb':True, "sorted":True, 's':args.strand}
-    annoBedLines, bed12Dict, bed6Dict, binsizeDict = AnnoBed12ToBed6(args.anno, args.gene, args.feature, args.bin, args.size)
-    annoBed = BedTool(annoBedLines, from_string=True).sort()
-    annoBedDict = {'bedtool':annoBed, 'bed12':bed12Dict, 'bed6':bed6Dict, 'binsize':binsizeDict}
+    ## judge arguments
+    iboolDict = defaultdict(bool)
+    if bool(args.bed):
+        iboolDict['bed'] = True
+    if bool(args.bam):
+        iboolDict['bam'] = True
+    if bool(args.bed) and bool(args.bam):
+        iboolDict['both'] = True
+    if iboolDict['both'] is False:
+        sys.exit('--bed or --bam should be set!')
+    if iboolDict['both']:
+        if len(args.bam) != len(args.bed):
+            ssys.exit('--bam and --bed should be matched!')
+    ## get sample name list
     sampleNameList = list()
     if bool(args.name):
-        if len(args.input) != len(args.name):
-            sys.error.write('--input and --name should match the number!')
-            sys.exit()
+        sampleNameList = args.name
+        if iboolDict['bed']:
+            if len(args.bed) != len(args.name):
+                sys.exit('--bed and --name should be matched!')
         else:
-            sampleNameList = args.name
+            if len(args.bam) != len(args.name):
+                sys.exit('--bam and --name should be matched!')
     else:
-        for inputFile in args.input:
-            basename = os.path.splitext(os.path.split(inputFile)[-1])[0]
-            sampleNameList.append(basename)
+        if iboolDict['bed']:
+            sampleNameList = GetSampleName(args.bed)
+        else:
+            sampleNameList = GetSampleName(args.bam)
+    ## run programs
+    kwargs = {'nonamecheck':True, 'wb':True, "sorted":True, 's':args.strand, 'S':False}
+    if args.library == 'reverse' and iboolDict['bam']:
+        kwargs['S'] = True
+        kwargs['s'] = False
+    elif args.library == 'unstranded' and iboolDict['bam']:
+        kwargs['s'] = False
+    annoBedDict = AnnoBed12ToBed6(args.anno, args.gene, args.feature, args.bin, args.size)
     binSampleValDict = defaultdict(dict)
-    for i in range(len(args.input)):
-        inputFile = args.input[i]
+    for i in range(len(sampleNameList)):
         sampleName = sampleNameList[i]
-        binValDict = RunMetagene(inputFile, annoBedDict, args, kwargs)
+        ## rebuild input bed
+        if iboolDict['both']:
+            inputBed = BedTool(args.bed[i]).sort()
+            bamFile = args.bam[i]
+            inputBedDict = BamToBed(bamFile, inputBed, args.library, args.paired)
+        elif iboolDict['bed']:
+            inputBedDict = RebuildBed(inputBedFile, args.method, args.extend)
+        else:
+            inputBed = None
+            bamFile = args.bam[i]
+            inputBedDict = BamToBed(bamFile, inputBed, args.library, args.paired)
+        ## retrieve bin-value relationships
+        binValDict = RunMetagene(inputBedDict, annoBedDict, args, kwargs)
         for binCoord in binValDict.keys():
             if binCoord not in binSampleValDict:
                 binSampleValDict[binCoord] = defaultdict(dict)
