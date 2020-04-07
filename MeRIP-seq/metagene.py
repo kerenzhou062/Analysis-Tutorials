@@ -7,6 +7,7 @@ from collections import defaultdict
 from pybedtools import BedTool
 import subprocess
 import tempfile
+from multiprocessing import Pool, Manager
 # in-house module
 import bedutils
 
@@ -20,9 +21,12 @@ parser.add_argument('-b', '--bin', action='store', type=str,
                     choices=['average', 'constant'],
                     default='constant',
                     help='The type of bin size')
+parser.add_argument('-c', '--cpu', action='store', type=int,
+                    default=1,
+                    help='Number of cpus to run this program')
 parser.add_argument('-e', '--extend', action='store', type=int,
                     default=0,
-                    help='Extend --extend bp around peak center ')
+                    help='Extend --extend bp around peak center')
 parser.add_argument('-f', '--feature', nargs='+', type=str,
                     choices=["coding", "exon", "intron", "full"],
                     default='coding',
@@ -139,34 +143,41 @@ def RebuildBed(bedFile, method, extend):
                     lineRow = row[0:3]
                     name = '##'.join([uniqPeakName, '1'])
                     lineRow.extend([name, str(bedinfo.score), bedinfo.strand])
-                    bedLineRow.append('\t'.join(lineRow))
+                    bedLineRow.append(lineRow)
                 lineNum += 1
-    bedLineRow.append('')
-    bedlines = '\n'.join(bedLineRow)
-    peakBed = BedTool(bedlines, from_string=True).sort()
+    peakBed = BedTool(bedLineRow).sort()
     bedDict = {'bedtool':peakBed, 'totalNum':lineNum, 'source':'bed'}
     return bedDict
 
 def BamToBed(bam, peakBed, library, paired):
+    def sub_call(command):
+        subprocess.call(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     bamToBedTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+    bedSortTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
     if paired is True:
-        command = 'samtools view -bf 66 {0} | bedtools bamtobed -i stdin | '.format(bam)
-        command += 'bedtools sort -i stdin > {0}'.format(bamToBedTemp.name)
+        fbamTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+        command = 'samtools view -bf 66 {0} > {1}'.format(bam, fbamTemp.name)
+        sub_call(command)
+        command = 'bedtools bamtobed -i {0} > {1}'.format(fbamTemp.name, bamToBedTemp)
+        sub_call(command)
+        fbamTemp.close()
     else:
-        command = 'bedtools bamtobed -i {0} | bedtools sort -i stdin > {1}'.format(bam, bamToBedTemp.name)
-    subprocess.call(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        command = 'bedtools bamtobed -i {0} > {1}'.format(bam, bamToBedTemp.name)
+        sub_call(command)
+    command = 'bedtools sort -i {0} > {1}'.format(bamToBedTemp.name, bedSortTemp.name)
+    sub_call(command)
+    bamToBedTemp.close()
+    ## construct bed
     totalReadNum = 0
     bedLineRow = list()
-    with open(bamToBedTemp.name, 'r') as f:
+    with open(bedSortTemp.name, 'r') as f:
         for line in f:
             row = line.split('\t')
             row[3] = '##'.join([row[3], '1'])
-            bedLineRow.append('\t'.join(row))
+            bedLineRow.append(row)
             totalReadNum += 1
-    bamToBedTemp.close()
-    bedLineRow.append('\n')
-    bedlines = ''.join(bedLineRow)
-    bamBed = BedTool(bedlines, from_string=True)
+    bedSortTemp.close()
+    bamBed = BedTool(bedLineRow)
     if peakBed is not None:
         kwargs = {'nonamecheck':True, 'u':True, "sorted":True, 'S':True, 's':False}
         if library == 'unstranded':
@@ -174,7 +185,7 @@ def BamToBed(bam, peakBed, library, paired):
         elif library == 'forward':
             kwargs['S'] = False
             kwargs['s'] = False
-        bamBed = bamBed.intersect(peakBed, **kwargs)
+        bamBed = bamBed.intersect(peakBed, stream=True, **kwargs)
     bedDict = {'bedtool':bamBed, 'totalNum':totalReadNum, 'source':'bam'}
     return bedDict
 
@@ -263,11 +274,9 @@ def AnnoBed12ToBed6(bed12File, geneType, feature, binType, binsize):
                 coordName = '##'.join([name, feature, str(fLenPreSum)])
                 row = [bedinfo.chr, coord[0], coord[1], coordName, mapLenPerbp, bedinfo.strand]
                 bed6Dict[coordName] = row
-                bedLineRow.append('\t'.join(map(str, row)))
+                bedLineRow.append(list(map(str, row)))
                 fLenPreSum += coord[1] - coord[0]
-    bedLineRow.append('')
-    bedlines = '\n'.join(bedLineRow)
-    annoBed = BedTool(bedlines, from_string=True).sort()
+    annoBed = BedTool(bedLineRow).sort()
     annoBedDict = {'bedtool':annoBed, 'bed12':bed12Dict, 'bed6':bed6Dict, 'binsize':binsizeDict}
     return annoBedDict
 
@@ -314,7 +323,8 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
     if bool(args.peaknum):
         totalPeakNum = args.peaknum
     ## intersect rebuild inputBed and annoBed
-    intersect = inputBed.intersect(annoBed, **kwargs)
+    intersect = inputBed.intersect(annoBed, stream=True, **kwargs)
+    ## to reduce the memory usage
     interDict = defaultdict(dict)
     interStatsDict = defaultdict(dict)
     for item in intersect:
@@ -342,6 +352,8 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
                 interDict[peakName][annoName] = defaultdict(dict)
         interDict[peakName][annoName][childId] = [uniqFeatureName, interStart, interEnd]
         interStatsDict[peakName][annoName] += interLen
+    ## to reduce memory usage
+    del intersect
     ## determin unique peakName-annoName relationship
     ## intersection lengh -> longest transcript
     peakAnnoPairDict = defaultdict(str)
@@ -400,6 +412,9 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
                         binCoord = binsizeDict[feature] - 1
                     binValDict[feature][binCoord]['sum'] += 1
                     binValDict[feature][binCoord]['peak'][peakName] += 1
+    ## to reduce memory usage
+    del interDict
+    del peakAnnoPairDict
     ## generate final bin-value dict
     interTxNum = len(interTxDict.keys())
     finalBinValDict = defaultdict(dict)
