@@ -4,6 +4,7 @@ import sys
 import argparse
 import re
 from collections import defaultdict
+import pysam
 from pybedtools import BedTool
 import subprocess
 import tempfile
@@ -150,43 +151,34 @@ def RebuildBed(bedFile, method, extend):
     return bedDict
 
 def BamToBed(bam, peakBed, library, paired):
-    def sub_call(command):
-        subprocess.call(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    bamToBedTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
-    bedSortTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+    bamToBedTemp = tempfile.NamedTemporaryFile(suffix='.bed', delete=True)
     if paired is True:
-        fbamTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
-        command = 'samtools view -bf 66 {0} > {1}'.format(bam, fbamTemp.name)
-        sub_call(command)
-        command = 'bedtools bamtobed -i {0} > {1}'.format(fbamTemp.name, bamToBedTemp)
-        sub_call(command)
+        fbamTemp = tempfile.NamedTemporaryFile(suffix='.bam', delete=True)
+        pysam.view('-bf', '66', '-o', fbamTemp.name, bam, catch_stdout=False)
+        bamToBedObj = BedTool(fbamTemp).bamtobed().sort()
         fbamTemp.close()
     else:
-        command = 'bedtools bamtobed -i {0} > {1}'.format(bam, bamToBedTemp.name)
-        sub_call(command)
-    command = 'bedtools sort -i {0} > {1}'.format(bamToBedTemp.name, bedSortTemp.name)
-    sub_call(command)
-    bamToBedTemp.close()
+        bamToBedObj = BedTool(bam).bamtobed().sort()
     ## construct bed
     totalReadNum = 0
     bedLineRow = list()
-    with open(bedSortTemp.name, 'r') as f:
-        for line in f:
-            row = line.split('\t')
-            row[3] = '##'.join([row[3], '1'])
-            bedLineRow.append(row)
-            totalReadNum += 1
-    bedSortTemp.close()
-    bamBed = BedTool(bedLineRow)
+    for interval in bamToBedObj:
+        row = interval.fields
+        row[3] = '##'.join([row[3], '1'])
+        bedLineRow.append(row)
+        totalReadNum += 1
+    bamToBed = BedTool(bedLineRow)
     if peakBed is not None:
+        temp = peakBed.saveas(peakBed._tmp())
+        peakBed = BedTool(temp.fn)
         kwargs = {'nonamecheck':True, 'stream':True, 'u':True, 'sorted':True, 'S':True, 's':False}
         if library == 'unstranded':
             kwargs['S'] = False
         elif library == 'forward':
             kwargs['S'] = False
             kwargs['s'] = False
-        bamBed = bamBed.intersect(peakBed, **kwargs)
-    bedDict = {'bedtool':bamBed, 'totalNum':totalReadNum, 'source':'bam'}
+        bamToBed = bamToBed.intersect(peakBed, **kwargs)
+    bedDict = {'bedtool':bamToBed, 'totalNum':totalReadNum, 'source':'bam'}
     return bedDict
 
 def AnnoBed12ToBed6(bed12File, geneType, feature, binType, binsize):
@@ -502,6 +494,8 @@ if __name__ == '__main__':
         kwargs['s'] = False
     ## construct annoBed from bed12
     annoBedDict = AnnoBed12ToBed6(args.anno, args.gene, args.feature, args.bin, args.size)
+    temp = annoBedDict['bedtool'].saveas(annoBedDict['bedtool']._tmp())
+    annoBedDict['bedtool'] = BedTool(temp.fn)
     ## multi-thread start
     pool = Pool(processes=args.cpu)
     resultList = []
