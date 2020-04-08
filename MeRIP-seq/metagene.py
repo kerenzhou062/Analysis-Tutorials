@@ -169,8 +169,6 @@ def BamToBed(bam, peakBed, library, paired):
         totalReadNum += 1
     bamToBed = BedTool(bedLineRow)
     if peakBed is not None:
-        temp = peakBed.saveas(peakBed._tmp())
-        peakBed = BedTool(temp.fn)
         kwargs = {'nonamecheck':True, 'stream':True, 'u':True, 'sorted':True, 'S':True, 's':False}
         if library == 'unstranded':
             kwargs['S'] = False
@@ -443,13 +441,19 @@ def MultiThreadRun(index, iboolDict, annoBedDict, args, kwargs):
     if iboolDict['both']:
         inputBed = BedTool(args.bed[index]).sort()
         bamFile = args.bam[index]
-        inputBedDict = BamToBed(bamFile, inputBed, args.library, args.paired)
+        tempFile = tempfile.NamedTemporaryFile(suffix='.bed', delete=True)
+        temp = inputBed.saveas(tempFile.name)
+        peakBed = BedTool(temp.fn)
+        inputBedDict = BamToBed(bamFile, peakBed, args.library, args.paired)
     elif iboolDict['bed']:
         inputBedDict = RebuildBed(args.bed[index], args.method, args.extend)
     else:
         inputBed = None
         bamFile = args.bam[index]
-        inputBedDict = BamToBed(bamFile, inputBed, args.library, args.paired)
+        tempFile = tempfile.NamedTemporaryFile(suffix='.bed', delete=True)
+        temp = inputBed.saveas(tempFile.name)
+        peakBed = BedTool(temp.fn)
+        inputBedDict = BamToBed(bamFile, peakBed, args.library, args.paired)
     ## retrieve bin-value relationships
     binValDict = RunMetagene(inputBedDict, annoBedDict, args, kwargs)
     return [sampleName, binValDict]
