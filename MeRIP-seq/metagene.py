@@ -7,7 +7,7 @@ from collections import defaultdict
 from pybedtools import BedTool
 import subprocess
 import tempfile
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
 # in-house module
 import bedutils
 
@@ -23,7 +23,7 @@ parser.add_argument('-b', '--bin', action='store', type=str,
                     help='The type of bin size')
 parser.add_argument('-c', '--cpu', action='store', type=int,
                     default=1,
-                    help='Number of cpus to run this program')
+                    help='Number of cpus to run this program (work for multiple input of --bed or --bam)')
 parser.add_argument('-e', '--extend', action='store', type=int,
                     default=0,
                     help='Extend --extend bp around peak center')
@@ -179,13 +179,13 @@ def BamToBed(bam, peakBed, library, paired):
     bedSortTemp.close()
     bamBed = BedTool(bedLineRow)
     if peakBed is not None:
-        kwargs = {'nonamecheck':True, 'u':True, "sorted":True, 'S':True, 's':False}
+        kwargs = {'nonamecheck':True, 'stream':True, 'u':True, 'sorted':True, 'S':True, 's':False}
         if library == 'unstranded':
             kwargs['S'] = False
         elif library == 'forward':
             kwargs['S'] = False
             kwargs['s'] = False
-        bamBed = bamBed.intersect(peakBed, stream=True, **kwargs)
+        bamBed = bamBed.intersect(peakBed, **kwargs)
     bedDict = {'bedtool':bamBed, 'totalNum':totalReadNum, 'source':'bam'}
     return bedDict
 
@@ -323,7 +323,7 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
     if bool(args.peaknum):
         totalPeakNum = args.peaknum
     ## intersect rebuild inputBed and annoBed
-    intersect = inputBed.intersect(annoBed, stream=True, **kwargs)
+    intersect = inputBed.intersect(annoBed, **kwargs)
     ## to reduce the memory usage
     interDict = defaultdict(dict)
     interStatsDict = defaultdict(dict)
@@ -446,6 +446,22 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
             count += 1
     return finalBinValDict
 
+def MultiThreadRun(index, iboolDict, annoBedDict, args, kwargs):
+    sampleName = args.name[index]
+    if iboolDict['both']:
+        inputBed = BedTool(args.bed[index]).sort()
+        bamFile = args.bam[index]
+        inputBedDict = BamToBed(bamFile, inputBed, args.library, args.paired)
+    elif iboolDict['bed']:
+        inputBedDict = RebuildBed(args.bed[index], args.method, args.extend)
+    else:
+        inputBed = None
+        bamFile = args.bam[index]
+        inputBedDict = BamToBed(bamFile, inputBed, args.library, args.paired)
+    ## retrieve bin-value relationships
+    binValDict = RunMetagene(inputBedDict, annoBedDict, args, kwargs)
+    return [sampleName, binValDict]
+
 # main program
 if __name__ == '__main__':
     ## judge arguments
@@ -465,9 +481,7 @@ if __name__ == '__main__':
         if len(args.bam) != len(args.bed):
             ssys.exit('--bam and --bed should be matched!')
     ## get sample name list
-    sampleNameList = list()
     if bool(args.name):
-        sampleNameList = args.name
         if iboolDict['bed']:
             if len(args.bed) != len(args.name):
                 sys.exit('--bed and --name should be matched!')
@@ -476,33 +490,30 @@ if __name__ == '__main__':
                 sys.exit('--bam and --name should be matched!')
     else:
         if iboolDict['bed']:
-            sampleNameList = GetSampleName(args.bed)
+            args.name = GetSampleName(args.bed)
         else:
-            sampleNameList = GetSampleName(args.bam)
+            args.name = GetSampleName(args.bam)
     ## run programs
-    kwargs = {'nonamecheck':True, 'wb':True, "sorted":True, 's':args.strand, 'S':False}
+    kwargs = {'nonamecheck':True, 'stream':True, 'wb':True, "sorted":True, 's':args.strand, 'S':False}
     if args.library == 'reverse' and iboolDict['bam']:
         kwargs['S'] = True
         kwargs['s'] = False
     elif args.library == 'unstranded' and iboolDict['bam']:
         kwargs['s'] = False
+    ## construct annoBed from bed12
     annoBedDict = AnnoBed12ToBed6(args.anno, args.gene, args.feature, args.bin, args.size)
+    ## multi-thread start
+    pool = Pool(processes=args.cpu)
+    resultList = []
+    for i in range(len(args.name)):
+        result = pool.apply_async(MultiThreadRun, args=(i, iboolDict, annoBedDict, args, kwargs,))
+        resultList.append(result)
+    pool.close()
+    pool.join()
+    ## multi-thread end
     binSampleValDict = defaultdict(dict)
-    for i in range(len(sampleNameList)):
-        sampleName = sampleNameList[i]
-        ## rebuild input bed
-        if iboolDict['both']:
-            inputBed = BedTool(args.bed[i]).sort()
-            bamFile = args.bam[i]
-            inputBedDict = BamToBed(bamFile, inputBed, args.library, args.paired)
-        elif iboolDict['bed']:
-            inputBedDict = RebuildBed(inputBedFile, args.method, args.extend)
-        else:
-            inputBed = None
-            bamFile = args.bam[i]
-            inputBedDict = BamToBed(bamFile, inputBed, args.library, args.paired)
-        ## retrieve bin-value relationships
-        binValDict = RunMetagene(inputBedDict, annoBedDict, args, kwargs)
+    for result in resultList:
+        sampleName, binValDict = result.get()
         for binCoord in binValDict.keys():
             if binCoord not in binSampleValDict:
                 binSampleValDict[binCoord] = defaultdict(dict)
@@ -513,12 +524,12 @@ if __name__ == '__main__':
     with open(args.output, 'w') as out:
         ## print header
         row = ['feature', 'bin']
-        row.extend(sampleNameList)
+        row.extend(args.name)
         out.write('\t'.join(row) + '\n')
         ## print data content
         for binCoord in sorted(binSampleValDict.keys()):
             feature = binSampleValDict[binCoord]['feature']
             row = [feature, str(binCoord)]
-            valueRow = list(map(lambda x:str(binSampleValDict[binCoord][x]), sampleNameList))
+            valueRow = list(map(lambda x:str(binSampleValDict[binCoord][x]), args.name))
             row.extend(valueRow)
             out.write('\t'.join(row) + '\n')
