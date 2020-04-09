@@ -380,8 +380,8 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
     bedtoolArgs = BedtoolArgs(kwargs)
     command = 'bedtools intersect -a {0} -b {1} {2} > {3}'.format(inputBedFile.name, annoBedFile.name, bedtoolArgs, interFile.name)
     SysSubCall(command)
-    ## to reduce the memory usage
-    interDict = defaultdict(dict)
+    ## to reduce the memory cost
+    ## determin peakName-annoName relationship
     interStatsDict = defaultdict(dict)
     with open(interFile.name, 'r') as f:
         for line in f:
@@ -393,7 +393,6 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
                 childId = '1'
             else:
                 peakName, childId = overlapRow[3].split('##')
-            uniqFeatureName = annoRow[3]
             annoName = annoRow[3].split('##')[0]
             ## if set --matchid, force annoName containing peakName
             if args.matchid:
@@ -404,17 +403,10 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
             interStart = int(overlapRow[1])
             interEnd = int(overlapRow[2])
             interLen = interEnd - interStart
-            if peakName not in interDict:
-                interDict[peakName] = defaultdict(dict)
+            if peakName not in interStatsDict:
                 interStatsDict[peakName] = defaultdict(int)
-                if annoName not in interDict[peakName]:
-                    interDict[peakName][annoName] = defaultdict(dict)
             else:
-                if annoName not in interDict[peakName]:
-                    interDict[peakName][annoName] = defaultdict(dict)
-            interDict[peakName][annoName][childId] = [uniqFeatureName, interStart, interEnd]
-            interStatsDict[peakName][annoName] += interLen
-    interFile.close()
+                interStatsDict[peakName][annoName] += interLen
     ## determin unique peakName-annoName relationship
     ## intersection lengh -> longest transcript
     peakAnnoPairDict = defaultdict(str)
@@ -436,6 +428,9 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
                     annoLen = bed12Dict[annoName][sizeKey]
                     if annoLen > preAnnoLen:
                         peakAnnoPairDict[peakName] = annoName
+    ## to reduce memory cost
+    del interStatsDict
+    ## start to decode bin
     ## determin bin value
     binValDict = defaultdict(dict)
     for feature in binsizeDict.keys():
@@ -445,12 +440,25 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
             binValDict[feature][i]['sum'] = 0
             binValDict[feature][i]['peak'] = defaultdict(int)
     interTxDict = defaultdict(int)
-    for peakName in sorted(peakAnnoPairDict.keys()):
-        annoName = peakAnnoPairDict[peakName]
-        for childId in interDict[peakName][annoName].keys():
-            uniqFeatureName, interStart, interEnd = interDict[peakName][annoName][childId]
-            interLen = interEnd - interStart
+    count = 1
+    with open(interFile.name, 'r') as f:
+        for line in f:
+            row = line.strip().split('\t')
+            overlapRow = row[0:6]
+            annoRow = row[6:]
+            if bedSource == 'bam':
+                peakName = overlapRow[3]
+                childId = '1'
+            else:
+                peakName, childId = overlapRow[3].split('##')
+            uniqFeatureName = annoRow[3]
             annoName, feature, fLenPreSum = uniqFeatureName.split('##')
+            if annoName != peakAnnoPairDict[peakName]:
+                continue
+            ## decode bed
+            interStart = int(overlapRow[1])
+            interEnd = int(overlapRow[2])
+            interLen = interEnd - interStart
             fLenPreSum = int(fLenPreSum)
             annoStart = bed6Dict[uniqFeatureName][1]
             annoEnd = bed6Dict[uniqFeatureName][2]
@@ -473,8 +481,11 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
                         binCoord = binsizeDict[feature] - 1
                     binValDict[feature][binCoord]['sum'] += 1
                     binValDict[feature][binCoord]['peak'][peakName] += 1
-    ## to reduce memory usage
-    del interDict
+            if count == 1:
+                print(feature, binCoord, binValDict[feature][binCoord])
+                count += 1
+    interFile.close()
+    ## to reduce memory cost
     del peakAnnoPairDict
     ## generate final bin-value dict
     interTxNum = len(interTxDict.keys())
