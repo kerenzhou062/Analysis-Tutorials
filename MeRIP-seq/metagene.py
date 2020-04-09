@@ -53,6 +53,9 @@ parser.add_argument('-o', '--output', action='store', type=str,
                     help='The output file')
 parser.add_argument('-p', '--peaknum', action='store', type=int,
                     help='Set the total number of peaks for --bed')
+parser.add_argument('-r', '--memory', action='store', type=int,
+                    default=5,
+                    help='Set the memory (G) for sorting bed')
 parser.add_argument('-s', '--smooth', action='store', type=str,
                     choices=['none', 'move', 'average'],
                     default='move',
@@ -107,15 +110,16 @@ def GetSampleName(fileLsit):
         sampleNameList.append(basename)
     return sampleNameList
 
-def SortBed(file, destFile=None, temp=False):
+def SortBed(file, dfile=None, memory=None, temp=False):
     if temp is True:
         bfile = file.name
     else:
         bfile = file
-    if destFile is None:
-        command = 'sort -S 5G -k1,1 -k2,2n {0} -o {0}'.format(bfile)
-    else:
-        command = 'sort -S 5G -k1,1 -k2,2n {0} -o {1}'.format(bfile, destFile)
+    if memory is None:
+        memory = 5
+    if dfile is None:
+        dfile = file
+    command = 'sort -S {0}G -k1,1 -k2,2n {1} -o {2}'.format(memory, bfile, dfile)
     SysSubCall(command)
 
 def BedrowToFile(bedrow, file, temp=True, sort=True):
@@ -135,13 +139,11 @@ def FileToBedrow(file, temp=True, delete=True):
     else:
         bfile = file
     bedrow = list()
-    count = 0
     with open(bfile, 'r') as f:
         for line in f:
             row = line.strip().split('\t')
             bedrow.append(row)
-            count += 1
-    return [bedrow, count]
+    return bedrow
 
 def RebuildBed(bedFile, method, extend):
     bedLineRow = list()
@@ -198,7 +200,7 @@ def RebuildBed(bedFile, method, extend):
     bedDict = {'bedrow':bedLineRow, 'totalNum':lineNum, 'source':'bed'}
     return bedDict
 
-def BamToBed(bam, peakBedFile, library, paired):
+def BamToBed(bam, peakBedFile, memory, library, paired):
     bamToBedTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
     bedSortTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
     if paired is True:
@@ -211,28 +213,28 @@ def BamToBed(bam, peakBedFile, library, paired):
     else:
         command = 'bedtools bamtobed -i {0} > {1}'.format(bam, bamToBedTemp.name)
         SysSubCall(command)
-    command = 'sort -S 5G -k1,1 -k2,2n {0} > {1}'.format(bamToBedTemp.name, bedSortTemp.name)
+    command = 'sort -S {0}G -k1,1 -k2,2n {1} > {2}'.format(memory, bamToBedTemp.name, bedSortTemp.name)
     SysSubCall(command)
-    bamToBedTemp.close()
+    command = 'wc -l {0}'.format(bedSortTemp.name)
+    totalReadNum = int(bytes.decode(subprocess.check_output(command, shell=True)).split(' ')[0])
     ## construct bed
-    totalReadNum = 0
-    bedLineRow, totalReadNum = FileToBedrow(bedSortTemp, temp=True, delete=True)
     if peakBedFile is not None:
         peakBedSortFile = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
-        SortBed(peakBedFile, peakBedSortFile.name)
-        bamToBedFile = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+        SortBed(peakBedFile, dfile=peakBedSortFile.name)
         interFile = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
-        BedrowToFile(bedLineRow, bamToBedFile, temp=True, sort=False)
         kwargs = {'nonamecheck':True, 'u':True, "sorted":True, 'S':True, 's':False}
-        if args.library == 'forward':
+        if library == 'forward':
             kwargs['S'] = False
             kwargs['s'] = True
-        elif args.library == 'unstranded':
+        elif library == 'unstranded':
             kwargs['S'] = False
         bedtoolArgs = BedtoolArgs(kwargs)
-        command = 'bedtools intersect -a {0} -b {1} {2} > {3}'.format(bamToBedFile.name, peakBedFile, bedtoolArgs, interFile.name)
+        command = 'bedtools intersect -a {0} -b {1} {2} > {3}'.format(bamToBedTemp.name, peakBedSortFile.name, bedtoolArgs, interFile.name)
         SysSubCall(command)
-        bedLineRow, __ = FileToBedrow(interFile, temp=True, delete=True)
+        bedLineRow = FileToBedrow(interFile, temp=True, delete=True)
+    else:
+        bedLineRow = FileToBedrow(bedSortTemp, temp=True, delete=True)
+    bamToBedTemp.close()
     bedDict = {'bedrow':bedLineRow, 'totalNum':totalReadNum, 'source':'bam'}
     return bedDict
 
@@ -380,9 +382,17 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
     bedtoolArgs = BedtoolArgs(kwargs)
     command = 'bedtools intersect -a {0} -b {1} {2} > {3}'.format(inputBedFile.name, annoBedFile.name, bedtoolArgs, interFile.name)
     SysSubCall(command)
+    inputBedFile.close()
+    annoBedFile.close()
     ## to reduce the memory cost
     ## determin peakName-annoName relationship
-    interStatsDict = defaultdict(dict)
+    ## intersection lengh -> longest transcript
+    peakAnnoPairDict = defaultdict(str)
+    peakAnnoDict = defaultdict(int)
+    prePeakName = ''
+    sizeKey = args.feature + '_size'
+    if args.feature == 'coding':
+        sizeKey = 'exon_size'
     with open(interFile.name, 'r') as f:
         for line in f:
             row = line.strip().split('\t')
@@ -390,9 +400,8 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
             annoRow = row[6:]
             if bedSource == 'bam':
                 peakName = overlapRow[3]
-                childId = '1'
             else:
-                peakName, childId = overlapRow[3].split('##')
+                peakName = overlapRow[3].split('##')[0]
             annoName = annoRow[3].split('##')[0]
             ## if set --matchid, force annoName containing peakName
             if args.matchid:
@@ -403,33 +412,45 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
             interStart = int(overlapRow[1])
             interEnd = int(overlapRow[2])
             interLen = interEnd - interStart
-            if peakName not in interStatsDict:
-                interStatsDict[peakName] = defaultdict(int)
+            if peakName == prePeakName:
+                peakAnnoDict[annoName] += interLen
             else:
-                interStatsDict[peakName][annoName] += interLen
-    ## determin unique peakName-annoName relationship
-    ## intersection lengh -> longest transcript
-    peakAnnoPairDict = defaultdict(str)
-    for peakName in interStatsDict.keys():
-        for annoName in interStatsDict[peakName].keys():
-            if peakName not in peakAnnoPairDict:
-                peakAnnoPairDict[peakName] = annoName
-            else:
-                preAnnoName = peakAnnoPairDict[peakName]
-                preInterLen = interStatsDict[peakName][preAnnoName]
-                interLen = interStatsDict[peakName][annoName]
-                if interLen > preInterLen:
-                    peakAnnoPairDict[peakName] = annoName
-                elif interLen == preInterLen:
-                    sizeKey = args.feature + '_size'
-                    if args.feature == 'coding':
-                        sizeKey = 'exon_size'
-                    preAnnoLen = bed12Dict[preAnnoName][sizeKey]
-                    annoLen = bed12Dict[annoName][sizeKey]
-                    if annoLen > preAnnoLen:
-                        peakAnnoPairDict[peakName] = annoName
-    ## to reduce memory cost
-    del interStatsDict
+                for tempAnnoName in peakAnnoDict.keys():
+                    if prePeakName not in peakAnnoPairDict:
+                        peakAnnoPairDict[prePeakName] = tempAnnoName
+                    else:
+                        preAnnoName = peakAnnoPairDict[prePeakName]
+                        ## skip multiple alignment reads
+                        if preAnnoName not in peakAnnoDict:
+                            break
+                        preInterLen = peakAnnoDict[preAnnoName]
+                        interLen = peakAnnoDict[tempAnnoName]
+                        if interLen > preInterLen:
+                            peakAnnoPairDict[prePeakName] = tempAnnoName
+                        elif interLen == preInterLen:
+                            preAnnoLen = bed12Dict[preAnnoName][sizeKey]
+                            annoLen = bed12Dict[tempAnnoName][sizeKey]
+                            if annoLen > preAnnoLen:
+                                peakAnnoPairDict[prePeakName] = tempAnnoName
+                ## re-initialization
+                prePeakName = peakName
+                peakAnnoDict = defaultdict(int)
+                peakAnnoDict[annoName] += interLen
+    ## for the last peakName
+    for annoName in peakAnnoDict.keys():
+        if prePeakName not in peakAnnoPairDict:
+            peakAnnoPairDict[prePeakName] = annoName
+        else:
+            preAnnoName = peakAnnoPairDict[prePeakName]
+            preInterLen = peakAnnoDict[preAnnoName]
+            interLen = peakAnnoDict[annoName]
+            if interLen > preInterLen:
+                peakAnnoPairDict[prePeakName] = annoName
+            elif interLen == preInterLen:
+                preAnnoLen = bed12Dict[preAnnoName][sizeKey]
+                annoLen = bed12Dict[annoName][sizeKey]
+                if annoLen > preAnnoLen:
+                    peakAnnoPairDict[prePeakName] = annoName
     ## start to decode bin
     ## determin bin value
     binValDict = defaultdict(dict)
@@ -440,7 +461,6 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
             binValDict[feature][i]['sum'] = 0
             binValDict[feature][i]['peak'] = defaultdict(int)
     interTxDict = defaultdict(int)
-    count = 1
     with open(interFile.name, 'r') as f:
         for line in f:
             row = line.strip().split('\t')
@@ -448,9 +468,8 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
             annoRow = row[6:]
             if bedSource == 'bam':
                 peakName = overlapRow[3]
-                childId = '1'
             else:
-                peakName, childId = overlapRow[3].split('##')
+                peakName = overlapRow[3].split('##')[0]
             uniqFeatureName = annoRow[3]
             annoName, feature, fLenPreSum = uniqFeatureName.split('##')
             if annoName != peakAnnoPairDict[peakName]:
@@ -481,9 +500,6 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
                         binCoord = binsizeDict[feature] - 1
                     binValDict[feature][binCoord]['sum'] += 1
                     binValDict[feature][binCoord]['peak'][peakName] += 1
-            if count == 1:
-                print(feature, binCoord, binValDict[feature][binCoord])
-                count += 1
     interFile.close()
     ## to reduce memory cost
     del peakAnnoPairDict
@@ -499,7 +515,8 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
         for binCoord in sorted(binValDict[feature].keys()):
             binSum = binValDict[feature][binCoord]['sum']
             if bedSource == 'bam':
-                binVal = binSum / totalPeakNum
+                binPeakNum = len(binValDict[feature][binCoord]['peak'].keys())
+                binVal = binPeakNum / totalPeakNum
             else:
                 if args.type == 'density':
                     binPeakNum = len(binValDict[feature][binCoord]['peak'].keys())
@@ -523,13 +540,13 @@ def MultiThreadRun(index, iboolDict, annoBedDict, args, kwargs):
     if iboolDict['both']:
         inputBedFile = args.bed[index]
         bamFile = args.bam[index]
-        inputBedDict = BamToBed(bamFile, inputBedFile, args.library, args.paired)
+        inputBedDict = BamToBed(bamFile, inputBedFile, args.memory, args.library, args.paired)
     elif iboolDict['bed']:
         inputBedDict = RebuildBed(args.bed[index], args.method, args.extend)
     else:
         inputBedFile = None
         bamFile = args.bam[index]
-        inputBedDict = BamToBed(bamFile, inputBedFile, args.library, args.paired)
+        inputBedDict = BamToBed(bamFile, inputBedFile, args.memory, args.library, args.paired)
     ## retrieve bin-value relationships
     binValDict = RunMetagene(inputBedDict, annoBedDict, args, kwargs)
     return [sampleName, binValDict]
@@ -578,14 +595,16 @@ if __name__ == '__main__':
     pool = Pool(processes=args.cpu)
     resultList = []
     for i in range(len(args.name)):
-        result = pool.apply_async(MultiThreadRun, args=(i, iboolDict, annoBedDict, args, kwargs,))
+        result = MultiThreadRun(i, iboolDict, annoBedDict, args, kwargs)
+        #result = pool.apply_async(MultiThreadRun, args=(i, iboolDict, annoBedDict, args, kwargs,))
         resultList.append(result)
     pool.close()
     pool.join()
     ## multi-thread end
     binSampleValDict = defaultdict(dict)
     for result in resultList:
-        sampleName, binValDict = result.get()
+        sampleName, binValDict = result
+        #sampleName, binValDict = result.get()
         for binCoord in binValDict.keys():
             if binCoord not in binSampleValDict:
                 binSampleValDict[binCoord] = defaultdict(dict)
