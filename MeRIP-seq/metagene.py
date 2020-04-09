@@ -122,11 +122,18 @@ def SortBed(file, dfile=None, memory=None, temp=False):
     command = 'sort -S {0}G -k1,1 -k2,2n {1} -o {2}'.format(memory, bfile, dfile)
     SysSubCall(command)
 
-def BedrowToFile(bedrow, file, temp=True, sort=True):
+def BedrowToFile(bedrow, file, uniq=False, temp=True, sort=True):
     if temp is True:
         bfile = file.name
     else:
         bfile = file
+    if uniq is True:
+        count = 1
+        with open(bfile, 'w') as out:
+            for row in bedrow:
+                row[3] = '|'.join([row[3], str(count)])
+                out.write('\t'.join(row) + '\n')
+                count += 1
     with open(bfile, 'w') as out:
         for row in bedrow:
             out.write('\t'.join(row) + '\n')
@@ -375,7 +382,8 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
     annoBedFile = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
     interFile = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
     if bedSource == 'bam':
-        BedrowToFile(inputBedrow, inputBedFile, temp=True, sort=False)
+        ## ignore multiple alignment reads
+        BedrowToFile(inputBedrow, inputBedFile, uniq=True, temp=True, sort=False)
     else:
         BedrowToFile(inputBedrow, inputBedFile, temp=True, sort=True)
     BedrowToFile(annoBedrow, annoBedFile, temp=True, sort=True)
@@ -420,9 +428,6 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
                         peakAnnoPairDict[prePeakName] = tempAnnoName
                     else:
                         preAnnoName = peakAnnoPairDict[prePeakName]
-                        ## skip multiple alignment reads
-                        if preAnnoName not in peakAnnoDict:
-                            break
                         preInterLen = peakAnnoDict[preAnnoName]
                         interLen = peakAnnoDict[tempAnnoName]
                         if interLen > preInterLen:
