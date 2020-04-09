@@ -195,7 +195,7 @@ def RebuildBed(bedFile, method, extend):
     bedDict = {'bedrow':bedLineRow, 'totalNum':lineNum, 'source':'bed'}
     return bedDict
 
-def BamToBed(bam, peakBed, library, paired, kwargs):
+def BamToBed(bam, peakBed, library, paired):
     bamToBedTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
     bedSortTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
     if paired is True:
