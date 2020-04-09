@@ -107,12 +107,15 @@ def GetSampleName(fileLsit):
         sampleNameList.append(basename)
     return sampleNameList
 
-def SortBed(file, temp=False):
+def SortBed(file, destFile=None, temp=False):
     if temp is True:
         bfile = file.name
     else:
         bfile = file
-    command = 'sort -S 5G -k1,1 -k2,2n {0} -o {0}'.format(bfile)
+    if destFile is None:
+        command = 'sort -S 5G -k1,1 -k2,2n {0} -o {0}'.format(bfile)
+    else:
+        command = 'sort -S 5G -k1,1 -k2,2n {0} -o {1}'.format(bfile, destFile)
     SysSubCall(command)
 
 def BedrowToFile(bedrow, file, temp=True, sort=True):
@@ -195,7 +198,7 @@ def RebuildBed(bedFile, method, extend):
     bedDict = {'bedrow':bedLineRow, 'totalNum':lineNum, 'source':'bed'}
     return bedDict
 
-def BamToBed(bam, peakBed, library, paired):
+def BamToBed(bam, peakBedFile, library, paired):
     bamToBedTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
     bedSortTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
     if paired is True:
@@ -214,7 +217,9 @@ def BamToBed(bam, peakBed, library, paired):
     ## construct bed
     totalReadNum = 0
     bedLineRow, totalReadNum = FileToBedrow(bedSortTemp, temp=True, delete=True)
-    if peakBed is not None:
+    if peakBedFile is not None:
+        peakBedSortFile = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+        SortBed(peakBedFile, peakBedSortFile.name)
         bamToBedFile = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
         interFile = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
         BedrowToFile(bedLineRow, bamToBedFile, temp=True, sort=False)
@@ -225,7 +230,7 @@ def BamToBed(bam, peakBed, library, paired):
         elif args.library == 'unstranded':
             kwargs['S'] = False
         bedtoolArgs = BedtoolArgs(kwargs)
-        command = 'bedtools intersect -a {0} -b {1} {2} > {3}'.format(bamToBedFile.name, peakBed, bedtoolArgs, interFile.name)
+        command = 'bedtools intersect -a {0} -b {1} {2} > {3}'.format(bamToBedFile.name, peakBedFile, bedtoolArgs, interFile.name)
         SysSubCall(command)
         bedLineRow, __ = FileToBedrow(interFile, temp=True, delete=True)
     bedDict = {'bedrow':bedLineRow, 'totalNum':totalReadNum, 'source':'bam'}
@@ -383,7 +388,11 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
             row = line.strip().split('\t')
             overlapRow = row[0:6]
             annoRow = row[6:]
-            peakName, childId = overlapRow[3].split('##')
+            if bedSource == 'bam':
+                peakName = overlapRow[3]
+                childId = '1'
+            else:
+                peakName, childId = overlapRow[3].split('##')
             uniqFeatureName = annoRow[3]
             annoName = annoRow[3].split('##')[0]
             ## if set --matchid, force annoName containing peakName
@@ -501,15 +510,15 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
 def MultiThreadRun(index, iboolDict, annoBedDict, args, kwargs):
     sampleName = args.name[index]
     if iboolDict['both']:
-        inputBed = args.bed[index]
+        inputBedFile = args.bed[index]
         bamFile = args.bam[index]
-        inputBedDict = BamToBed(bamFile, inputBed, args.library, args.paired)
+        inputBedDict = BamToBed(bamFile, inputBedFile, args.library, args.paired)
     elif iboolDict['bed']:
         inputBedDict = RebuildBed(args.bed[index], args.method, args.extend)
     else:
-        inputBed = None
+        inputBedFile = None
         bamFile = args.bam[index]
-        inputBedDict = BamToBed(bamFile, inputBed, args.library, args.paired)
+        inputBedDict = BamToBed(bamFile, inputBedFile, args.library, args.paired)
     ## retrieve bin-value relationships
     binValDict = RunMetagene(inputBedDict, annoBedDict, args, kwargs)
     return [sampleName, binValDict]
