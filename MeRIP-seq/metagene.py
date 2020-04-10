@@ -203,7 +203,6 @@ def RebuildBed(bedFile, destBedTmp, method, extend):
 
 def BamToBed(bam, destBedTmp, peakBedFile, memory, library, paired):
     bamToBedTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
-    bedTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
     if paired is True:
         fbamTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
         command = 'samtools view -bf 66 {0} > {1}'.format(bam, fbamTemp.name)
@@ -229,21 +228,13 @@ def BamToBed(bam, destBedTmp, peakBedFile, memory, library, paired):
         elif library == 'unstranded':
             kwargs['S'] = False
         bedtoolArgs = BedtoolArgs(kwargs)
-        command = 'bedtools intersect -a {0} -b {1} {2} > {3}'.format(bamToBedSortTemp.name, peakBedSortFile.name, bedtoolArgs, bedTemp.name)
+        command = 'bedtools intersect -a {0} -b {1} {2} > {3}'.format(bamToBedSortTemp.name, peakBedSortFile.name, bedtoolArgs, destBedTmp.name)
         SysSubCall(command)
         bamToBedSortTemp.close()
         peakBedSortFile.close()
     else:
-        SortBed(bamToBedTemp.name, dfile=bedTemp.name, memory=memory, temp=False)
+        SortBed(bamToBedTemp.name, dfile=destBedTmp.name, memory=memory, temp=False)
     bamToBedTemp.close()
-    count = 1
-    with open(bedTemp.name, 'r') as f, open(destBedTmp.name, 'w') as out:
-        for line in f:
-            row = line.strip().split('\t')
-            row[3] = '|'.join([row[3], str(count)])
-            out.write('\t'.join(row) + '\n')
-            count += 1
-    bedTemp.close()
     bedDict = {'bedFile':destBedTmp.name, 'totalNum':totalReadNum, 'source':'bam'}
     return bedDict
 
@@ -389,13 +380,8 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
     annoBedFile.close()
     ## to reduce the memory cost
     ## determin peakName-annoName relationship
-    ## intersection lengh -> longest transcript
-    peakAnnoPairDict = defaultdict(str)
-    peakAnnoDict = defaultdict(int)
-    prePeakName = ''
-    sizeKey = args.feature + '_size'
-    if args.feature == 'coding':
-        sizeKey = 'exon_size'
+    interDict = defaultdict(dict)
+    interStatsDict = defaultdict(dict)
     with open(interFile.name, 'r') as f:
         for line in f:
             row = line.strip().split('\t')
@@ -405,6 +391,7 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
                 peakName = overlapRow[3]
             else:
                 peakName = overlapRow[3].split('##')[0]
+            uniqFeatureName = annoRow[3]
             annoName = annoRow[3].split('##')[0]
             ## if set --matchid, force annoName containing peakName
             if args.matchid:
@@ -415,42 +402,31 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
             interStart = int(overlapRow[1])
             interEnd = int(overlapRow[2])
             interLen = interEnd - interStart
-            if peakName == prePeakName:
-                peakAnnoDict[annoName] += interLen
+            if peakName not in interStatsDict:
+                interStatsDict[peakName] = defaultdict(int)
+            interStatsDict[peakName][annoName] += interLen
+    ## determin uniq peakName-annoName relationship
+    ## intersection lengh -> longest transcript
+    peakAnnoPairDict = defaultdict(str)
+    for peakName in interStatsDict.keys():
+        for annoName in interStatsDict[peakName].keys():
+            if peakName not in peakAnnoPairDict:
+                peakAnnoPairDict[peakName] = annoName
             else:
-                for tempAnnoName in peakAnnoDict.keys():
-                    if prePeakName not in peakAnnoPairDict:
-                        peakAnnoPairDict[prePeakName] = tempAnnoName
-                    else:
-                        preAnnoName = peakAnnoPairDict[prePeakName]
-                        preInterLen = peakAnnoDict[preAnnoName]
-                        interLen = peakAnnoDict[tempAnnoName]
-                        if interLen > preInterLen:
-                            peakAnnoPairDict[prePeakName] = tempAnnoName
-                        elif interLen == preInterLen:
-                            preAnnoLen = bed12Dict[preAnnoName][sizeKey]
-                            annoLen = bed12Dict[tempAnnoName][sizeKey]
-                            if annoLen > preAnnoLen:
-                                peakAnnoPairDict[prePeakName] = tempAnnoName
-                ## re-initialization
-                prePeakName = peakName
-                peakAnnoDict = defaultdict(int)
-                peakAnnoDict[annoName] += interLen
-    ## for the last peakName
-    for annoName in peakAnnoDict.keys():
-        if prePeakName not in peakAnnoPairDict:
-            peakAnnoPairDict[prePeakName] = annoName
-        else:
-            preAnnoName = peakAnnoPairDict[prePeakName]
-            preInterLen = peakAnnoDict[preAnnoName]
-            interLen = peakAnnoDict[annoName]
-            if interLen > preInterLen:
-                peakAnnoPairDict[prePeakName] = annoName
-            elif interLen == preInterLen:
-                preAnnoLen = bed12Dict[preAnnoName][sizeKey]
-                annoLen = bed12Dict[annoName][sizeKey]
-                if annoLen > preAnnoLen:
-                    peakAnnoPairDict[prePeakName] = annoName
+                preAnnoName = peakAnnoPairDict[peakName]
+                preInterLen = interStatsDict[peakName][preAnnoName]
+                interLen = interStatsDict[peakName][annoName]
+                if interLen > preInterLen:
+                    peakAnnoPairDict[peakName] = annoName
+                elif interLen == preInterLen:
+                    sizeKey = args.feature + '_size'
+                    if args.feature == 'coding':
+                        sizeKey = 'exon_size'
+                    preAnnoLen = bed12Dict[preAnnoName][sizeKey]
+                    annoLen = bed12Dict[annoName][sizeKey]
+                    if annoLen > preAnnoLen:
+                        peakAnnoPairDict[peakName] = annoName
+    del interStatsDict
     ## start to decode bin
     ## determin bin value
     binValDict = defaultdict(dict)
