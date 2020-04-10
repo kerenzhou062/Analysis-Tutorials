@@ -41,7 +41,7 @@ parser.add_argument('-k', '--bam', nargs='+', type=str,
 parser.add_argument('-l', '--library', action='store', type=str,
                     choices=['unstranded', 'reverse', 'forward'],
                     default='reverse',
-                    help='The library tye of bam files')
+                    help='The library type of bam files')
 parser.add_argument('-m', '--method', action='store', type=str,
                     choices=['center', 'interval', 'exon'],
                     default='center',
