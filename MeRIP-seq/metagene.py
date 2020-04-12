@@ -4,7 +4,6 @@ import sys
 import argparse
 import re
 from collections import defaultdict
-import pysam
 from pybedtools import BedTool
 import subprocess
 import tempfile
@@ -54,8 +53,8 @@ parser.add_argument('-n', '--name', nargs='+', type=str,
 parser.add_argument('-o', '--output', action='store', type=str,
                     default="bin.txt",
                     help='The output file')
-parser.add_argument('-p', '--peaknum', action='store', type=int,
-                    help='Set the total number of peaks for --bed')
+parser.add_argument('-p', '--totalnum', action='store', type=int,
+                    help='Set the total number of peaks for --bed or reads for --bam')
 parser.add_argument('-r', '--memory', action='store', type=int,
                     default=5,
                     help='Set the memory (G) for sorting bed')
@@ -314,14 +313,14 @@ def AnnoBed12ToBed6(bed12File, geneType, feature, binType, binsize):
 
 def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
     inputBed = inputBedDict['bedtool']
-    totalPeakNum = inputBedDict['totalNum']
+    totalNum = inputBedDict['totalNum']
     bedSource = inputBedDict['source']
     annoBed = annoBedDict['bedtool']
     bed12Dict = annoBedDict['bed12']
     bed6Dict = annoBedDict['bed6']
     binsizeDict = annoBedDict['binsize']
-    if bool(args.peaknum):
-        totalPeakNum = args.peaknum
+    if bool(args.totalnum):
+        totalNum = args.totalnum
     ## intersect rebuild inputBed and annoBed
     intersect = inputBed.intersect(annoBed, **kwargs)
     ## to reduce the memory usage
@@ -332,9 +331,8 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
         annoRow = item.fields[6:]
         if bedSource == 'bam':
             peakName = overlapRow[3]
-            childId = '1'
         else:
-            peakName, childId = overlapRow[3].split('##')
+            peakName = overlapRow[3].split('##')[0]
         uniqFeatureName = annoRow[3]
         annoName = annoRow[3].split('##')[0]
         ## if set --matchid, force annoName containing peakName
@@ -385,9 +383,8 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
         annoRow = item.fields[6:]
         if bedSource == 'bam':
             peakName = overlapRow[3]
-            childId = '1'
         else:
-            peakName, childId = overlapRow[3].split('##')
+            peakName = overlapRow[3].split('##')[0]
         uniqFeatureName = annoRow[3]
         annoName = annoRow[3].split('##')[0]
         if annoName == peakAnnoPairDict[peakName]:
@@ -431,13 +428,13 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
         for binCoord in sorted(binValDict[feature].keys()):
             binSum = binValDict[feature][binCoord]['sum']
             if bedSource == 'bam':
-                binVal = binSum / totalPeakNum
+                binVal = binSum / totalNum
             else:
                 if args.type == 'density':
                     binPeakNum = len(binValDict[feature][binCoord]['peak'].keys())
-                    binVal = binPeakNum / totalPeakNum * 100
+                    binVal = binPeakNum / totalNum * 100
                 elif args.type == 'percentage':
-                    binVal = binSum / totalPeakNum * 100
+                    binVal = binSum / totalNum * 100
                 else:
                     binVal = binSum
             binValList.append(binVal)
