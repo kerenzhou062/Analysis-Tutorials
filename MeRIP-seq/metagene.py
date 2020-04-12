@@ -5,6 +5,7 @@ import argparse
 import re
 from collections import defaultdict
 from pybedtools import BedTool
+from pybedtools import helpers as pyhelpers
 import subprocess
 import tempfile
 from multiprocessing import Pool
@@ -78,6 +79,9 @@ parser.add_argument('-z', '--size', action='store', type=int,
 parser.add_argument('--matchid', action='store_true',
                     default=False,
                     help='Match input bed name in annotation bed12')
+parser.add_argument('--deltmp', action='store_true',
+                    default=False,
+                    help='Delete ALL files matching "pybedtools.*.tmp" in the temp dir')
 parser.add_argument('--paired', action='store_true',
                     default=False,
                     help='Paired-end for bam files in --bam')
@@ -476,6 +480,10 @@ def MultiThreadRun(index, iboolDict, annoBedDict, args, kwargs):
 
 # main program
 if __name__ == '__main__':
+    ## setting temporary dir for pybedtools
+    pyhelpers.set_tempdir(args.temp)
+    if args.deltmp:
+        delete = pyhelpers.cleanup(verbose=False, remove_all=True)
     ## judge arguments
     iboolDict = defaultdict(bool)
     ibool = 0
