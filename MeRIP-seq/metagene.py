@@ -61,7 +61,7 @@ parser.add_argument('-r', '--memory', action='store', type=int,
 parser.add_argument('-s', '--smooth', action='store', type=str,
                     choices=['none', 'move', 'average'],
                     default='move',
-                    help='The smooth method')
+                    help='The method for smoothing the curve')
 parser.add_argument('-t', '--type', action='store', type=str,
                     choices=['density', 'percentage', 'number'],
                     default='density',
