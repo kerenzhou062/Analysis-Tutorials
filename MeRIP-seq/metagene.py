@@ -513,8 +513,11 @@ if __name__ == '__main__':
         kwargs['s'] = False
     ## construct annoBed from bed12
     annoBedDict = AnnoBed12ToBed6(args.anno, args.gene, args.feature, args.bin, args.size)
-    temp = annoBedDict['bedtool'].saveas(annoBedDict['bedtool']._tmp())
-    annoBedDict['bedtool'] = BedTool(temp.fn)
+    annoBedTemp = tempfile.NamedTemporaryFile(suffix='.tmp', dir=args.temp, delete=True)
+    temp = annoBedDict['bedtool'].moveto(annoBedTemp.name)
+    del temp
+    gc.collect()
+    annoBedDict['bedtool'] = BedTool(annoBedTemp.name)
     ## multi-thread start
     pool = Pool(processes=args.cpu)
     resultList = []
@@ -523,6 +526,7 @@ if __name__ == '__main__':
         resultList.append(result)
     pool.close()
     pool.join()
+    annoBedTemp.close()
     ## multi-thread end
     binSampleValDict = defaultdict(dict)
     for result in resultList:
