@@ -547,7 +547,6 @@ if __name__ == '__main__':
         resultList.append(result)
     pool.close()
     pool.join()
-    annoBedTemp.close()
     ## multi-thread end
     binSampleValDict = defaultdict(dict)
     for result in resultList:
