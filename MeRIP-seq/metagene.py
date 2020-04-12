@@ -222,7 +222,8 @@ def BamToBed(bam, peakBed, destFile, args):
         elif args.library == 'forward':
             kwargs['S'] = False
             kwargs['s'] = True
-        bamToBed = bamToBed.intersect(peakBed, **kwargs)
+        bamToBed = bamToBed.intersect(peakBed, **kwargs).moveto(destFile)
+        bamToBed = BedTool(destFile)
     bedDict = {'bedtool':bamToBed, 'totalNum':totalReadNum, 'source':'bam'}
     return bedDict
 
