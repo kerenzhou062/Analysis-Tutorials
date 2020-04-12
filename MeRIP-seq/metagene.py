@@ -481,7 +481,7 @@ def MultiThreadRun(index, iboolDict, annoBedDict, args, kwargs):
 # main program
 if __name__ == '__main__':
     ## setting temporary dir for pybedtools
-    pyhelpers.set_tempdir(args.temp)
+    setTemp = pyhelpers.set_tempdir(args.temp)
     if args.deltmp:
         delete = pyhelpers.cleanup(verbose=False, remove_all=True)
     ## judge arguments
