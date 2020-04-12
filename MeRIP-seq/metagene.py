@@ -4,8 +4,7 @@ import sys
 import argparse
 import re
 from collections import defaultdict
-from pybedtools import BedTool
-from pybedtools import helpers as pyhelpers
+import pybedtools
 import subprocess
 import tempfile
 from multiprocessing import Pool
@@ -81,7 +80,7 @@ parser.add_argument('--matchid', action='store_true',
                     help='Match input bed name in annotation bed12')
 parser.add_argument('--deltmp', action='store_true',
                     default=False,
-                    help='Delete ALL files matching "pybedtools.*.tmp" in the temp dir')
+                    help='Delete ALL files matching "pybedtools.*.tmp" in the temp dir before running program')
 parser.add_argument('--multiple', action='store_true',
                     default=False,
                     help='Use all multiple-aligned reads (use only one of them by default)')
@@ -198,7 +197,7 @@ def RebuildBed(bedFile, method, extend):
                     lineRow.extend([name, str(bedinfo.score), bedinfo.strand])
                     bedLineRow.append(lineRow)
                 lineNum += 1
-    peakBed = BedTool(bedLineRow).sort()
+    peakBed = pybedtools.BedTool(bedLineRow).sort()
     bedDict = {'bedtool':peakBed, 'totalNum':lineNum, 'source':'bed'}
     return bedDict
 
@@ -235,7 +234,7 @@ def BamToBed(bam, peakBed, destFile, args):
     command = 'wc -l {0}'.format(destFile)
     totalReadNum = int(bytes.decode(subprocess.check_output(command, shell=True)).split(' ')[0])
     ## construct bed
-    bamToBed = BedTool(destFile)
+    bamToBed = pybedtools.BedTool(destFile)
     if peakBed is not None:
         kwargs = {'nonamecheck':True, 'u':True, 'sorted':True, 'S':True, 's':False}
         if args.library == 'unstranded':
@@ -244,7 +243,7 @@ def BamToBed(bam, peakBed, destFile, args):
             kwargs['S'] = False
             kwargs['s'] = True
         bamToBed = bamToBed.intersect(peakBed, **kwargs).moveto(destFile)
-        bamToBed = BedTool(destFile)
+        bamToBed = pybedtools.BedTool(destFile)
     bedDict = {'bedtool':bamToBed, 'totalNum':totalReadNum, 'source':'bam'}
     return bedDict
 
@@ -335,7 +334,7 @@ def AnnoBed12ToBed6(bed12File, geneType, feature, binType, binsize):
                 bed6Dict[coordName] = row
                 bedLineRow.append(list(map(str, row)))
                 fLenPreSum += coord[1] - coord[0]
-    annoBed = BedTool(bedLineRow).sort()
+    annoBed = pybedtools.BedTool(bedLineRow).sort()
     annoBedDict = {'bedtool':annoBed, 'bed12':bed12Dict, 'bed6':bed6Dict, 'binsize':binsizeDict}
     return annoBedDict
 
@@ -479,7 +478,7 @@ def MultiThreadRun(index, iboolDict, annoBedDict, args, kwargs):
     if iboolDict['bam']:
         tempFile = tempfile.NamedTemporaryFile(suffix='.tmp', dir=args.temp, delete=True)
     if iboolDict['both']:
-        peakBed = BedTool(args.bed[index]).sort()
+        peakBed = pybedtools.BedTool(args.bed[index]).sort()
         bamFile = args.bam[index]
         inputBedDict = BamToBed(bamFile, peakBed, tempFile.name, args)
     elif iboolDict['bed']:
@@ -498,9 +497,9 @@ def MultiThreadRun(index, iboolDict, annoBedDict, args, kwargs):
 # main program
 if __name__ == '__main__':
     ## setting temporary dir for pybedtools
-    setTemp = pyhelpers.set_tempdir(args.temp)
+    pybedtools.set_tempdir(args.temp)
     if args.deltmp:
-        delete = pyhelpers.cleanup(verbose=False, remove_all=True)
+        pybedtools.cleanup(verbose=False, remove_all=True)
     ## judge arguments
     iboolDict = defaultdict(bool)
     ibool = 0
@@ -547,6 +546,8 @@ if __name__ == '__main__':
         resultList.append(result)
     pool.close()
     pool.join()
+    ## Deletes all temp files from the current session
+    pybedtools.cleanup(verbose=False, remove_all=False)
     ## multi-thread end
     binSampleValDict = defaultdict(dict)
     for result in resultList:
