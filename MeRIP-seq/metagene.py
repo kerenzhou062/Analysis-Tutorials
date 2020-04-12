@@ -82,6 +82,9 @@ parser.add_argument('--matchid', action='store_true',
 parser.add_argument('--deltmp', action='store_true',
                     default=False,
                     help='Delete ALL files matching "pybedtools.*.tmp" in the temp dir')
+parser.add_argument('--multiple', action='store_true',
+                    default=False,
+                    help='Use all multiple-aligned reads (use only one of them by default)')
 parser.add_argument('--paired', action='store_true',
                     default=False,
                     help='Paired-end for bam files in --bam')
@@ -211,9 +214,23 @@ def BamToBed(bam, peakBed, destFile, args):
     else:
         command = 'bedtools bamtobed -i {0} > {1}'.format(bam, bamToBedTemp.name)
         SysSubCall(command)
-    command = 'sort -T {0} -S {1}G -k1,1 -k2,2n {2} -o {3}'.format(args.temp, args.memory, bamToBedTemp.name, destFile)
-    SysSubCall(command)
-    bamToBedTemp.close()
+    if args.multiple:
+        unifyTempFile = tempfile.NamedTemporaryFile(suffix='.tmp', dir=args.temp, delete=True)
+        count = 1
+        with open(bamToBedTemp.name, 'r') as f, open(unifyTempFile.name, 'w') as out:
+            for line in f:
+                row = line.split('\t')
+                row[3] = '|'.join([row[3], str(count)])
+                out.write('\t'.join(row))
+                count += 1
+        bamToBedTemp.close()
+        command = 'sort -T {0} -S {1}G -k1,1 -k2,2n {2} -o {3}'.format(args.temp, args.memory, unifyTempFile.name, destFile)
+        SysSubCall(command)
+        unifyTempFile.close()
+    else:
+        command = 'sort -T {0} -S {1}G -k1,1 -k2,2n {2} -o {3}'.format(args.temp, args.memory, bamToBedTemp.name, destFile)
+        SysSubCall(command)
+        bamToBedTemp.close()
     ## get total read number
     command = 'wc -l {0}'.format(destFile)
     totalReadNum = int(bytes.decode(subprocess.check_output(command, shell=True)).split(' ')[0])
@@ -522,11 +539,6 @@ if __name__ == '__main__':
         kwargs['s'] = False
     ## construct annoBed from bed12
     annoBedDict = AnnoBed12ToBed6(args.anno, args.gene, args.feature, args.bin, args.size)
-    annoBedTemp = tempfile.NamedTemporaryFile(suffix='.tmp', dir=args.temp, delete=True)
-    temp = annoBedDict['bedtool'].moveto(annoBedTemp.name)
-    del temp
-    gc.collect()
-    annoBedDict['bedtool'] = BedTool(annoBedTemp.name)
     ## multi-thread start
     pool = Pool(processes=args.cpu)
     resultList = []
