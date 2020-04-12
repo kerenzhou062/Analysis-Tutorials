@@ -69,6 +69,8 @@ parser.add_argument('-t', '--type', action='store', type=str,
 parser.add_argument('-w', '--width', action='store', type=int,
                     default=5,
                     help='The span for smooth')
+parser.add_argument('-x', '--temp', action='store', type=str,
+                    help='The temporay directory')
 parser.add_argument('-z', '--size', action='store', type=int,
                     default=100,
                     help='The bin size of each feature')
@@ -189,10 +191,10 @@ def RebuildBed(bedFile, method, extend):
     bedDict = {'bedtool':peakBed, 'totalNum':lineNum, 'source':'bed'}
     return bedDict
 
-def BamToBed(bam, peakBed, destFile, memory, library, paired):
-    bamToBedTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
-    if paired is True:
-        fbamTemp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+def BamToBed(bam, peakBed, destFile, args):
+    bamToBedTemp = tempfile.NamedTemporaryFile(suffix='.tmp', dir=args.temp, delete=True)
+    if args.paired is True:
+        fbamTemp = tempfile.NamedTemporaryFile(suffix='.tmp', dir=args.temp, delete=True)
         command = 'samtools view -bf 66 {0} > {1}'.format(bam, fbamTemp.name)
         SysSubCall(command)
         command = 'bedtools bamtobed -i {0} > {1}'.format(fbamTemp.name, bamToBedTemp)
@@ -201,7 +203,7 @@ def BamToBed(bam, peakBed, destFile, memory, library, paired):
     else:
         command = 'bedtools bamtobed -i {0} > {1}'.format(bam, bamToBedTemp.name)
         SysSubCall(command)
-    command = 'sort -S {0}G -k1,1 -k2,2n {1} -o {2}'.format(memory, bamToBedTemp.name, destFile)
+    command = 'sort -S {0}G -k1,1 -k2,2n {1} -o {2}'.format(args.memory, bamToBedTemp.name, destFile)
     SysSubCall(command)
     bamToBedTemp.close()
     ## get total read number
@@ -211,9 +213,9 @@ def BamToBed(bam, peakBed, destFile, memory, library, paired):
     bamToBed = BedTool(destFile)
     if peakBed is not None:
         kwargs = {'nonamecheck':True, 'u':True, 'sorted':True, 'S':True, 's':False}
-        if library == 'unstranded':
+        if args.library == 'unstranded':
             kwargs['S'] = False
-        elif library == 'forward':
+        elif args.library == 'forward':
             kwargs['S'] = False
             kwargs['s'] = True
         bamToBed = bamToBed.intersect(peakBed, **kwargs)
@@ -449,17 +451,17 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
 
 def MultiThreadRun(index, iboolDict, annoBedDict, args, kwargs):
     if iboolDict['bam']:
-        tempFile = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+        tempFile = tempfile.NamedTemporaryFile(suffix='.tmp', dir=args.temp, delete=True)
     if iboolDict['both']:
         peakBed = BedTool(args.bed[index]).sort()
         bamFile = args.bam[index]
-        inputBedDict = BamToBed(bamFile, peakBed, tempFile.name, args.memory, args.library, args.paired)
+        inputBedDict = BamToBed(bamFile, peakBed, tempFile.name, args)
     elif iboolDict['bed']:
         inputBedDict = RebuildBed(args.bed[index], args.method, args.extend)
     else:
         peakBed = None
         bamFile = args.bam[index]
-        inputBedDict = BamToBed(bamFile, peakBed, tempFile.name, args.memory, args.library, args.paired)
+        inputBedDict = BamToBed(bamFile, peakBed, tempFile.name, args)
     ## retrieve bin-value relationships
     sampleName = args.name[index]
     binValDict = RunMetagene(inputBedDict, annoBedDict, args, kwargs)
@@ -469,6 +471,8 @@ def MultiThreadRun(index, iboolDict, annoBedDict, args, kwargs):
 
 # main program
 if __name__ == '__main__':
+    if bool(args.temp) is False:
+        args.temp = '/tmp'
     ## judge arguments
     iboolDict = defaultdict(bool)
     ibool = 0
