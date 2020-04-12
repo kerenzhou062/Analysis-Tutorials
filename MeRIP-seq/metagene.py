@@ -203,7 +203,7 @@ def BamToBed(bam, peakBed, destFile, args):
     else:
         command = 'bedtools bamtobed -i {0} > {1}'.format(bam, bamToBedTemp.name)
         SysSubCall(command)
-    command = 'sort -S {0}G -k1,1 -k2,2n {1} -o {2}'.format(args.memory, bamToBedTemp.name, destFile)
+    command = 'sort -T {0} -S {1}G -k1,1 -k2,2n {2} -o {3}'.format(args.temp, args.memory, bamToBedTemp.name, destFile)
     SysSubCall(command)
     bamToBedTemp.close()
     ## get total read number
