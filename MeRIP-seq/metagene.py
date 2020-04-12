@@ -70,6 +70,7 @@ parser.add_argument('-w', '--width', action='store', type=int,
                     default=5,
                     help='The span for smooth')
 parser.add_argument('-x', '--temp', action='store', type=str,
+                    default='/tmp',
                     help='The temporay directory')
 parser.add_argument('-z', '--size', action='store', type=int,
                     default=100,
@@ -80,9 +81,12 @@ parser.add_argument('--matchid', action='store_true',
 parser.add_argument('--paired', action='store_true',
                     default=False,
                     help='Paired-end for bam files in --bam')
+parser.add_argument('--reverse', action='store_true',
+                    default=False,
+                    help='Only report overlaps on the reverse strand (ignore by --library)')
 parser.add_argument('--strand', action='store_true',
                     default=False,
-                    help='Only report overlap on the same strand')
+                    help='Only report overlaps on the same strand (ignore by --library)')
 
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
@@ -471,8 +475,6 @@ def MultiThreadRun(index, iboolDict, annoBedDict, args, kwargs):
 
 # main program
 if __name__ == '__main__':
-    if bool(args.temp) is False:
-        args.temp = '/tmp'
     ## judge arguments
     iboolDict = defaultdict(bool)
     ibool = 0
@@ -503,7 +505,7 @@ if __name__ == '__main__':
         else:
             args.name = GetSampleName(args.bam)
     ## run programs
-    kwargs = {'nonamecheck':True, 'wb':True, "sorted":True, 's':args.strand, 'S':False}
+    kwargs = {'nonamecheck':True, 'wb':True, "sorted":True, 's':args.strand, 'S':args.reverse}
     if args.library == 'reverse' and iboolDict['bam']:
         kwargs['S'] = True
         kwargs['s'] = False
