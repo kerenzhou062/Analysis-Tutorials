@@ -202,9 +202,9 @@ def RebuildBed(bedFile, method, extend):
     return bedDict
 
 def BamToBed(bam, peakBed, destFile, args):
-    bamToBedTemp = tempfile.NamedTemporaryFile(suffix='.tmp', dir=args.temp, delete=True)
+    bamToBedTemp = tempfile.NamedTemporaryFile(suffix='.tmp',  prefix='pybedtools.', dir=args.temp, delete=True)
     if args.paired is True:
-        fbamTemp = tempfile.NamedTemporaryFile(suffix='.tmp', dir=args.temp, delete=True)
+        fbamTemp = tempfile.NamedTemporaryFile(suffix='.tmp',  prefix='pybedtools.', dir=args.temp, delete=True)
         command = 'samtools view -bf 66 {0} > {1}'.format(bam, fbamTemp.name)
         SysSubCall(command)
         command = 'bedtools bamtobed -i {0} > {1}'.format(fbamTemp.name, bamToBedTemp)
@@ -214,7 +214,7 @@ def BamToBed(bam, peakBed, destFile, args):
         command = 'bedtools bamtobed -i {0} > {1}'.format(bam, bamToBedTemp.name)
         SysSubCall(command)
     if args.multiple:
-        unifyTempFile = tempfile.NamedTemporaryFile(suffix='.tmp', dir=args.temp, delete=True)
+        unifyTempFile = tempfile.NamedTemporaryFile(suffix='.tmp',  prefix='pybedtools.', dir=args.temp, delete=True)
         count = 1
         with open(bamToBedTemp.name, 'r') as f, open(unifyTempFile.name, 'w') as out:
             for line in f:
@@ -476,7 +476,7 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
 
 def MultiThreadRun(index, iboolDict, annoBedDict, args, kwargs):
     if iboolDict['bam']:
-        tempFile = tempfile.NamedTemporaryFile(suffix='.tmp', dir=args.temp, delete=True)
+        tempFile = tempfile.NamedTemporaryFile(suffix='.tmp',  prefix='pybedtools.', dir=args.temp, delete=True)
     if iboolDict['both']:
         peakBed = pybedtools.BedTool(args.bed[index]).sort()
         bamFile = args.bam[index]
