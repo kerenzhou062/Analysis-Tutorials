@@ -490,6 +490,8 @@ def MultiThreadRun(index, iboolDict, annoBedDict, args, kwargs):
     ## retrieve bin-value relationships
     sampleName = args.name[index]
     binValDict = RunMetagene(inputBedDict, annoBedDict, args, kwargs)
+    ## Deletes all temp files from the current session
+    pybedtools.cleanup(verbose=False, remove_all=False)
     if iboolDict['bam']:
         tempFile.close()
     return [sampleName, binValDict]
@@ -546,8 +548,6 @@ if __name__ == '__main__':
         resultList.append(result)
     pool.close()
     pool.join()
-    ## Deletes all temp files from the current session
-    pybedtools.cleanup(verbose=False, remove_all=False)
     ## multi-thread end
     binSampleValDict = defaultdict(dict)
     for result in resultList:
