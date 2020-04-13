@@ -446,7 +446,9 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
                         binCoord = binsizeDict[feature] - 1
                     binValDict[feature][binCoord]['sum'] += 1
                     binValDict[feature][binCoord]['peak'][peakName] += 1
-    ## to reduce memory usage
+    ## to reduce memory cost
+    ## Deletes all temp files from the current session
+    pybedtools.cleanup(verbose=False, remove_all=False)
     del intersect, peakAnnoPairDict
     gc.collect()
     ## generate final bin-value dict
