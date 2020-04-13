@@ -60,7 +60,7 @@ parser.add_argument('-r', '--memory', action='store', type=int,
                     help='Set the memory (G) for sorting bed')
 parser.add_argument('-s', '--smooth', action='store', type=str,
                     choices=['none', 'move', 'average'],
-                    default='move',
+                    default='none',
                     help='The method for smoothing the curve')
 parser.add_argument('-t', '--type', action='store', type=str,
                     choices=['density', 'percentage', 'number'],
