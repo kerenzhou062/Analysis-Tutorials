@@ -207,7 +207,7 @@ def BamToBed(bam, peakBed, destFile, args):
         fbamTemp = tempfile.NamedTemporaryFile(suffix='.tmp',  prefix='pybedtools.', dir=args.temp, delete=True)
         command = 'samtools view -bf 65 {0} > {1}'.format(bam, fbamTemp.name)
         SysSubCall(command)
-        command = 'bedtools bamtobed -i {0} > {1}'.format(fbamTemp.name, bamToBedTemp)
+        command = 'bedtools bamtobed -i {0} > {1}'.format(fbamTemp.name, bamToBedTemp.name)
         SysSubCall(command)
         fbamTemp.close()
     else:
