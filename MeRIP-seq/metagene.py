@@ -99,6 +99,11 @@ if len(sys.argv[1:]) == 0:
     parser.print_help()
     parser.exit()
 
+def FileExist(fList, argument):
+    for file in fList:
+        if os.path.isfile(file) is False:
+            sys.exit('File "{0}" is not existed in --{1}!'.format(file, argument))
+
 def ExonLenSum(blist):
     return sum(map(lambda x: x[1] - x[0], blist))
 
@@ -508,9 +513,11 @@ if __name__ == '__main__':
     iboolDict = defaultdict(bool)
     ibool = 0
     if bool(args.bed):
+        FileExist(args.bed)
         ibool += 1
         iboolDict['bed'] = True
     if bool(args.bam):
+        FileExist(args.bam)
         ibool += 1
         iboolDict['bam'] = True
     if ibool == 0:
