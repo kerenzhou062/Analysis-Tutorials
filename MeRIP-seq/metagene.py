@@ -503,6 +503,8 @@ if __name__ == '__main__':
     if args.deltmp:
         pybedtools.cleanup(verbose=False, remove_all=True)
     ## judge arguments
+    if args.gene != 'protein_coding' and args.feature == 'coding':
+        sys.exit('--feature should not be "coding" when --gene is not "protein_coding"!')
     iboolDict = defaultdict(bool)
     ibool = 0
     if bool(args.bed):
@@ -517,7 +519,7 @@ if __name__ == '__main__':
         iboolDict['both'] = True
     if iboolDict['both']:
         if len(args.bam) != len(args.bed):
-            ssys.exit('--bam and --bed should be matched!')
+            sys.exit('--bam and --bed should be matched!')
     ## get sample name list
     if bool(args.name):
         if iboolDict['bed']:
