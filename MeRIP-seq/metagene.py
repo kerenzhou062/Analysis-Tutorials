@@ -508,16 +508,17 @@ if __name__ == '__main__':
     if args.deltmp:
         pybedtools.cleanup(verbose=False, remove_all=True)
     ## judge arguments
+    FileExist([args.anno], 'anno')
     if args.gene != 'protein_coding' and args.feature in ['coding', 'utr5', 'cds', 'utr3']:
         sys.exit('--feature should not be ["coding", "utr5", "cds", "utr3"] when --gene is not "protein_coding"!')
     iboolDict = defaultdict(bool)
     ibool = 0
     if bool(args.bed):
-        FileExist(args.bed)
+        FileExist(args.bed, 'bed')
         ibool += 1
         iboolDict['bed'] = True
     if bool(args.bam):
-        FileExist(args.bam)
+        FileExist(args.bam, 'bam')
         ibool += 1
         iboolDict['bam'] = True
     if ibool == 0:
