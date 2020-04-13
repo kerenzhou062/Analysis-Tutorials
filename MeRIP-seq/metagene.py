@@ -29,7 +29,7 @@ parser.add_argument('-e', '--extend', action='store', type=int,
                     default=0,
                     help='Extend --extend bp around peak center')
 parser.add_argument('-f', '--feature', nargs='+', type=str,
-                    choices=["coding", "exon", "intron", "full"],
+                    choices=["coding", "utr5", "cds", "utr3", "exon", "intron", "full"],
                     default='coding',
                     help='The bin features [coding:utr5,cds,utr3]')
 parser.add_argument('-g', '--gene', nargs='+', type=str,
@@ -503,8 +503,8 @@ if __name__ == '__main__':
     if args.deltmp:
         pybedtools.cleanup(verbose=False, remove_all=True)
     ## judge arguments
-    if args.gene != 'protein_coding' and args.feature == 'coding':
-        sys.exit('--feature should not be "coding" when --gene is not "protein_coding"!')
+    if args.gene != 'protein_coding' and args.feature in ['coding', 'utr5', 'cds', 'utr3']:
+        sys.exit('--feature should not be ["coding", "utr5", "cds", "utr3"] when --gene is not "protein_coding"!')
     iboolDict = defaultdict(bool)
     ibool = 0
     if bool(args.bed):
