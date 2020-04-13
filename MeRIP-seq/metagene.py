@@ -509,8 +509,11 @@ if __name__ == '__main__':
         pybedtools.cleanup(verbose=False, remove_all=True)
     ## judge arguments
     FileExist([args.anno], 'anno')
+    if args.reverse and args.strand:
+        sys.exit('--reverse and --strand should not be True at the same time!')
     if args.gene != 'protein_coding' and args.feature in ['coding', 'utr5', 'cds', 'utr3']:
         sys.exit('--feature should not be ["coding", "utr5", "cds", "utr3"] when --gene is not "protein_coding"!')
+    ## bam and bed judgement
     iboolDict = defaultdict(bool)
     ibool = 0
     if bool(args.bed):
