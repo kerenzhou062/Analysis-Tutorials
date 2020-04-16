@@ -57,7 +57,6 @@ if ( is.null(args$ylab) ) { args$ylab = 'Peaks Coverage (%)' }
 LoadPacakge("ggplot2")
 LoadPacakge("ggpubr")
 LoadPacakge("reshape")
-LoadPacakge("forcats")
 LoadPacakge("RColorBrewer")
 LoadPacakge("grid")
 
@@ -69,12 +68,11 @@ getPalette <- colorRampPalette(brewer.pal(6, "Dark2"))
 
 annoCoord = (max(melData$value)-min(melData$value)) / 20
 
-if (args$feature != 'coding') {
-  featureXlabCoord = as.integer((max(data$bin) + min(data$bin)) / 2)
-  featureText <- textGrob(args$feature, gp=gpar(fontface="bold"))
-  metaGenePlot <- ggplot(melData, aes(x=bin, y=value, group=variable)) +
-    geom_area(aes(fill= fct_reorder(variable, value, .desc = TRUE)), position = 'identity') +
-    geom_line(aes(colour= fct_reorder(variable, value, .desc = TRUE)), size=0.5) +
+## library("forcats")
+## geom_area(aes(fill= fct_reorder(variable, value, .desc = TRUE)), position = 'identity')
+metaGenePlot <- ggplot(melData, aes(x=bin, y=value, group=variable)) +
+    geom_area(aes(fill= variable), position = 'identity') +
+    geom_line(aes(colour= variable), size=0.5) +
     theme_bw() +
     theme(axis.line = element_line(colour = "black"),
       panel.grid = element_blank(),
@@ -87,8 +85,13 @@ if (args$feature != 'coding') {
       plot.margin = unit(c(1,1,2,1), "lines")) +
     scale_color_manual(values = getPalette(colourCount)) +
     scale_x_continuous(expand = c(0,0)) + scale_y_continuous(expand = c(0,0)) +
-    annotation_custom(featureText,xmin=featureXlabCoord,xmax=featureXlabCoord,ymin=-annoCoord,ymax=-annoCoord) +
     xlab("") + ylab(args$ylab)
+
+if (args$feature != 'coding') {
+  featureXlabCoord = as.integer((max(data$bin) + min(data$bin)) / 2)
+  featureText <- textGrob(args$feature, gp=gpar(fontface="bold"))
+  metaGenePlot <- metaGenePlot +
+    annotation_custom(featureText,xmin=featureXlabCoord,xmax=featureXlabCoord,ymin=-annoCoord,ymax=-annoCoord)
 }else{
   colourCount <- length(data) - 2
   getPalette <- colorRampPalette(brewer.pal(5, "Dark2"))
@@ -107,29 +110,17 @@ if (args$feature != 'coding') {
   cdsText <- textGrob("CDS", gp=gpar(fontface="bold"))
   utr3Text <- textGrob("3' UTR", gp=gpar(fontface="bold"))
   ## metagene
-  metaGenePlot <- ggplot(melData, aes(x=bin, y=value, group=variable)) +
-    geom_area(aes(fill= fct_reorder(variable, value, .desc = TRUE)), position = 'identity') +
-    geom_line(aes(colour= fct_reorder(variable, value, .desc = TRUE)), size=0.5) +
-    theme_bw() +
+  metaGenePlot <- metaGenePlot +
     geom_vline(aes(xintercept=utr5XlabMax), colour="#4F3833", linetype="dashed", size=0.5) +
     geom_vline(aes(xintercept=cdsXlabMax), colour="#4F3833", linetype="dashed", size=0.5) +
-    theme(axis.line = element_line(colour = "black"),
-      panel.grid = element_blank(),
-      panel.border = element_blank(),
-      text=element_text(size=12),
-      legend.position = 'right',
-      legend.title = element_blank(),
-      axis.text.x=element_blank(),
-      axis.ticks.x=element_blank(),
-      plot.margin = unit(c(1,1,2,1), "lines")) +
-    scale_color_manual(values = getPalette(colourCount)) +
-    scale_x_continuous(expand = c(0,0)) + scale_y_continuous(expand = c(0,0)) +
     annotation_custom(utr5Text,xmin=utr5XlabCoord,xmax=utr5XlabCoord,ymin=-annoCoord,ymax=-annoCoord) +
     annotation_custom(cdsText,xmin=cdsXlabCoord,xmax=cdsXlabCoord,ymin=-annoCoord,ymax=-annoCoord) +
-    annotation_custom(utr3Text,xmin=utr3XlabCoord,xmax=utr3XlabCoord,ymin=-annoCoord,ymax=-annoCoord) +
-    xlab("") + ylab(args$ylab) + coord_cartesian(clip = "off")
+    annotation_custom(utr3Text,xmin=utr3XlabCoord,xmax=utr3XlabCoord,ymin=-annoCoord,ymax=-annoCoord)
 }
 
+metaGenePlot <- metaGenePlot + coord_cartesian(clip = "off")
+
+## print plot to pdf
 metagenePlotPdf <- file.path(args$output, paste(args$prefix, ".metagene.pdf", sep=""))
 
 pdf(metagenePlotPdf, width = 8, height = 5)

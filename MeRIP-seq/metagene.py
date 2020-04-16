@@ -343,7 +343,9 @@ def AnnoBed12ToBed6(bed12File, geneType, feature, binType, binsize):
     annoBedDict = {'bedtool':annoBed, 'bed12':bed12Dict, 'bed6':bed6Dict, 'binsize':binsizeDict}
     return annoBedDict
 
-def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
+def RunMetagene(inputBedDict, args, kwargs):
+    ## construct annoBed from bed12
+    annoBedDict = AnnoBed12ToBed6(args.anno, args.gene, args.feature, args.bin, args.size)
     inputBed = inputBedDict['bedtool']
     totalNum = inputBedDict['totalNum']
     bedSource = inputBedDict['source']
@@ -356,7 +358,6 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
     ## intersect rebuild inputBed and annoBed
     intersect = inputBed.intersect(annoBed, **kwargs)
     ## to reduce the memory usage
-    inputBed = None
     interStatsDict = defaultdict(dict)
     for item in intersect:
         overlapRow = item.fields[0:6]
@@ -447,8 +448,6 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
                     binValDict[feature][binCoord]['sum'] += 1
                     binValDict[feature][binCoord]['peak'][peakName] += 1
     ## to reduce memory cost
-    ## Deletes all temp files from the current session
-    intersect = None
     del peakAnnoPairDict
     gc.collect()
     ## generate final bin-value dict
@@ -481,7 +480,7 @@ def RunMetagene(inputBedDict, annoBedDict, args, kwargs):
             count += 1
     return finalBinValDict
 
-def MultiThreadRun(index, iboolDict, annoBedDict, args, kwargs):
+def MultiThreadRun(index, iboolDict, args, kwargs):
     if iboolDict['bam']:
         tempFile = tempfile.NamedTemporaryFile(suffix='.tmp', prefix='pybedtools.tempfile', dir=args.temp, delete=True)
     if iboolDict['both']:
@@ -496,7 +495,7 @@ def MultiThreadRun(index, iboolDict, annoBedDict, args, kwargs):
         inputBedDict = BamToBed(bamFile, peakBed, tempFile.name, args)
     ## retrieve bin-value relationships
     sampleName = args.name[index]
-    binValDict = RunMetagene(inputBedDict, annoBedDict, args, kwargs)
+    binValDict = RunMetagene(inputBedDict, args, kwargs)
     ## Deletes all temp files from the current session
     pybedtools.cleanup(verbose=False, remove_all=False)
     if iboolDict['bam']:
@@ -553,13 +552,11 @@ if __name__ == '__main__':
         kwargs['s'] = False
     elif args.library == 'unstranded' and iboolDict['bam']:
         kwargs['s'] = False
-    ## construct annoBed from bed12
-    annoBedDict = AnnoBed12ToBed6(args.anno, args.gene, args.feature, args.bin, args.size)
     ## multi-thread start
     pool = Pool(processes=args.cpu)
     resultList = []
     for i in range(len(args.name)):
-        result = pool.apply_async(MultiThreadRun, args=(i, iboolDict, annoBedDict, args, kwargs,))
+        result = pool.apply_async(MultiThreadRun, args=(i, iboolDict, args, kwargs,))
         resultList.append(result)
     pool.close()
     pool.join()
