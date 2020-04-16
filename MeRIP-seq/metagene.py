@@ -9,7 +9,6 @@ command =  matrix(c(
     "input",        "i",   1,  "character",   "input bin matrix derived from metagene.py",
     "output",       "o",   1,  "character",   "Output directory (./)",
     "prefix",       "p",   1,  "character",   "Output prefix (metagene)",
-    "reorder",      "r",   0,  "logical",     "Re-order input matrix",
     "smooth",       "s",   0,  "logical",     "Smooth the curve (not finish yet)",
     "ylab",         "y",   1,  "character",   "The name of ylab"
 ), byrow=TRUE, ncol=5)
@@ -50,7 +49,6 @@ ShowHelp(args$help, 'none', TRUE)
 ShowHelp(args$input, '-i|--input')
 
 # default values
-if ( is.null(args$reorder) ) { args$reorder = FALSE }
 if ( is.null(args$smooth) ) { args$smooth = FALSE }
 if ( is.null(args$color) ) { args$color = 'Dark2' }
 if ( is.null(args$prefix) ) { args$prefix = 'metagene' }
@@ -68,6 +66,8 @@ LoadPacakge("grid")
 data = read.table(file=args$input, sep="\t", header=TRUE, row.names=NULL)
 valueData <- data[ , -which(names(data) %in% c("feature"))]
 melData <- melt(valueData,id=c("bin"))
+## make color of variables overlay
+melData$variable <- reorder(melData$variable, melData$value, function(x) -max(x) )
 #melData$reorder <- factor(melData$variable, levels = sort(unique(as.character(melData$variable))))
 colourCount <- length(data) - 2
 annoCoord = (max(melData$value)-min(melData$value)) / 20
@@ -75,17 +75,9 @@ annoCoord = (max(melData$value)-min(melData$value)) / 20
 ## library("forcats")
 ## geom_area(aes(fill=fct_reorder(variable, value, .desc = TRUE)), position = 'identity')
 
-if (isTRUE(args$reorder)) {
-  metaGenePlot <- ggplot(melData, aes(x=bin, y=value, group=variable)) +
-    geom_area(aes(fill=fct_reorder(variable, value, .desc = TRUE)), position = 'identity') +
-    geom_line(aes(colour=fct_reorder(variable, value, .desc = TRUE)), size=0.5)
-}else{
-  metaGenePlot <- ggplot(melData, aes(x=bin, y=value, group=variable)) +
+metaGenePlot <- ggplot(melData, aes(x=bin, y=value, group=variable)) +
     geom_area(aes(fill=variable), position = 'identity') +
-    geom_line(aes(colour=variable), size=0.5)
-}
-
-metaGenePlot <- metaGenePlot +
+    geom_line(aes(colour=variable), size=0.5) +
     theme_bw() +
     theme(axis.line = element_line(colour = "black"),
       panel.grid = element_blank(),
