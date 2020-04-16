@@ -4,7 +4,7 @@ suppressMessages(library('getopt'))
 
 command =  matrix(c(
     "help",         "h",   0,  "logical",     "Show help information",
-    "color",        "c",   1,  "character",   "Palette of scale_fill_brewer() [Paired]",
+    "color",        "c",   1,  "character",   "Palette of scale_fill_brewer() [Dark2]",
     "feature",      "f",   1,  "character",   "feature (coding, exon, intron, full) [coding]",
     "input",        "i",   1,  "character",   "input bin matrix derived from metagene.py",
     "output",       "o",   1,  "character",   "Output directory (./)",
@@ -52,7 +52,7 @@ ShowHelp(args$input, '-i|--input')
 # default values
 if ( is.null(args$reorder) ) { args$reorder = FALSE }
 if ( is.null(args$smooth) ) { args$smooth = FALSE }
-if ( is.null(args$color) ) { args$color = 'Paired' }
+if ( is.null(args$color) ) { args$color = 'Dark2' }
 if ( is.null(args$prefix) ) { args$prefix = 'metagene' }
 if ( is.null(args$output) ) { args$output = './' }
 if ( is.null(args$feature) ) { args$feature = 'coding' }
