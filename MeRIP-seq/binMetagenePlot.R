@@ -4,11 +4,12 @@ suppressMessages(library('getopt'))
 
 command =  matrix(c(
     "help",         "h",   0,  "logical",     "Show help information",
+    "color",        "c",   1,  "character",   "Palette of scale_fill_brewer() [Dark2]",
     "feature",      "f",   1,  "character",   "feature (coding, exon, intron, full) [coding]",
     "input",        "i",   1,  "character",   "input bin matrix derived from metagene.py",
     "output",       "o",   1,  "character",   "Output directory (./)",
     "prefix",       "p",   1,  "character",   "Output prefix (metagene)",
-    "smooth",       "s",   0,  "logical",     "Smooth the curve",
+    "smooth",       "s",   0,  "logical",     "Smooth the curve (not finish yet)",
     "ylab",         "y",   1,  "character",   "The name of ylab"
 ), byrow=TRUE, ncol=5)
 
@@ -49,6 +50,7 @@ ShowHelp(args$input, '-i|--input')
 
 # default values
 if ( is.null(args$smooth) ) { args$smooth = FALSE }
+if ( is.null(args$color) ) { args$color = 'Dark2' }
 if ( is.null(args$prefix) ) { args$prefix = 'metagene' }
 if ( is.null(args$output) ) { args$output = './' }
 if ( is.null(args$feature) ) { args$feature = 'coding' }
@@ -58,21 +60,24 @@ LoadPacakge("ggplot2")
 LoadPacakge("ggpubr")
 LoadPacakge("reshape")
 LoadPacakge("RColorBrewer")
+LoadPacakge("forcats")
 LoadPacakge("grid")
 
 data = read.table(file=args$input, sep="\t", header=TRUE, row.names=NULL)
 valueData <- data[ , -which(names(data) %in% c("feature"))]
 melData <- melt(valueData,id=c("bin"))
+## make color of variables overlay
+melData$variable <- reorder(melData$variable, melData$value, function(x) -max(x) )
+#melData$reorder <- factor(melData$variable, levels = sort(unique(as.character(melData$variable))))
 colourCount <- length(data) - 2
-getPalette <- colorRampPalette(brewer.pal(6, "Dark2"))
-
 annoCoord = (max(melData$value)-min(melData$value)) / 20
 
 ## library("forcats")
-## geom_area(aes(fill= fct_reorder(variable, value, .desc = TRUE)), position = 'identity')
+## geom_area(aes(fill=fct_reorder(variable, value, .desc = TRUE)), position = 'identity')
+
 metaGenePlot <- ggplot(melData, aes(x=bin, y=value, group=variable)) +
-    geom_area(aes(fill= variable), position = 'identity') +
-    geom_line(aes(colour= variable), size=0.5) +
+    geom_area(aes(fill=variable), position = 'identity') +
+    geom_line(aes(colour=variable), size=0.5) +
     theme_bw() +
     theme(axis.line = element_line(colour = "black"),
       panel.grid = element_blank(),
@@ -83,7 +88,7 @@ metaGenePlot <- ggplot(melData, aes(x=bin, y=value, group=variable)) +
       axis.text.x=element_blank(),
       axis.ticks.x=element_blank(),
       plot.margin = unit(c(1,1,2,1), "lines")) +
-    scale_color_manual(values = getPalette(colourCount)) +
+    scale_fill_brewer(palette=args$color) +
     scale_x_continuous(expand = c(0,0)) + scale_y_continuous(expand = c(0,0)) +
     xlab("") + ylab(args$ylab)
 
@@ -93,8 +98,6 @@ if (args$feature != 'coding') {
   metaGenePlot <- metaGenePlot +
     annotation_custom(featureText,xmin=featureXlabCoord,xmax=featureXlabCoord,ymin=-annoCoord,ymax=-annoCoord)
 }else{
-  colourCount <- length(data) - 2
-  getPalette <- colorRampPalette(brewer.pal(5, "Dark2"))
   utr5XlabMin <- min(data[data$feature == 'utr5',]$bin)
   utr5XlabMax <- max(data[data$feature == 'utr5',]$bin)
   cdsXlabMin <- min(data[data$feature == 'cds',]$bin)
