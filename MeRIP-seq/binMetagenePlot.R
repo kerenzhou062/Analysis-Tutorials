@@ -7,10 +7,10 @@ command =  matrix(c(
     "color",        "c",   1,  "character",   "Palette of scale_fill_brewer() [Dark2]",
     "feature",      "f",   1,  "character",   "feature (coding, exon, intron, full) [coding]",
     "input",        "i",   1,  "character",   "input bin matrix derived from metagene.py",
-    "output",       "o",   1,  "character",   "Output directory (./)",
-    "prefix",       "p",   1,  "character",   "Output prefix (metagene)",
+    "output",       "o",   1,  "character",   "Output directory [./]",
+    "prefix",       "p",   1,  "character",   "Output prefix [metagene]",
     "smooth",       "s",   0,  "logical",     "Smooth the curve (not finish yet)",
-    "ylab",         "y",   1,  "character",   "The name of ylab"
+    "ylab",         "y",   1,  "character",   "The name of ylab [Peaks Coverage (%)]"
 ), byrow=TRUE, ncol=5)
 
 # function
