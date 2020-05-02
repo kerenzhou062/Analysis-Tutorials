@@ -13,7 +13,7 @@ import gc
 import bedutils
 
 parser = argparse.ArgumentParser(
-    description="This script is used for ploting metagene pattern from bed or bam based on gene annotations in bed12 format",
+    description="This script is used for plotting metagene pattern from bed or bam based on gene annotations in bed12 format",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-a', '--anno', action='store', type=str,
                     required=True,
