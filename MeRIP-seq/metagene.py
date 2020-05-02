@@ -35,7 +35,7 @@ parser.add_argument('-f', '--feature', nargs='+', type=str,
 parser.add_argument('-g', '--gene', nargs='+', type=str,
                     choices=["protein_coding", "non_coding", "all"],
                     default='protein_coding',
-                    help='The bin features')
+                    help='The gene features')
 parser.add_argument('-i', '--bed', nargs='+', type=str,
                     help='The input bed files (bed3, bed6, bed12)')
 parser.add_argument('-k', '--bam', nargs='+', type=str,
