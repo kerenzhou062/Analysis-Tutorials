@@ -95,7 +95,7 @@ if args.noheader is False:
     if args.idType == 'gene':
         headerRow = ['GeneName', 'Synonyms', 'Description', 'GeneType', 'GeneClass']
     else:
-        headerRow = ['GeneId', 'Synonyms', 'Description', 'GeneName', 'GeneType', 'GeneClass', 'TxName', 'TxType']
+        headerRow = ['GeneId', 'GeneName', 'Synonyms', 'Description', 'GeneType', 'GeneClass', 'TxName', 'TxType']
     if args.onlyName:
         headerRow = ['GeneName']
 count = 1
