@@ -72,7 +72,10 @@ for countMtx in countMtxFiles:
                 cqvDict[geneId].append(cqv)
 
 with open (args.output, 'w') as out:
-    row = ['gene_id']
+    if args.identity == 'gene':
+        row = ['gene_id']
+    else:
+        row = ['tx_id']
     row.extend(sampleNameList)
     if args.abundance != 'counts':
         row.extend(list(map(lambda x: x + '_CQV', sampleNameList)))
