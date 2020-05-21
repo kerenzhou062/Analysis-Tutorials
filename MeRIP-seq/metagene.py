@@ -41,8 +41,8 @@ parser.add_argument('-i', '--bed', nargs='+', type=str,
 parser.add_argument('-k', '--bam', nargs='+', type=str,
                     help='The input bam files (if --bed set, should be equal to --bed)')
 parser.add_argument('-l', '--library', action='store', type=str,
-                    choices=['unstranded', 'reverse', 'forward'],
-                    default='reverse',
+                    choices=['unstranded', 'fr-firstrand','fr-secondstrand'],
+                    default='fr-firstrand',
                     help='The library tye of bam files')
 parser.add_argument('-m', '--method', action='store', type=str,
                     choices=['center', 'interval', 'exon'],
@@ -244,7 +244,7 @@ def BamToBed(bam, peakBed, destFile, args):
         kwargs = {'nonamecheck':True, 'u':True, 'sorted':True, 'S':True, 's':False}
         if args.library == 'unstranded':
             kwargs['S'] = False
-        elif args.library == 'forward':
+        elif args.library == 'fr-secondstrand':
             kwargs['S'] = False
             kwargs['s'] = True
         bamToBed = bamToBed.intersect(peakBed, **kwargs).moveto(destFile)
@@ -547,7 +547,7 @@ if __name__ == '__main__':
             args.name = GetSampleName(args.bam)
     ## run programs
     kwargs = {'nonamecheck':True, 'wb':True, "sorted":True, 's':args.strand, 'S':args.reverse}
-    if args.library == 'reverse' and iboolDict['bam']:
+    if args.library == 'fr-firstrand' and iboolDict['bam']:
         kwargs['S'] = True
         kwargs['s'] = False
     elif args.library == 'unstranded' and iboolDict['bam']:
