@@ -33,9 +33,9 @@ parser.add_argument('-q', '--fdr', action='store', type=float,
                     default=1,
                     help='Cutoff of fdr')
 parser.add_argument('-s', '--strand', action='store', type=str,
-                    choices=['unstrand', 'reverse', 'forward'],
-                    default='reverse',
-                    help='Library protocols of bam (reverse:fr-firstrand, forward:fr-secondstrand)')
+                    choices=['unstranded', 'fr-firstrand','fr-secondstrand'],
+                    default='fr-firstrand',
+                    help='Library protocols of bam')
 parser.add_argument('-t', '--treat', action='store', type=str,
                     required=True,
                     help='M6A peak.xls of treatment group from exomePeak')
@@ -327,9 +327,9 @@ if bool(args.bamdir):
     peakReadDict = Manager().dict()
     cntBamDict = defaultdict(list)
     trtBamDict = defaultdict(list)
-    if args.strand == 'unstrand':
+    if args.strand == 'unstranded':
         strand = ''
-    elif args.strand == 'reverse':
+    elif args.strand == 'fr-firstrand':
         strand = '-S'
     else:
         strand = '-s'
