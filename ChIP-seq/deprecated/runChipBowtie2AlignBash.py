@@ -56,7 +56,7 @@ if len(sys.argv[1:]) == 0:
 threadNum = args.cpu
 memory = args.memory
 partition = args.part
-quality = args.cpu
+quality = args.quality
 anno = Anno()
 genomeIndex = anno.gindex(args.index)
 blacklist = anno.blacklist(args.blacklist)
