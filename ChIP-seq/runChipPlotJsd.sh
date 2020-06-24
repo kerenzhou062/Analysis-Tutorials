@@ -116,7 +116,7 @@ C_ALL=en_US.UTF-8 LANG=en_US.UTF-8 plotFingerprint -b ${BAMS} \
   --numberOfProcessors ${THREADS} --plotFile ${JSD_PLOT}
 
 echo "Delete *filt.srt.nodup.bfilt.bam!"
-#find "$INPUT_DIR" -maxdepth 2 -type f -name "*filt.srt.nodup.bfilt.bam" | xargs -I {} rm -rf {}
-#find "$INPUT_DIR" -maxdepth 2 -type f -name "*filt.srt.nodup.bfilt.bam.bai" | xargs -I {} rm -rf {}
+find "$INPUT_DIR" -maxdepth 2 -type f -name "*filt.srt.nodup.bfilt.bam" | xargs -I {} rm -rf {}
+find "$INPUT_DIR" -maxdepth 2 -type f -name "*filt.srt.nodup.bfilt.bam.bai" | xargs -I {} rm -rf {}
 #
 echo "Step 2f done!"
