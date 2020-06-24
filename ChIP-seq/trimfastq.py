@@ -19,6 +19,7 @@ def run():
 
     if len(sys.argv) < 2:
         print('usage: python %s <inputfilename> <bpToKeep | max> [-trim5 bp] [-flowcellID flowcell] [-addEnd 1 | 2] [-replace string newstring | blank] [-renameIDs prefix] [-stdout]' % sys.argv[0])
+        print('\tif trim length is longer than the read length, then will automatically set as "max"')
         print('\tthe -trim5 option will trim additional bp from the 5 end, i.e. if you want the middle 36bp of 38bp reads, use 36 as bp to keep and 1 as the trim5 argument')
         print('\tUse - to specify standard input, the script will print(to standard output by default')
         print('\tThe script can read compressed files as long as they have the correct suffix - .bz2 or .gz')
@@ -31,6 +32,11 @@ def run():
         trim='max'
     else: 
         trim = int(sys.argv[2])
+    with open(inputfilename, 'r') as f:
+        __ = f.readline()
+        readLen = len(f.readline().strip())
+        if readLen < trim:
+            trim = readLen
     outputfilename = inputfilename.split('/')[-1].split('.fastq')[0] + '.' +str(trim)+'mers.fastq'
     doFlowcellID=False
 
