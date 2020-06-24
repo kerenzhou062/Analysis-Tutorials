@@ -238,8 +238,7 @@ runChipAlignGenome.sh --prefix {alignPrefix} --quality {quality} \\
 runChipPoolReplicatesTemplate='''
 echo "Run runChipPoolReplicates for {exp} ({ip})"
 chipPoolRepLog="{chipPoolRepLog}"
-runChipPoolReplicates.sh --thread {thread} \\
-  --prefix {ipPrefix} \\
+runChipPoolReplicates.sh --prefix {ipPrefix} \\
   --blacklist {blacklist} \\
   --input {algnRoot} \\
   > $chipPoolRepLog 2>&1
