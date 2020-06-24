@@ -151,7 +151,7 @@ for i in `find ./ -maxdepth 1 -type f -links +1 -name "*.filt.srt.nodup.bam"| gr
 do
   BTILT_PREFIX=${i%%.bam}
   NODUP_BFILT_BAM=${BTILT_PREFIX}.bfilt.bam
-  FINAL_BAM_INDEX_FILE=${BTILT_PREFIX}.bfilt.bai
+  FINAL_BAM_INDEX_FILE=${BTILT_PREFIX}.bfilt.bam.bai
   bedtools intersect -nonamecheck -v -abam ${i} -b ${BLACKLIST} > ${NODUP_BFILT_BAM}
   samtools index ${NODUP_BFILT_BAM} ${FINAL_BAM_INDEX_FILE}
 done

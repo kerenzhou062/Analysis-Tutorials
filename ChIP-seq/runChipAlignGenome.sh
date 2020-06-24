@@ -435,8 +435,9 @@ samtools view -F 1804 -q ${MAPQ_THRESH} -b ${TRIM_RAW_BAM_FILE} -o ${TRIM_FILT_B
 # ================================
 echo "Make tagAlign for trim-filtered (but not deduped) BAM..."
 
+NREADS=15000000
 TEMP_TRIM_TA_FILE="${TRIM_FILT_BAM_PREFIX}.tagAlign.gz"
-SUBSAMPLED_TA_FILE="${TRIM_OFPREFIX}.filt.sample.15.tagAlign.gz"
+SUBSAMPLED_TA_FILE="${TRIM_OFPREFIX}.filt.sample.$((NREADS / 1000000)).tagAlign.gz"
 
 bedtools bamtobed -i ${TRIM_FILT_BAM_FILE} | \
   awk 'BEGIN{OFS="\t"}{$4="N";$5="1000";print $0}' | \
@@ -454,9 +455,8 @@ zcat -f ${TEMP_TRIM_TA_FILE} | grep -v "chrM" |   shuf -n ${NREADS} --random-sou
 ### temporary block
 CC_SCORES_FILE="${SUBSAMPLED_TA_FILE}.cc.qc"
 CC_PLOT_FILE="${SUBSAMPLED_TA_FILE}.cc.plot.pdf"
-NTHREADS=10
 
-Rscript $(which run_spp.R) -c=${SUBSAMPLED_TA_FILE} -p=${NTHREADS} -filtchr=chrM \
+Rscript $(which run_spp.R) -c=${SUBSAMPLED_TA_FILE} -p=${THREADS} -filtchr=chrM \
   -savp=${CC_PLOT_FILE} -out=${CC_SCORES_FILE}
 sed -r 's/,[^\t]+//g' ${CC_SCORES_FILE} > temp
 mv temp ${CC_SCORES_FILE}
