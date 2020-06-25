@@ -98,7 +98,6 @@ JSD_PLOT="${FILE_PREFIX}.JSD.png"
 # FINAL_BAM_PREFIX="${FILE_PREFIX}.filt.srt.nodup"
 # FINAL_BAM_FILE="${FINAL_BAM_PREFIX}.bam" # To be stored
 
-echo "Filtering bam with blacklist bed file..."
 BAMS=""
 LABELS=""
 for bam in `find ./ -maxdepth 2 -type f -name "*filt.srt.nodup.bfilt.bam"| grep -v 'pooled'| sort`;
