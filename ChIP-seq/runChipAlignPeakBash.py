@@ -259,7 +259,7 @@ MAIN_ALIGN_DIR="{mainAlignDir}"
 MAIN_PEAK_DIR="{mainPeakDir}"
 #separated by " "
 THREADS={thread}
-GENOMESIZE="{gsize}"
+GENOME_SIZE="{gsize}"
 IP_CHIP="{ipChipStr}"
 CONTROL_CHIP="{conChipStr}"
 NAME="{nameStr}"
@@ -281,7 +281,7 @@ callMacs2Parallel.py -cpu ${{THREADS}} \\
   -ip ${{IP_CHIP}} \\
   -input ${{CONTROL_CHIP}} \\
   -format BED \\
-  -gsize ${{GENOMESIZE}} \\
+  -gsize ${{GENOME_SIZE}} \\
   -pval {pval} \\
   -shift ${{SHIFT}} \\
   -extsize ${{EXTSIZE}} \\
@@ -304,7 +304,7 @@ callMacs2Parallel.py -cpu ${{THREADS}} \\
   -ip ${{IP_CHIP}} \\
   -input ${{CONTROL_CHIP}} \\
   -format BED \\
-  -gsize ${{GENOMESIZE}} \\
+  -gsize ${{GENOME_SIZE}} \\
   -pval {pval} \\
   -shift ${{SHIFT}} \\
   -extsize ${{EXTSIZE}} \\
@@ -369,6 +369,7 @@ peakOverlapTemplate = '''
 echo "Running overlap peaks on {peakType} peaks..."
 runChipOverlapPeaks.sh --type {peakType} --prefix {exp} \\
   --output {overlapDir} \\
+  --gsize {chrsize} \\
   --blacklist {blacklist} \\
   --peak1 {peak1} \\
   --peak2 {peak2}

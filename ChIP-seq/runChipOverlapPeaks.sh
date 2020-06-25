@@ -9,6 +9,7 @@ function showHelp {
   echo -e "options:
     -h | --help: show help information <bool>
     -b | --blacklist: input genome blacklist bed, which consists of centromere, repeat regions, etc. <str>
+    -g | --gsize: the genome size <str>
     -o | --output: the output directory <str>
     -p | --prefix: the prefix of dataset (eg. HepG2_CTCF_WT) <str>
     -t | --type: peak type (narrowPeak|broadPeak) <str>
@@ -24,7 +25,7 @@ if [[ $# == 0 ]]; then
   exit 2
 fi
 
-TEMP=`getopt -o hb:p:o:t:, --long help,blacklist:,output:,prefix:,\
+TEMP=`getopt -o hb:g:p:o:t:, --long help,blacklist:,gsize:,output:,prefix:,\
   --long type:,peak1:,peak2:, \
   --long load, \
   -- "$@"`
@@ -42,6 +43,7 @@ while true; do
   case "$1" in
     -h | --help ) showHelp; shift ;;
     -b | --blacklist ) BLACKLIST="$2"; shift 2 ;;
+    -g | --gsize ) GENOME_SIZE="$2"; shift 2 ;;
     -o | --output ) OUTPUT_DIR="$2"; shift 2 ;;
     -p | --prefix ) PREFIX="$2"; shift 2 ;;
     -t | --type ) PEAK_TYPE="$2"; shift 2 ;;
@@ -89,12 +91,15 @@ if [ "$LOAD_FLAG" = true ]; then
 fi
 
 if [ ! -d "$OUTPUT_DIR" ]; then
-  mkdir -p 
+  mkdir -p "$OUTPUT_DIR"
 fi
 
 FILE_PREFIX="${OUTPUT_DIR}/${PREFIX}"
 
 cd ${OUTPUT_DIR}
+
+##overlap
+echo "Start to overlap peaks..."
 
 bedtools intersect -a $PEAK1 \
   -b $PEAK2 \
@@ -104,6 +109,18 @@ bedtools intersect -a $PEAK1 \
 bedtools intersect -a $PEAK1 \
   -b $PEAK2 \
   -nonamecheck | \
-  bedtools -a stdin -b ${BLACKLIST} \
+  bedtools intersect -a stdin -b ${BLACKLIST} \
   -v -nonamecheck \
   > "${FILE_PREFIX}.overlap.filt.${PEAK_TYPE}"
+
+if [ ! -z "$GENOME_SIZE" ] && [ -f "$GENOME_SIZE" ]; then
+  ##fisher test
+  echo "Start fisher test..."
+  peak1Name=$(basename $PEAK1)
+  peak2Name=$(basename $PEAK2)
+  bedtools sort -i $PEAK1 -g $GENOME_SIZE > $peak1Name
+  bedtools sort -i $PEAK2 -g $GENOME_SIZE > $peak2Name
+  bedtools fisher -a $peak1Name -b $peak2Name -g $GENOME_SIZE \
+    > "${FILE_PREFIX}.${PEAK_TYPE}.fisher.txt"
+  rm -f $peak1Name $peak2Name
+fi
