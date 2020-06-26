@@ -118,23 +118,23 @@ def runMacs2(ip, control, name, other, output,
         os.remove('{0}.fc.signal.sorted.bedgraph'.format(prefix))
 
         # generate count signal track
-        # postive strand
+        # postive + negative strand
         countCommand = "zcat -f {ip} | sort -S {sortMem}% -k1,1 -k2,2n | \
-            bedtools genomecov -5 -bg -strand + -g {chrsize} \
+            bedtools genomecov -bg -g {chrsize} \
             -i stdin > {output}/TMP.POS.BED".format(**vars())
         subprocess.run(countCommand, shell=True)
         countCommand = "bedGraphToBigWig {output}/TMP.POS.BED \
-            {chrsize} {output}/{name}.positive.bw >> \
+            {chrsize} {output}/{name}.count.bw >> \
             {logFile} 2>&1".format(**vars())
         subprocess.run(countCommand, shell=True)
-        # negative strand
-        countCommand = "zcat -f {ip} | sort -S {sortMem}% -k1,1 -k2,2n | \
-            bedtools genomecov -5 -bg -strand - -g {chrsize} \
-            -i stdin > {output}/TMP.POS.BED".format(**vars())
-        subprocess.run(countCommand, shell=True)
-        countCommand = "bedGraphToBigWig {output}/TMP.POS.BED {chrsize} \
-            {output}/{name}.negative.bw >> {logFile} 2>&1".format(**vars())
-        subprocess.run(countCommand, shell=True)
+        ## negative strand
+        #countCommand = "zcat -f {ip} | sort -S {sortMem}% -k1,1 -k2,2n | \
+        #    bedtools genomecov -5 -bg -strand - -g {chrsize} \
+        #    -i stdin > {output}/TMP.POS.BED".format(**vars())
+        #subprocess.run(countCommand, shell=True)
+        #countCommand = "bedGraphToBigWig {output}/TMP.POS.BED {chrsize} \
+        #    {output}/{name}.negative.bw >> {logFile} 2>&1".format(**vars())
+        #subprocess.run(countCommand, shell=True)
         os.remove('{output}/TMP.POS.BED'.format(**vars()))
     return 1
 
