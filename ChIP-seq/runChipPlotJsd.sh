@@ -92,7 +92,7 @@ FILE_PREFIX="${INPUT_DIR}/${PREFIX}"
 echo "Step 2f starting..."
 
 JSD_LOG="${FILE_PREFIX}.JSD.log"
-JSD_PLOT="${FILE_PREFIX}.JSD.png"
+JSD_PLOT="${FILE_PREFIX}.JSD.pdf"
 
 # BAMs are blacklist-filtered first for each replicate and control
 # FINAL_BAM_PREFIX="${FILE_PREFIX}.filt.srt.nodup"
