@@ -10,6 +10,8 @@ from collections import defaultdict
 # or runChipAlignPeakBash.py <fastq dir>
 
 parser = argparse.ArgumentParser(
+    description='This script used for generate ChIP-seq pipeline bash.\n\
+    Required program: bowtie2, picard, bedtools, deepTools, MACS2, idr',
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-alignment', action='store', type=str,
                     default='alignment',
