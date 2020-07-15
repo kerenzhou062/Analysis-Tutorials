@@ -6,8 +6,8 @@ import re
 from glob import glob
 from collections import defaultdict
 
-# usage: runChipSeBowtie2AlignBash.py
-# or runChipSeBowtie2AlignBash.py <fastq dir>
+# usage: runChipAlignPeakBash.py
+# or runChipAlignPeakBash.py <fastq dir>
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
