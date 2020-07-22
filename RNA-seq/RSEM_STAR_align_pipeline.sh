@@ -36,7 +36,7 @@ function showHelp {
     --star-genome-dir: STAR genome directory - prepared with RSEM_STAR_prep.sh <str>
     --read1: fastq of read1 <str>
     --read2: fastq of read2 (not set if single-end) <str>
-    --strandedess: strandedness of the RNA-Seq reads ('none[default]|forward|reverse') <str>
+    --strandedess: strandedness of the RNA-Seq reads ('none(unstranded)[default]|forward(fr-secondstrand)|reverse(fr-firstrand)') <str>
     --seq-type: RNA-seq type, possible values: PE SE
     --append-names: set RSEM with --append-names <bool>
     --disable-bw: do not generate bigWig files <str>
@@ -253,7 +253,7 @@ else
   mkdir Signal_RAW
   
   echo "STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} "
-  echo "  --outWigType bedGraph $STARparWig --outWigNorm None --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr"
+  echo "  --outWigType bedGraph $STARparWig --outWigNorm None --outFileNamePrefix ./Signal_RAW/ --outWigReferencesPrefix chr"
   STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} \
     --outWigType bedGraph $STARparWig --outWigNorm None --outFileNamePrefix ./Signal_RAW/ --outWigReferencesPrefix chr
   
@@ -263,7 +263,7 @@ else
   mkdir Signal_RPM
   
   echo "STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} "
-  echo "  --outWigType bedGraph $STARparWig --outWigNorm RPM --outFileNamePrefix ./Signal/ --outWigReferencesPrefix chr"
+  echo "  --outWigType bedGraph $STARparWig --outWigNorm RPM --outFileNamePrefix ./Signal_RPM/ --outWigReferencesPrefix chr"
   STAR --runMode inputAlignmentsFromBAM   --inputBAMfile ${sortedGenomeBAM} \
     --outWigType bedGraph $STARparWig --outWigNorm RPM --outFileNamePrefix ./Signal_RPM/ --outWigReferencesPrefix chr
   
