@@ -44,7 +44,7 @@ function showHelp {
     --skip-mapping: skip reads mapping step <bool>
     --skip-txsort: skip *transcript.sorted.bam sorting step <bool>
     --skip-rsem: skip RSEM expression calculating step <bool>
-    --zcat-flag: set if the input fastq <bool>"
+    --zcat-flag: set if the input fastqs are gzipped <bool>"
   exit 2;
 }
 
