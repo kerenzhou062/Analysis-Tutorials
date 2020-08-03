@@ -18,8 +18,8 @@ command =  matrix(c(
     "ruvgCount",    "u",   2,  "numeric",     "Counts cutoff for filtering count matrix with --batchMethod RUVg (5)",
     "ruvgLogfc",    "l",   2,  "numeric",     "pvalue cutoff for filtering count matrix with --batchMethod RUVg (1)",
     "ruvgPval",     "v",   2,  "numeric",     "log2CF cutoff for filtering count matrix with --batchMethod RUVg (0.3)",
-    "selectCol",    "C",   2,  "character",   "Only 'selectCol' in samplemtx was selected as contrast in results()",
-    "selectRow",    "R",   2,  "character",   "Only 'selectRow' from 'selectCol' was selected as contrast in results()",
+    "selectCol",    "C",   2,  "character",   "Only 'colname' in samplemtx was selected as contrast in results()",
+    "selectRow",    "R",   2,  "character",   "Only 'rowname' from 'selectCol' was selected as contrast in results()",
     "sampleMtx",    "m",   1,  "character",   "Sample relationships matrix",
     "shrink",       "s",   1,  "character",   "Shrinkage method for DE results (none|normal|apeglm|ashr[default])",
     "spiRegex",     "r",   1,  "character",   "Name pattern of spikeins in gene_id (ERCC-)",
@@ -165,7 +165,7 @@ cts <- cts[filtered,]
 
 contrast <- c(design, treat, control)
 if (!is.null(args$selectCol)) {
-  name <- paste( design, control, '.', selectCol, selectRow, sep="")
+  name <- paste( design, control, '.', args$selectCol, args$selectRow, sep="")
 }else{
   name <- paste( design, treat, 'vs', control, sep="_")
 }
@@ -191,7 +191,7 @@ if( args$batchMethod == "spikeins" ){
   colData <- pData(spikeNorSet)
 
   if (!is.null(args$selectCol)) {
-    designFormula <- as.formula(paste("~ W_1 +", design, '+', design, ':', selectCol, sep=" "))
+    designFormula <- as.formula(paste("~ W_1 +", design, '+', design, ':', args$selectCol, sep=" "))
   }else{
     designFormula <- as.formula(paste("~ W_1 +", design, sep=" "))
   }
@@ -250,7 +250,7 @@ if (args$batchMethod == 'RUVg') {
   dds$W2 <- set$W_2
   ## re-design factors
   if (!is.null(args$selectCol)) {
-    design(dds) <- as.formula(paste("~ W1 + W2 +", design, '+', design, ':', selectCol, sep=" "))
+    design(dds) <- as.formula(paste("~ W1 + W2 +", design, '+', design, ':', args$selectCol, sep=" "))
   }else{
     design(dds) <- as.formula(paste("~ W1 + W2 +", design, sep=" "))
   }
@@ -278,6 +278,9 @@ if ( shrink != 'none' ) {
     res <- results( dds, contrast=contrast )
   }
 }
+
+# to avoid NA adjusted p-values
+res$padj <- p.adjust(res$pvalue, method="BH")
 
 # plot MA plot
 maPlotPdf <- file.path(output, paste(prefix, ".MA.pdf", sep=""))
