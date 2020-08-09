@@ -11,9 +11,9 @@ from collections import defaultdict
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--cole', action='store', type=int, required=True,
-                    help='the end index of column for expression data (-1 indicate the end of the dataframe)')
+                    help='the end index of column for expression data (except for the index column, -1 indicate the end of the dataframe)')
 parser.add_argument('--cols', action='store', type=int, required=True,
-                    help='the start index of column for expression data')
+                    help='the start index of column for expression matrix (except for the index column)')
 parser.add_argument('--gene', action='store', nargs='+', type=str, required=True,
                     help='based gene list used for testing the co-expression network (if set as "all", then run program for all genes)')
 parser.add_argument('--index', action='store', type=int, required=True,
