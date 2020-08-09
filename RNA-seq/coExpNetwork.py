@@ -10,9 +10,11 @@ from multiprocessing import Pool, Manager
 from collections import defaultdict
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--cole', action='store', type=int, required=True,
+parser.add_argument('--cole', action='store', type=int,
+                    default=0,
                     help='the end index of column for expression data (except for the index column, -1 indicate the end of the dataframe)')
-parser.add_argument('--cols', action='store', type=int, required=True,
+parser.add_argument('--cols', action='store', type=int,
+                    default=-1,
                     help='the start index of column for expression matrix (except for the index column)')
 parser.add_argument('--gene', action='store', nargs='+', type=str, required=True,
                     help='based gene list used for testing the co-expression network (if set as "all", then run program for all genes)')
@@ -27,6 +29,11 @@ parser.add_argument('--input', action='store', type=str, required=True,
 parser.add_argument('--mins', action='store', type=int,
                     default=10,
                     help='input gene expression matrix (column:sample, row:gene)')
+parser.add_argument('--operator', action='store', type=str,
+                    choices=['>', '>=', '<', '<=', '!='],
+                    help='operator used for filtering the matrix data')
+parser.add_argument('--operval', action='store', type=float,
+                    help='filtering value for operator')
 parser.add_argument('--sep', action='store', type=str,
                     default='\t',
                     help='delimiter of columns to use')
@@ -47,14 +54,29 @@ if len(sys.argv[1:]) == 0:
     parser.print_help()
     parser.exit()
 
-def CallCoExpNetwork(data, igene, tgeneList, mins, cols, cole):
+def FilterMatrix(data, operator, operval):
+    data = data[data.columns[~data.isnull().all()]]
+    if bool(operator) and bool(operval) :
+        if operator == '<':
+            data = data.loc[:, (data.iloc[0, :] < operval)]
+        elif operator == '<=':
+            data = data.loc[:, (data.iloc[0, :] <= operval)]
+        elif operator == '>':
+            data = data.loc[:, (data.iloc[0, :] > operval)]
+        elif operator == '>=':
+            data = data.loc[:, (data.iloc[0, :] >= operval)]
+        elif operator == '!=':
+            data = data.loc[:, (data.iloc[0, :] != operval)]
+    return data
+
+def CallCoExpNetwork(data, igene, tgeneList, mins, cols, cole, operator, operval):
     # get expression data of input gene
     if cole == -1:
         igData = data.iloc[data.index == igene].iloc[:,cols:]
     else:
         igData = data.iloc[data.index == igene].iloc[:,cols:cole]
     # filter NA values
-    igData = igData[igData.columns[~igData.isnull().all()]]
+    igData = FilterMatrix(igData, operator, operval)
     
     coefList = list()
     for tgene in tgeneList:
@@ -71,7 +93,7 @@ def CallCoExpNetwork(data, igene, tgeneList, mins, cols, cole):
                 # geneData may contain multiple rows
                 tgData = geneData.iloc[[i]]
                 # filter NA values
-                tgData = tgData[tgData.columns[~tgData.isnull().all()]]
+                tgData = FilterMatrix(tgData, operator, operval)
                 ## get data from common columns and flatten 
                 nparrA = igData[igData.columns & tgData.columns].to_numpy()[0]
                 nparrB = tgData[igData.columns & tgData.columns].to_numpy()[0]
@@ -115,13 +137,13 @@ if args.gene == 'all':
     for i in range(len(indexList) - 1):
         igene = indexList[i]
         tgeneList = indexList[i+1:]
-        result = pool.apply_async(CallCoExpNetwork, args=(data, igene, tgeneList, args.mins, args.cols, args.cole, ))
+        result = pool.apply_async(CallCoExpNetwork, args=(data, igene, tgeneList, args.mins, args.cols, args.cole, args.operator, args.operval, ))
         resultList.append(result)
 else:
     for igene in args.gene:
         if igene in indexList:
             tgeneList = list(filter(lambda x:x != args.gene, indexList))
-            result = pool.apply_async(CallCoExpNetwork, args=(data, igene, tgeneList, args.mins, args.cols, args.cole, ))
+            result = pool.apply_async(CallCoExpNetwork, args=(data, igene, tgeneList, args.mins, args.cols, args.cole, args.operator, args.operval, ))
             resultList.append(result)
         else:
             sys.error.write('No such gene ({0}) found in the expression matrix!'.format(igene))
