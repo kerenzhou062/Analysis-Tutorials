@@ -21,7 +21,7 @@ parser.add_argument('--index', action='store', type=int, required=True,
 parser.add_argument('--contain', action='store', type=str,
                     help='regex for filtering the columns (included)')
 parser.add_argument('--filter', action='store', type=str,
-                    help='regex for filtering the columns (not included)')
+                    help='regex for filtering the columns (excluded)')
 parser.add_argument('--input', action='store', type=str, required=True,
                     help='input gene expression matrix (column:sample, row:gene)')
 parser.add_argument('--mins', action='store', type=int,
