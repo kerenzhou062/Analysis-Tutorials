@@ -119,7 +119,7 @@ def CallCoExpNetwork(data, igene, tgeneList, mins, operators, opervals):
 
 if bool(args.operator) and bool(args.operval):
     if len(args.operator) != len(args.operval):
-        sys.stderr.write('Errors in --operator and --operval!')
+        sys.stderr.write('Errors in --operator and --operval!\n')
         sys.exit()
 else:
     args.operator = []
@@ -163,13 +163,13 @@ if args.gene == 'all':
         resultList.append(result)
 else:
     for igene in args.gene:
-        if igene in indexList:
-            tgeneList = list(filter(lambda x:x != args.gene, indexList))
-            result = pool.apply_async(CallCoExpNetwork, args=(data, igene, tgeneList, args.mins, args.operator, args.operval, ))
-            resultList.append(result)
-        else:
-            sys.error.write('No such gene ({0}) found in the expression matrix!'.format(igene))
+        if igene not in indexList:
+            sys.error.write('No such gene ({0}) found in the expression matrix!\n'.format(igene))
             sys.exit()
+    for igene in args.gene:
+        tgeneList = list(filter(lambda x:x != args.gene, indexList))
+        result = pool.apply_async(CallCoExpNetwork, args=(data, igene, tgeneList, args.mins, args.operator, args.operval, ))
+        resultList.append(result)
 pool.close()
 pool.join()
 
