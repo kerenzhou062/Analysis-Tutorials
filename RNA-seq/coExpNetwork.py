@@ -29,10 +29,15 @@ parser.add_argument('--input', action='store', type=str, required=True,
 parser.add_argument('--mins', action='store', type=int,
                     default=10,
                     help='input gene expression matrix (column:sample, row:gene)')
-parser.add_argument('--operator', action='store', type=str,
+parser.add_argument('--operator1', action='store', type=str,
                     choices=['>', '>=', '<', '<=', '!='],
                     help='operator used for filtering the matrix data')
-parser.add_argument('--operval', action='store', type=float,
+parser.add_argument('--operval1', action='store', type=float,
+                    help='filtering value for operator')
+parser.add_argument('--operator2', action='store', type=str,
+                    choices=['>', '>=', '<', '<=', '!='],
+                    help='operator used for filtering the matrix data')
+parser.add_argument('--operval2', action='store', type=float,
                     help='filtering value for operator')
 parser.add_argument('--sep', action='store', type=str,
                     default='\t',
@@ -54,38 +59,34 @@ if len(sys.argv[1:]) == 0:
     parser.print_help()
     parser.exit()
 
-def FilterMatrix(data, operator, operval):
-    data = data[data.columns[~data.isnull().all()]]
+def FilterMatrix(df, operator, operval):
+    df = df[df.columns[~df.isnull().all()]]
+    ## filter columns by row values
     if bool(operator) and bool(operval) :
         if operator == '<':
-            data = data.loc[:, (data.iloc[0, :] < operval)]
+            df = df[df.columns[df.iloc[0, :] < operval]]
         elif operator == '<=':
-            data = data.loc[:, (data.iloc[0, :] <= operval)]
+            df = df[df.columns[df.iloc[0, :] <= operval]]
         elif operator == '>':
-            data = data.loc[:, (data.iloc[0, :] > operval)]
+            df = df[df.columns[df.iloc[0, :] > operval]]
         elif operator == '>=':
-            data = data.loc[:, (data.iloc[0, :] >= operval)]
+            df = df[df.columns[df.iloc[0, :] >= operval]]
         elif operator == '!=':
-            data = data.loc[:, (data.iloc[0, :] != operval)]
-    return data
+            df = df[df.columns[df.iloc[0, :] != operval]]
+    return df
 
-def CallCoExpNetwork(data, igene, tgeneList, mins, cols, cole, operator, operval):
+def CallCoExpNetwork(data, igene, tgeneList, mins, operators, opervals):
     # get expression data of input gene
-    if cole == -1:
-        igData = data.iloc[data.index == igene].iloc[:,cols:]
-    else:
-        igData = data.iloc[data.index == igene].iloc[:,cols:cole]
+    igData = data.iloc[data.index == igene]
     # filter NA values
-    igData = FilterMatrix(igData, operator, operval)
-    
+    igData = FilterMatrix(igData, operators[0], opervals[0])
+    igData = FilterMatrix(igData, operators[1], opervals[1])
+
     coefList = list()
     for tgene in tgeneList:
         if tgene != igene:
             # get expression data of testing gene
-            if cole == -1:
-                geneData = data.iloc[data.index == tgene].iloc[:,cols:]
-            else:
-                geneData = data.iloc[data.index == tgene].iloc[:,cols:cole]
+            geneData = data.iloc[data.index == tgene]
             coef = 0
             pval = 1
             sampleNum = 0
@@ -93,10 +94,17 @@ def CallCoExpNetwork(data, igene, tgeneList, mins, cols, cole, operator, operval
                 # geneData may contain multiple rows
                 tgData = geneData.iloc[[i]]
                 # filter NA values
-                tgData = FilterMatrix(tgData, operator, operval)
+                tgData = FilterMatrix(tgData, operators[0], opervals[0])
+                tgData = FilterMatrix(tgData, operators[1], opervals[1])
                 ## get data from common columns and flatten 
                 nparrA = igData[igData.columns & tgData.columns].to_numpy()[0]
                 nparrB = tgData[igData.columns & tgData.columns].to_numpy()[0]
+                ## to avoid 0 elements
+                if len(nparrA) == 0 or len(nparrB) == 0:
+                    continue
+                ## to avoid PearsonRConstantInputWarning: constant values
+                if np.all(nparrA == nparrA[0]) or np.all(nparrB == nparrB[0]):
+                    continue
                 tsampleNum = len(nparrA)
                 if tsampleNum >= mins:
                     if args.log2 is True:
@@ -112,11 +120,18 @@ def CallCoExpNetwork(data, igene, tgeneList, mins, cols, cole, operator, operval
                 coefList.append(coefRow)
     return coefList
 
+## read input data into a matrix
 data = pd.read_csv(args.input, sep=args.sep, header=0, index_col=args.index)
 
 # transpose data matrix if needed
 if args.transpose is True:
     data = data.T
+
+## get expression data from column-cols to column-cole
+if args.cole == -1:
+    data = data.iloc[:,args.cols:]
+else:
+    data = data.iloc[:,args.cols:args.cole]
 
 # filter column if needed
 colNames = list(data.columns)
@@ -131,19 +146,22 @@ if bool(args.filter):
 
 indexList = sorted(set(data.index.values), key=lambda x:str(x))
 # run coexpression network
+operators = [args.operator1, args.operator2]
+opervals = [args.operval1, args.operval2]
+
 pool = Pool(processes=args.threads)
 resultList = []
 if args.gene == 'all':
     for i in range(len(indexList) - 1):
         igene = indexList[i]
         tgeneList = indexList[i+1:]
-        result = pool.apply_async(CallCoExpNetwork, args=(data, igene, tgeneList, args.mins, args.cols, args.cole, args.operator, args.operval, ))
+        result = pool.apply_async(CallCoExpNetwork, args=(data, igene, tgeneList, args.mins, operators, opervals, ))
         resultList.append(result)
 else:
     for igene in args.gene:
         if igene in indexList:
             tgeneList = list(filter(lambda x:x != args.gene, indexList))
-            result = pool.apply_async(CallCoExpNetwork, args=(data, igene, tgeneList, args.mins, args.cols, args.cole, args.operator, args.operval, ))
+            result = pool.apply_async(CallCoExpNetwork, args=(data, igene, tgeneList, args.mins, operators, opervals, ))
             resultList.append(result)
         else:
             sys.error.write('No such gene ({0}) found in the expression matrix!'.format(igene))
