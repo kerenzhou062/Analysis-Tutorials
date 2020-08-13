@@ -6,9 +6,7 @@ import numpy as np
 from scipy import stats
 import pandas as pd
 import argparse
-from multiprocessing import Pool, Manager
-from collections import defaultdict
-import time
+from multiprocessing import Pool
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--cole', action='store', type=int,
@@ -126,7 +124,6 @@ else:
     args.operator = []
     args.operval = []
 
-start_time = time.clock()
 # read input data into a matrix
 data = pd.read_csv(args.input, sep=args.sep, header=0, index_col=args.index)
 
@@ -176,11 +173,9 @@ pool.close()
 pool.join()
 
 with open(args.output, 'w') as out:
-    row = ['inputGene', 'testGene', 'PCC', 'pvalue', 'sampleSize']
+    row = ['inputGene', 'testGene', 'pcc', 'pvalue', 'sampleSize']
     out.write('\t'.join(row) + '\n')
     for result in resultList:
         coefList = result.get()
         for coefRow in coefList:
             out.write('\t'.join(coefRow) + '\n')
-
-print (time.clock() - start_time, "seconds")
