@@ -8,6 +8,7 @@ import pandas as pd
 import argparse
 from multiprocessing import Pool, Manager
 from collections import defaultdict
+import time
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--cole', action='store', type=int,
@@ -70,7 +71,7 @@ def FilterMatrix(df, operator, operval):
             df = df[df.columns[df.iloc[0, :] != operval]]
     return df
 
-def CallCoExpNetwork(data, igene, tgeneList, mins, operators, opervals):
+def CallCoExpNetwork(data, igene, tgeneList, minSize, operators, opervals):
     # get expression data of input gene
     igData = data.iloc[data.index == igene]
     # filter out values
@@ -82,9 +83,9 @@ def CallCoExpNetwork(data, igene, tgeneList, mins, operators, opervals):
         if tgene != igene:
             # get expression data of testing gene
             geneData = data.iloc[data.index == tgene]
-            coef = 0
+            rho = 0
             pval = 1
-            sampleNum = 0
+            sampleSize = 0
             for i in range(len(geneData)):
                 # geneData may contain multiple rows
                 tgData = geneData.iloc[[i]]
@@ -100,18 +101,18 @@ def CallCoExpNetwork(data, igene, tgeneList, mins, operators, opervals):
                 ## to avoid PearsonRConstantInputWarning: constant values
                 if np.all(nparrA == nparrA[0]) or np.all(nparrB == nparrB[0]):
                     continue
-                tsampleNum = len(nparrA)
-                if tsampleNum >= mins:
+                tsampleSize = len(nparrA)
+                if tsampleSize >= minSize:
                     if args.log2 is True:
                         nparrA = np.log2(nparrA + 0.01)
                         nparrB = np.log2(nparrB + 0.01)
-                    tcoef, tpvalue = stats.pearsonr(nparrA, nparrB)
-                    if abs(coef) < abs(tcoef):
-                        coef = tcoef
+                    trho, tpvalue = stats.pearsonr(nparrA, nparrB)
+                    if abs(rho) < abs(trho):
+                        rho = trho
                         pvalue = tpvalue
-                        sampleNum = tsampleNum
-            if coef != 0:
-                coefRow = [igene, tgene, str(coef), str(pvalue), str(sampleNum)]
+                        sampleSize = tsampleSize
+            if rho != 0:
+                coefRow = [igene, tgene, str(rho), str(pvalue), str(sampleSize)]
                 coefList.append(coefRow)
     return coefList
 
@@ -125,6 +126,7 @@ else:
     args.operator = []
     args.operval = []
 
+start_time = time.clock()
 # read input data into a matrix
 data = pd.read_csv(args.input, sep=args.sep, header=0, index_col=args.index)
 
@@ -174,9 +176,11 @@ pool.close()
 pool.join()
 
 with open(args.output, 'w') as out:
-    row = ['inputGene', 'testGene', 'PCC', 'pvalue', 'sampleNum']
+    row = ['inputGene', 'testGene', 'PCC', 'pvalue', 'sampleSize']
     out.write('\t'.join(row) + '\n')
     for result in resultList:
         coefList = result.get()
         for coefRow in coefList:
             out.write('\t'.join(coefRow) + '\n')
+
+print (time.clock() - start_time, "seconds")
