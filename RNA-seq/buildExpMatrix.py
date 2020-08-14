@@ -56,14 +56,14 @@ parser.add_argument('--time', action='store_true',
                     help='report running time')
 parser.add_argument('--transpose', action='store_true',
                     default=False,
-                    help='transpose the input matrix data before running program')
+                    help='transpose the input matrix data to fit --input data structure before running program')
 
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
     parser.print_help()
     parser.exit()
 
-def FilterMatrix(df, operator, operval, opertype):
+def FilterDataframe(df, operator, operval, opertype):
     ## filter columns by row values
     if bool(operator) and bool(operval):
         if opertype == 'single':
@@ -99,7 +99,7 @@ def CallCoExpNetwork(data, igene, tgeneList, minSize, operators, opervals, opert
     # filter out values
     if opertype == 'single':
         for i in range(len(operators)):
-            igAllData = FilterMatrix(igAllData, operators[i], opervals[i], opertype)
+            igAllData = FilterDataframe(igAllData, operators[i], opervals[i], opertype)
 
     coefList = list()
     # igAllData may contain multiple rows
@@ -118,16 +118,16 @@ def CallCoExpNetwork(data, igene, tgeneList, minSize, operators, opervals, opert
                     # filter out values
                     if opertype == 'single':
                         for k in range(len(operators)):
-                            tgData = FilterMatrix(tgData, operators[k], opervals[k], opertype)
+                            tgData = FilterDataframe(tgData, operators[k], opervals[k], opertype)
                             ## get data from common columns and flatten
                         mergeData = pd.concat([igData, tgData], axis=1)
-                        mergeData = FilterMatrix(mergeData, False, False, False)
+                        mergeData = FilterDataframe(mergeData, False, False, False)
                     else:
                         # Concatenate igData and tgData
                         mergeData = pd.concat([igData, tgData], axis=1)
                         for k in range(len(operators)):
                             # filter out values on multiple rows
-                            mergeData = FilterMatrix(mergeData, operators[k], opervals[k], opertype)
+                            mergeData = FilterDataframe(mergeData, operators[k], opervals[k], opertype)
                     ## get data from common columns and flatten 
                     nparrA = mergeData[igene].to_numpy()
                     nparrB = mergeData[tgene].to_numpy()
