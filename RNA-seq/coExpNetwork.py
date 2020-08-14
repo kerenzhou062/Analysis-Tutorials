@@ -10,37 +10,38 @@ from multiprocessing import Pool
 import time
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--cole', action='store', type=int,
+parser.add_argument('--faxis', action='store', type=int,
                     default=0,
-                    help='the end index of column of DataFrame (except for the index column, -1 indicate the end of the dataframe)')
-parser.add_argument('--cols', action='store', type=int,
-                    default=-1,
-                    help='the start index of column of DataFrame (except for the index column)')
+                    choices=[0, 1, 2],
+                    help='axis to apply the --filter (0:row, 1:column, 2:both)')
+parser.add_argument('--filter', action='store', type=str,
+                    help='keep labels from axis for which re.search(regex, label) == True')
 parser.add_argument('--gene', action='store', nargs='+', type=str, required=True,
                     help='based gene list used for testing the co-expression network (if set as "all", then run program for all genes)')
 parser.add_argument('--index', action='store', type=int, required=True,
-                    help='the index of column of input matrix used for DataFrame index (geneName, geneId, etc.)')
-parser.add_argument('--contain', action='store', type=str,
-                    help='regex for filtering the columns (included)')
-parser.add_argument('--filter', action='store', type=str,
-                    help='regex for filtering the columns (excluded)')
+                    help='used #th column (0-based) of --input for DataFrame index (geneName, geneId, etc.)')
 parser.add_argument('--input', action='store', type=str, required=True,
                     help='input gene expression matrix (column:sample, row:gene)')
 parser.add_argument('--minsize', action='store', type=int,
                     default=10,
-                    help='input gene expression matrix (column:sample, row:gene)')
+                    help='minimun sample size for calculating pearson correlation coefficient')
 parser.add_argument('--operator', action='store', nargs='*', type=str,
                     choices=['>', '>=', '<', '<=', '!='],
                     help='operators used for filtering the DataFrame')
+parser.add_argument('--operval', action='store', nargs='*', type=float,
+                    help='filtering values for operator (corresponding to --operator)')
 parser.add_argument('--opertype', action='store', type=str,
                     default='multiple',
                     choices=['single', 'multiple'],
                     help='apply operators on single row or multiple row of DataFrame')
-parser.add_argument('--operval', action='store', nargs='*', type=float,
-                    help='filtering values for operator (corresponding to --operator)')
+parser.add_argument('--output', action='store', type=str, required=True,
+                    help='output result matrix')
 parser.add_argument('--sep', action='store', type=str,
                     default='\t',
                     help='delimiter of columns to use')
+parser.add_argument('--slice', action='store', nargs=2, type=int,
+                    default=[0, -1],
+                    help='slice the 1#th from 2#th row of DataFrame (-1 indicate the end of the dataframe)')
 parser.add_argument('--threads', action='store', type=int,
                     default=1,
                     help='threads to run the program')
@@ -52,70 +53,81 @@ parser.add_argument('--time', action='store_true',
                     help='report running time')
 parser.add_argument('--transpose', action='store_true',
                     default=False,
-                    help='transpose the input matrix data before running program')
-parser.add_argument('--output', action='store', type=str, required=True,
-                    help='output result matrix')
+                    help='transpose the DataFrame to fit --input data structure before calculating pcc')
 
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
     parser.print_help()
     parser.exit()
 
-def FilterMatrix(df, operator, operval):
-    # remove columns with na
-    df = df.dropna(axis=1, how='any')
+def FiltDf(df, operator, operval, opertype):
     ## filter columns by row values
-    if bool(operator) and bool(operval) :
-        if operator == '<':
-            df = df[df.columns[(df < operval).any()]]
-        elif operator == '<=':
-            df = df[df.columns[(df <= operval).any()]]
-        elif operator == '>':
-            df = df[df.columns[(df > operval).any()]]
-        elif operator == '>=':
-            df = df[df.columns[(df >= operval).any()]]
-        elif operator == '!=':
-            df = df[df.columns[(df != operval).any()]]
+    if bool(operator) and bool(operval):
+        if opertype == 'single':
+            if operator == '<':
+                df =df[df.iloc[:,[0]] < operval]
+            elif operator == '<=':
+                df = df[df.iloc[:,[0]] <= operval]
+            elif operator == '>':
+                df =df[df.iloc[:,[0]] > operval]
+            elif operator == '>=':
+                df = df[df.iloc[:,[0]] >= operval]
+            elif operator == '!=':
+                df = df[df.iloc[:,[0]] != operval]
+        else:
+            cols = df.columns
+            if operator == '<':
+                df = df[(df[cols[0]] < operval) | (df[cols[1]] < operval)]
+            elif operator == '<=':
+                df = df[(df[cols[0]] <= operval) | (df[cols[1]] <= operval)]
+            elif operator == '>':
+                df = df[(df[cols[0]] > operval) | (df[cols[1]] > operval)]
+            elif operator == '>=':
+                df = df[(df[cols[0]] >= operval) | (df[cols[1]] >= operval)]
+            elif operator == '!=':
+                df = df[(df[cols[0]] < operval) | (df[cols[1]] < operval)]
+    # remove columns with na
+    df = df.dropna(axis=0, how='any')
     return df
 
 def CallCoExpNetwork(data, igene, tgeneList, minSize, operators, opervals, opertype):
     # get expression data of input gene
-    igAllData = data.iloc[data.index == igene]
+    igAllData = data[[igene]]
     # filter out values
     if opertype == 'single':
         for i in range(len(operators)):
-            igAllData = FilterMatrix(igAllData, operators[i], opervals[i])
+            igAllData = FiltDf(igAllData, operators[i], opervals[i], opertype)
 
     coefList = list()
     # igAllData may contain multiple rows
-    for i in range(len(igAllData)):
-        igData = igAllData.iloc[[i]]
+    for i in range(len(igAllData.columns)):
+        igData = igAllData.iloc[:, [i]]
         for tgene in tgeneList:
             if tgene != igene:
                 # get expression data of testing gene
-                tgAllData = data.iloc[data.index == tgene]
+                tgAllData = data[[tgene]]
                 rho = 0
                 pval = 1
                 sampleSize = 0
-                for j in range(len(tgAllData)):
+                for j in range(len(tgAllData.columns)):
                     # tgAllData may contain multiple rows
-                    tgData = tgAllData.iloc[[j]]
+                    tgData = tgAllData.iloc[:, [j]]
                     # filter out values
                     if opertype == 'single':
                         for k in range(len(operators)):
-                            tgData = FilterMatrix(tgData, operators[k], opervals[k])
-                            ## get data from common columns and flatten 
-                            nparrA = igData[igData.columns & tgData.columns].to_numpy()[0]
-                            nparrB = tgData[igData.columns & tgData.columns].to_numpy()[0]
+                            tgData = FiltDf(tgData, operators[k], opervals[k], opertype)
+                            ## get data from common columns and flatten
+                        mergeData = pd.concat([igData, tgData], axis=1)
+                        mergeData = FiltDf(mergeData, False, False, False)
                     else:
                         # Concatenate igData and tgData
-                        mergeData = pd.concat([igData, tgData], axis=0)
+                        mergeData = pd.concat([igData, tgData], axis=1)
                         for k in range(len(operators)):
                             # filter out values on multiple rows
-                            mergeData = FilterMatrix(mergeData, operators[k], opervals[k])
-                            ## get data from common columns and flatten 
-                            nparrA = mergeData.iloc[[0]].to_numpy()[0]
-                            nparrB = mergeData.iloc[[1]].to_numpy()[0]
+                            mergeData = FiltDf(mergeData, operators[k], opervals[k], opertype)
+                    ## get data from common columns and flatten 
+                    nparrA = mergeData[igene].to_numpy()
+                    nparrB = mergeData[tgene].to_numpy()
                     ## to avoid 0 elements
                     if len(nparrA) == 0 or len(nparrB) == 0:
                         continue
@@ -150,48 +162,48 @@ else:
     args.operval = []
 
 # read input data into a matrix
-data = pd.read_csv(args.input, sep=args.sep, header=0, index_col=args.index)
+data = pd.read_csv(args.input, sep=args.sep, header=0, index_col=args.index, engine='c', memory_map=True)
 
 # transpose data matrix if needed
 if args.transpose is True:
     data = data.T
 
-# get expression data from column-cols to column-cole
-if args.cole == -1:
-    data = data.iloc[:,args.cols:]
-else:
-    data = data.iloc[:,args.cols:args.cole]
+# get expression data from row-start to row-end
+if args.slice[0] < 0:
+    args.slice[0] = 0
 
-# filter column if needed
-colNames = list(data.columns)
+if args.slice[1] == -1 or args.slice[1] > len(data):
+    args.slice[1] = len(data) - 1
 
-if bool(args.contain):
-    colNames = list(filter(lambda x:bool(re.search(r'{0}'.format(args.contain), x)) is True, colNames ))
-    data = data.filter(items=colNames)
+data = data.iloc[args.slice[0]:args.slice[1], :]
 
+# filter column and index if needed
 if bool(args.filter):
-    colNames = list(filter(lambda x:bool(re.search(r'{0}'.format(args.filter), x)) is False, colNames ))
-    data = data.filter(items=colNames)
+    if args.faxis == 2:
+        data = data.filter(regex=args.filter, axis=0)
+        data = data.filter(regex=args.filter, axis=1)
+    else:
+        data = data.filter(regex=args.filter, axis=args.faxis)
 
-# get gene list
-indexList = sorted(set(data.index.values), key=lambda x:str(x))
+# get final gene list
+geneList = sorted(list(data.columns))
 
 # run coexpression network
 pool = Pool(processes=args.threads)
 resultList = []
 if args.gene == 'all':
-    for i in range(len(indexList) - 1):
-        igene = indexList[i]
-        tgeneList = indexList[i+1:]
+    for i in range(len(geneList) - 1):
+        igene = geneList[i]
+        tgeneList = geneList[i+1:]
         result = pool.apply_async(CallCoExpNetwork, args=(data, igene, tgeneList, args.minsize, args.operator, args.operval, args.opertype,))
         resultList.append(result)
 else:
     for igene in args.gene:
-        if igene not in indexList:
+        if igene not in geneList:
             sys.error.write('No such gene ({0}) found in the expression matrix!\n'.format(igene))
             sys.exit()
     for igene in args.gene:
-        tgeneList = list(filter(lambda x:x != args.gene, indexList))
+        tgeneList = list(filter(lambda x:x != args.gene, geneList))
         result = pool.apply_async(CallCoExpNetwork, args=(data, igene, tgeneList, args.minsize, args.operator, args.operval, args.opertype,))
         resultList.append(result)
 pool.close()
