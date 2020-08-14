@@ -63,7 +63,7 @@ if len(sys.argv[1:]) == 0:
     parser.print_help()
     parser.exit()
 
-def FilterDataframe(df, operator, operval, opertype):
+def FiltDf(df, operator, operval, opertype):
     ## filter columns by row values
     if bool(operator) and bool(operval):
         if opertype == 'single':
@@ -99,7 +99,7 @@ def CallCoExpNetwork(data, igene, tgeneList, minSize, operators, opervals, opert
     # filter out values
     if opertype == 'single':
         for i in range(len(operators)):
-            igAllData = FilterDataframe(igAllData, operators[i], opervals[i], opertype)
+            igAllData = FiltDf(igAllData, operators[i], opervals[i], opertype)
 
     coefList = list()
     # igAllData may contain multiple rows
@@ -118,16 +118,16 @@ def CallCoExpNetwork(data, igene, tgeneList, minSize, operators, opervals, opert
                     # filter out values
                     if opertype == 'single':
                         for k in range(len(operators)):
-                            tgData = FilterDataframe(tgData, operators[k], opervals[k], opertype)
+                            tgData = FiltDf(tgData, operators[k], opervals[k], opertype)
                             ## get data from common columns and flatten
                         mergeData = pd.concat([igData, tgData], axis=1)
-                        mergeData = FilterDataframe(mergeData, False, False, False)
+                        mergeData = FiltDf(mergeData, False, False, False)
                     else:
                         # Concatenate igData and tgData
                         mergeData = pd.concat([igData, tgData], axis=1)
                         for k in range(len(operators)):
                             # filter out values on multiple rows
-                            mergeData = FilterDataframe(mergeData, operators[k], opervals[k], opertype)
+                            mergeData = FiltDf(mergeData, operators[k], opervals[k], opertype)
                     ## get data from common columns and flatten 
                     nparrA = mergeData[igene].to_numpy()
                     nparrB = mergeData[tgene].to_numpy()
