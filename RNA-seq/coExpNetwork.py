@@ -41,7 +41,7 @@ parser.add_argument('--sep', action='store', type=str,
                     help='delimiter of columns to use')
 parser.add_argument('--slice', action='store', nargs=2, type=int,
                     default=[0, -1],
-                    help='slice the 1#th from 2#th row of DataFrame (-1 indicate the end of the dataframe)')
+                    help='slice the DataFrame from 1#th to 2#th row (-1 indicate the end of the dataframe)')
 parser.add_argument('--threads', action='store', type=int,
                     default=1,
                     help='threads to run the program')
