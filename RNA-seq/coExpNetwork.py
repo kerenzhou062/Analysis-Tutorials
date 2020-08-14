@@ -21,7 +21,7 @@ parser.add_argument('--gene', action='store', nargs='+', type=str, required=True
 parser.add_argument('--index', action='store', type=int, required=True,
                     help='used #th column (0-based) of --input for DataFrame index (geneName, geneId, etc.)')
 parser.add_argument('--input', action='store', type=str, required=True,
-                    help='input gene expression matrix (column:sample, row:gene)')
+                    help='input gene expression matrix (column:sample, row:gene, "na" values will be filtered before calculation)')
 parser.add_argument('--minsize', action='store', type=int,
                     default=10,
                     help='minimun sample size for calculating pearson correlation coefficient')
