@@ -56,7 +56,7 @@ parser.add_argument('--time', action='store_true',
                     help='report running time')
 parser.add_argument('--transpose', action='store_true',
                     default=False,
-                    help='transpose the input matrix data to fit --input data structure before running program')
+                    help='transpose the DataFrame to fit --input data structure before calculating pcc')
 
 args = parser.parse_args()
 if len(sys.argv[1:]) == 0:
