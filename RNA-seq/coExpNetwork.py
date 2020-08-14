@@ -191,7 +191,8 @@ geneList = sorted(list(data.columns))
 # run coexpression network
 pool = Pool(processes=args.threads)
 resultList = []
-if args.gene == 'all':
+
+if 'all' in args.gene:
     for i in range(len(geneList) - 1):
         igene = geneList[i]
         tgeneList = geneList[i+1:]
@@ -200,7 +201,7 @@ if args.gene == 'all':
 else:
     for igene in args.gene:
         if igene not in geneList:
-            sys.error.write('No such gene ({0}) found in the expression matrix!\n'.format(igene))
+            sys.stderr.write('No such gene ({0}) found in the expression matrix!\n'.format(igene))
             sys.exit()
     for igene in args.gene:
         tgeneList = list(filter(lambda x:x != args.gene, geneList))
