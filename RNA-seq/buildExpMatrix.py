@@ -13,14 +13,14 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 parser.add_argument('--end', action='store', type=int,
                     default=-1,
                     help='the end row index  of DataFrame (-1 indicate the end of the dataframe)')
-parser.add_argument('--gene', action='store', nargs='+', type=str, required=True,
-                    help='based gene list used for testing the co-expression network (if set as "all", then run program for all genes)')
 parser.add_argument('--faxis', action='store', type=int,
                     default=0,
                     choices=[0, 1, 2],
                     help='axis to apply the --filter (0:row, 1:column, 2:both)')
 parser.add_argument('--filter', action='store', type=str,
                     help='keep labels from axis for which re.search(regex, label) == True')
+parser.add_argument('--gene', action='store', nargs='+', type=str, required=True,
+                    help='based gene list used for testing the co-expression network (if set as "all", then run program for all genes)')
 parser.add_argument('--index', action='store', type=int, required=True,
                     help='the index of column of input matrix used for DataFrame index (geneName, geneId, etc.)')
 parser.add_argument('--input', action='store', type=str, required=True,
@@ -31,12 +31,12 @@ parser.add_argument('--minsize', action='store', type=int,
 parser.add_argument('--operator', action='store', nargs='*', type=str,
                     choices=['>', '>=', '<', '<=', '!='],
                     help='operators used for filtering the DataFrame')
+parser.add_argument('--operval', action='store', nargs='*', type=float,
+                    help='filtering values for operator (corresponding to --operator)')
 parser.add_argument('--opertype', action='store', type=str,
                     default='multiple',
                     choices=['single', 'multiple'],
                     help='apply operators on single row or multiple row of DataFrame')
-parser.add_argument('--operval', action='store', nargs='*', type=float,
-                    help='filtering values for operator (corresponding to --operator)')
 parser.add_argument('--output', action='store', type=str, required=True,
                     help='output result matrix')
 parser.add_argument('--sep', action='store', type=str,
