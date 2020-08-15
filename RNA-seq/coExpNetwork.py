@@ -15,7 +15,7 @@ parser.add_argument('--faxis', action='store', type=int,
                     choices=[0, 1, 2],
                     help='axis to apply the --filter (0:row, 1:column, 2:both)')
 parser.add_argument('--filter', action='store', type=str,
-                    help='keep labels from axis for which re.search(regex, label) == True')
+                    help='keep labels from axis for which re.search(regex, label) == True (After transpose if needed)')
 parser.add_argument('--gene', action='store', nargs='+', type=str, required=True,
                     help='based gene list used for testing the co-expression network (if set as "all", then run program for all genes)')
 parser.add_argument('--index', action='store', type=int, required=True,
@@ -60,7 +60,7 @@ if len(sys.argv[1:]) == 0:
     parser.print_help()
     parser.exit()
 
-def FiltDf(df, operator, operval, opertype):
+def FiltDataframe(df, operator, operval, opertype):
     ## filter columns by row values
     if bool(operator) and bool(operval):
         if opertype == 'single':
@@ -96,7 +96,7 @@ def CallCoExpNetwork(data, igene, tgeneList, minSize, operators, opervals, opert
     # filter out values
     if opertype == 'single':
         for i in range(len(operators)):
-            igAllData = FiltDf(igAllData, operators[i], opervals[i], opertype)
+            igAllData = FiltDataframe(igAllData, operators[i], opervals[i], opertype)
 
     coefList = list()
     # igAllData may contain multiple rows
@@ -115,21 +115,20 @@ def CallCoExpNetwork(data, igene, tgeneList, minSize, operators, opervals, opert
                     # filter out values
                     if opertype == 'single':
                         for k in range(len(operators)):
-                            tgData = FiltDf(tgData, operators[k], opervals[k], opertype)
+                            tgData = FiltDataframe(tgData, operators[k], opervals[k], opertype)
                             ## get data from common columns and flatten
                         mergeData = pd.concat([igData, tgData], axis=1)
-                        mergeData = FiltDf(mergeData, False, False, False)
+                        mergeData = FiltDataframe(mergeData, False, False, False)
                     else:
                         # Concatenate igData and tgData
-                        mergeData = pd.concat([igData, tgData], axis=1)
+                        mergeData = pd.concat([igData, tgData], axis=1).dropna(axis=0, how='any')
                         for k in range(len(operators)):
                             # filter out values on multiple rows
-                            mergeData = FiltDf(mergeData, operators[k], opervals[k], opertype)
-                    ## get data from common columns and flatten 
-                    nparrA = mergeData[igene].to_numpy()
-                    nparrB = mergeData[tgene].to_numpy()
+                            mergeData = FiltDataframe(mergeData, operators[k], opervals[k], opertype)
+                    nparrA = mergeData[igene].astype('float64').to_numpy()
+                    nparrB = mergeData[tgene].astype('float64').to_numpy()
                     ## to avoid 0 elements
-                    if len(nparrA) == 0 or len(nparrB) == 0:
+                    if len(nparrA) == 0:
                         continue
                     ## to avoid PearsonRConstantInputWarning: constant values
                     if np.all(nparrA == nparrA[0]) or np.all(nparrB == nparrB[0]):
@@ -162,7 +161,10 @@ else:
     args.operval = []
 
 # read input data into a matrix
-data = pd.read_csv(args.input, sep=args.sep, header=0, index_col=args.index, engine='c', memory_map=True)
+data = pd.read_csv(args.input, sep=args.sep, header=0, index_col=args.index, engine='c', memory_map=True, converters={args.index:str})
+
+# drop missing values in index
+data = data.loc[data.index.dropna()]
 
 # transpose data matrix if needed
 if args.transpose is True:
@@ -186,7 +188,7 @@ if bool(args.filter):
         data = data.filter(regex=args.filter, axis=args.faxis)
 
 # get final gene list
-geneList = sorted(map(str,list(data.columns)))
+geneList = sorted(list(data.columns))
 
 # run coexpression network
 pool = Pool(processes=args.threads)
