@@ -121,7 +121,8 @@ def CallCoExpNetwork(data, igene, tgeneList, minSize, operators, opervals, opert
                         mergeData = FiltDataframe(mergeData, False, False, False)
                     else:
                         # Concatenate igData and tgData
-                        mergeData = pd.concat([igData, tgData], axis=1).dropna(axis=0, how='any')
+                        mergeData = pd.concat([igData, tgData], axis=1)
+                        mergeData = FiltDataframe(mergeData, False, False, False)
                         for k in range(len(operators)):
                             # filter out values on multiple rows
                             mergeData = FiltDataframe(mergeData, operators[k], opervals[k], opertype)
