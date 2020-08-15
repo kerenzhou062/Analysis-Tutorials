@@ -186,7 +186,7 @@ if bool(args.filter):
         data = data.filter(regex=args.filter, axis=args.faxis)
 
 # get final gene list
-geneList = sorted(list(data.columns))
+geneList = sorted(map(str,list(data.columns)))
 
 # run coexpression network
 pool = Pool(processes=args.threads)
