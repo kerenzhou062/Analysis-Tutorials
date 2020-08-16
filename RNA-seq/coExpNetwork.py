@@ -95,15 +95,14 @@ def FiltDataframe(df, operator, operval, opertype):
 def CallCoExpNetwork(data, igene, tgeneList, minSize, operators, opervals, opertype):
     # get expression data of input gene
     igAllData = data[[igene]]
-    # filter out values
-    if opertype == 'single':
-        for i in range(len(operators)):
-            igAllData = FiltDataframe(igAllData, operators[i], opervals[i], opertype)
-
     coefList = list()
     # igAllData may contain multiple rows
     for i in range(len(igAllData.columns)):
         igData = igAllData.iloc[:, [i]]
+        # filter out values
+        if opertype == 'single':
+            for i in range(len(operators)):
+                igData = FiltDataframe(igData, operators[i], opervals[i], opertype)
         for tgene in tgeneList:
             if tgene != igene:
                 # get expression data of testing gene
@@ -176,7 +175,7 @@ if args.transpose is True:
     data = data.loc[data.index.dropna()]
 
 # fill nan value with --fillna
-if bool(args.fillna):
+if args.fillna is not None:
     data = data.fillna(args.fillna)
 
 # get expression data from row-start to row-end
