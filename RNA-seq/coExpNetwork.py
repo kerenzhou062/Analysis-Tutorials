@@ -64,7 +64,7 @@ if len(sys.argv[1:]) == 0:
 
 def FiltDataframe(df, operator, operval, opertype):
     ## filter columns by row values
-    if bool(operator) and bool(operval):
+    if (type(operator) is float) and (type(operval) is float):
         if opertype == 'single':
             if operator == '<':
                 df =df[df.iloc[:,[0]] < operval]
@@ -150,11 +150,11 @@ def CallCoExpNetwork(data, igene, tgeneList, minSize, operators, opervals, opert
                     coefList.append(coefRow)
     return coefList
 
-# record time
+# record start time
 stime = time.time()
-# check --operator and --operval
 
-if bool(args.operator) and bool(args.operval):
+# check --operator and --operval
+if args.operator is not None and args.operval is not None:
     if len(args.operator) != len(args.operval):
         sys.stderr.write('Errors in --operator and --operval!\n')
         sys.exit()
