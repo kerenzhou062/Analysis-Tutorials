@@ -14,6 +14,8 @@ parser.add_argument('--faxis', action='store', type=int,
                     default=0,
                     choices=[0, 1, 2],
                     help='axis to apply the --filter (0:row, 1:column, 2:both)')
+parser.add_argument('--fillna', action='store', type=float,
+                    help='fill the "nan" values with # in the DataFrame')
 parser.add_argument('--filter', action='store', type=str,
                     help='keep labels from axis for which re.search(regex, label) == True (After transpose if needed)')
 parser.add_argument('--gene', action='store', nargs='+', type=str, required=True,
@@ -166,6 +168,9 @@ data = pd.read_csv(args.input, sep=args.sep, header=0, index_col=args.index, eng
 
 # drop missing values in index
 data = data.loc[data.index.dropna()]
+
+if bool(args.fillna):
+    data = data.fillna(args.fillna)
 
 # transpose data matrix if needed
 if args.transpose is True:
