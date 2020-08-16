@@ -87,7 +87,7 @@ def FiltDataframe(df, operator, operval, opertype):
             elif operator == '>=':
                 df = df[(df[cols[0]] >= operval) | (df[cols[1]] >= operval)]
             elif operator == '!=':
-                df = df[(df[cols[0]] < operval) | (df[cols[1]] < operval)]
+                df = df[(df[cols[0]] != operval) | (df[cols[1]] != operval)]
     # remove columns with na
     df = df.dropna(axis=0, how='any')
     return df
