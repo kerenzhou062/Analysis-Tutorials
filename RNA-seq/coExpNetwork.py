@@ -169,12 +169,15 @@ data = pd.read_csv(args.input, sep=args.sep, header=0, index_col=args.index, eng
 # drop missing values in index
 data = data.loc[data.index.dropna()]
 
-if bool(args.fillna):
-    data = data.fillna(args.fillna)
-
 # transpose data matrix if needed
 if args.transpose is True:
     data = data.T
+    # drop missing values in index after transpose
+    data = data.loc[data.index.dropna()]
+
+# fill nan value with --fillna
+if bool(args.fillna):
+    data = data.fillna(args.fillna)
 
 # get expression data from row-start to row-end
 if args.slice[0] < 0:
