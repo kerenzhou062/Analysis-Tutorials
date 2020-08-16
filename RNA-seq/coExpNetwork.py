@@ -33,9 +33,9 @@ parser.add_argument('--operator', action='store', nargs='*', type=str,
 parser.add_argument('--operval', action='store', nargs='*', type=float,
                     help='filtering values for operator (corresponding to --operator)')
 parser.add_argument('--opertype', action='store', type=str,
-                    default='multiple',
-                    choices=['single', 'multiple'],
-                    help='apply operators on single row or multiple row of DataFrame')
+                    default='paired',
+                    choices=['single', 'paired'],
+                    help='apply operators on single row or paired row of DataFrame')
 parser.add_argument('--output', action='store', type=str, required=True,
                     help='output result matrix')
 parser.add_argument('--sep', action='store', type=str,
