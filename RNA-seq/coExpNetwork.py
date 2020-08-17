@@ -205,8 +205,8 @@ if bool(args.filter):
     else:
         data = data.filter(regex=args.filter, axis=args.faxis)
 
-# get final gene list
-geneList = sorted(list(data.columns))
+# get final gene list and remove the duplicate records
+geneList = sorted(set(data.columns))
 
 # run coexpression network
 pool = Pool(processes=args.threads)
@@ -216,7 +216,7 @@ if 'all' in args.gene:
     for i in range(len(geneList) - 1):
         qgene = geneList[i]
         tgeneList = geneList[i+1:]
-        result = pool.apply_async(CallCoExpNetwork, args=(data, qgene, tgeneList, args.minsize, args.operator, args.operval, args.opertype,))
+        result = pool.apply_async(CallCoExpNetwork, args=(data, qgene, tgeneList, args.minsize, args.operator, args.operval, args.opertype, args.method))
         resultList.append(result)
 else:
     for qgene in args.gene:
@@ -224,8 +224,8 @@ else:
             sys.stderr.write('No such gene ({0}) found in the expression matrix!\n'.format(qgene))
             sys.exit()
     for qgene in args.gene:
-        tgeneList = list(filter(lambda x:x != args.gene, geneList))
-        result = pool.apply_async(CallCoExpNetwork, args=(data, qgene, tgeneList, args.minsize, args.operator, args.operval, args.opertype,))
+        tgeneList = list(filter(lambda x:x not in args.gene, geneList))
+        result = pool.apply_async(CallCoExpNetwork, args=(data, qgene, tgeneList, args.minsize, args.operator, args.operval, args.opertype, args.method))
         resultList.append(result)
 pool.close()
 pool.join()
