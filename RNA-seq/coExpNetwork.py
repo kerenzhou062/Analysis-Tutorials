@@ -45,7 +45,7 @@ parser.add_argument('--output', action='store', type=str, required=True,
                     help='output result matrix')
 parser.add_argument('--sep', action='store', type=str,
                     default='\t',
-                    help='delimiter of columns to use')
+                    help='delimiter of columns to use ($\'\\t\' for tab)')
 parser.add_argument('--slice', action='store', nargs=2, type=int,
                     default=[0, -1],
                     help='slice the DataFrame from 1#th to 2#th row (-1 indicate the end of the dataframe)')
@@ -173,7 +173,7 @@ else:
     args.operval = []
 
 # read input data into a matrix
-data = pd.read_csv(args.input, sep=args.sep, header=0, index_col=args.index, engine='python', memory_map=True, converters={args.index:str})
+data = pd.read_csv(args.input, sep=args.sep, header=0, index_col=args.index, engine='c', memory_map=True, converters={args.index:str})
 
 # drop missing values in index
 data = data.loc[data.index.dropna()]
@@ -207,7 +207,7 @@ if bool(args.filter):
 
 # get final gene list and remove the duplicate records
 geneList = sorted(set(data.columns))
-print(geneList)
+
 # run coexpression network
 pool = Pool(processes=args.threads)
 resultList = []
