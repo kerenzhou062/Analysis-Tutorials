@@ -189,13 +189,14 @@ if args.fillna is not None:
     data = data.fillna(args.fillna)
 
 # get expression data from row-start to row-end
-if args.slice[0] < 0:
-    args.slice[0] = 0
 
-if args.slice[1] == -1 or args.slice[1] > len(data):
-    args.slice[1] = len(data) - 1
-
-data = data.iloc[args.slice[0]:args.slice[1], :]
+if args.slice is not None:
+    if args.slice[0] != 0 or args.slice[1] != -1:
+        if args.slice[0] < 0:
+            args.slice[0] = 0
+        if args.slice[1] == -1 or args.slice[1] > len(data):
+            args.slice[1] = len(data) - 1
+        data = data.iloc[args.slice[0]:args.slice[1], :]
 
 # filter column and index if needed
 if bool(args.filter):
