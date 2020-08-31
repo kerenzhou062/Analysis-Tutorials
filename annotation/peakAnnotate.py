@@ -44,7 +44,7 @@ parser.add_argument('-kbTSS', action='store', type=str,
                     help='<int,int,...:int,int,...> record (up:down) distance to TSS in kb')
 parser.add_argument('-kbTTS', action='store', type=str,
                     default='1:1,2',
-                    help='<int,int,...:int,int,...> record (up:down) distance to TSS in kb')
+                    help='<int,int,...:int,int,...> record (up:down) distance to TTS in kb')
 parser.add_argument('--keepName', action='store_true',
                     default=False,
                     help='keep original 4th column in output')
