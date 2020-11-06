@@ -411,11 +411,9 @@ with open(runSbatchScript, 'w') as sbatch:
                 else:
                     fastq2 = ','.join(map(lambda x: os.path.join("$FASTQ_DIR/", x) , repDict[2]))
                     runAlignCommandList.append(runAlignPairedTemplate.format(**vars()))
-            ## check if has replicates
             ## runChipPoolReplicates command
-            if repNum > 1:
-                chipPoolRepLog = os.path.join(algnRoot, ipPrefix + '.ChipPoolReplicates.log' )
-                runAlignCommandList.append(runChipPoolReplicatesTemplate.format(**vars()))
+            chipPoolRepLog = os.path.join(algnRoot, ipPrefix + '.ChipPoolReplicates.log' )
+            runAlignCommandList.append(runChipPoolReplicatesTemplate.format(**vars()))
         ## ## runChipPoolReplicates command
         expDir = os.path.join(mainAlignDir, exp)
         chipPlotJdLog = os.path.join(expDir, exp + '.ChipPlotJd.log' )
