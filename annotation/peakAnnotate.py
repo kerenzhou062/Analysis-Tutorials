@@ -65,6 +65,9 @@ parser.add_argument('-name', action='store', type=str,
 parser.add_argument('--overwitePri', action='store_true',
                     default=False,
                     help='Overwrite priority Feature and GeneClass (-priF & -priG)')
+parser.add_argument('-peakType', action='store', type=str, choices=['narrowPeak', 'broadPeak', 'other'],
+                    default='other',
+                    help='The type of input bed')
 parser.add_argument('-priF', action='store', type=str,
                     help="',' seperated pre-defined priority of features (eg., \"CDS,5' UTR\")")
 parser.add_argument('-priG', action='store', type=str,
@@ -752,8 +755,17 @@ if bool(args.extraAnno):
 ## construct header
 headerRow = list()
 if len(peakHeaderRow) != peakColNum:
-    peakHeaderRow = ['peakCol'+str(i+1) for i in range(peakColNum)]
+    if args.peakType == 'narrowPeak':
+        peakHeaderRow = ['chrom', 'chromStart', 'chromEnd', 'name', 'score']
+        peakHeaderRow += ['strand', 'signalValue', 'pValue(-log10)', 'qValue(-log10)', 'peak']
+    elif args.peakType == 'broadPeak':
+        peakHeaderRow = ['chrom', 'chromStart', 'chromEnd', 'name', 'score']
+        peakHeaderRow += ['strand', 'signalValue', 'pValue(-log10)', 'qValue(-log10)']
+    else:
+        peakHeaderRow = ['peakCol'+str(i+1) for i in range(peakColNum)]
+
 peakHeaderRow.append('PeakLength')
+
 headerRow.extend(peakHeaderRow)
 mainHeaderRow = ["GeneId", "GeneName",  "Synonyms", "Description", "GeneType", \
     "GeneClass", "TxId", "TxName", "TxType", "Feature"]
