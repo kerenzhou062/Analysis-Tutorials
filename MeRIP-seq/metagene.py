@@ -271,7 +271,7 @@ def AnnoBed12ToBed6(bed12File, geneType, feature, binType, binsize):
             bed12Dict[bedinfo.name]['exon'] = bed12.exon
             bed12Dict[bedinfo.name]['intron'] = bed12.intron
             ## length and size
-            bed12Dict[bedinfo.name]['full_length'] = bed12.end - bed12.start
+            bed12Dict[bedinfo.name]['full_size'] = bed12.end - bed12.start
             bed12Dict[bedinfo.name]['intron_size'] = ExonLenSum(bed12.intron)
             bed12Dict[bedinfo.name]['exon_size'] = ExonLenSum(bed12.exon)
 
