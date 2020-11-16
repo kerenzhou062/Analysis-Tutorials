@@ -28,7 +28,7 @@ parser.add_argument('-c', '--cpu', action='store', type=int,
 parser.add_argument('-e', '--extend', action='store', type=int,
                     default=0,
                     help='Extend --extend bp around peak center')
-parser.add_argument('-f', '--feature', nargs='+', type=str,
+parser.add_argument('-f', '--feature', action='store', type=str,
                     choices=["coding", "utr5", "cds", "utr3", "exon", "intron", "full"],
                     default='coding',
                     help='The bin features [coding:utr5,cds,utr3]')
