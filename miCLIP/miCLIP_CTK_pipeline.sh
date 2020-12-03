@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=CTK_miCLIP_pipeline    # Job name
+#SBATCH --job-name=miCLIP_CTK_pipeline    # Job name
 #SBATCH --mail-type=END,FAIL          # Mail events (NONE, BEGIN, END, FAIL, ALL)
 #SBATCH --mail-user=kzhou@coh.org     # Where to send mail  
 #SBATCH -n 10                          # Number of cores
@@ -7,21 +7,21 @@
 #SBATCH -p all                        # default queue is all if you don't specify
 #SBATCH --mem=100G                      # Amount of memory in GB
 #SBATCH --time=120:10:00               # Time limit hrs:min:sec
-#SBATCH --output=CTK_miCLIP_pipeline.log   # Standard output and error log
+#SBATCH --output=miCLIP_CTK_pipeline.log   # Standard output and error log
 
 # NOTE: This requires GNU getopt.  On Mac OS X and FreeBSD, you have to install this
 # separately; see below.
 
 function showHelp {
-  echo -ne "usage: sbatch CTK_miCLIP_pipeline.sh -n <thread_num> -o <log> --mem <200G> "
-  echo -ne "CTK_miCLIP_pipeline.sh <options>\n"
+  echo -ne "usage: sbatch miCLIP_CTK_pipeline.sh -n <thread_num> -o <log> --mem <200G> "
+  echo -ne "miCLIP_CTK_pipeline.sh <options>\n"
   echo -e "options:
     -h | --help: show help information <bool>
     -b | --barcode-length: barcode length <int>
     -e | --exp-prefix: experiment prefix string <str>
     -f | --fasta: genome fasta file <str>
     -g | --gsize: genome size file <str>
-    -i | --input: input fastq directory (cutadapt) <str>
+    -i | --input: input fastq directory (exp_prefix*.trim.fastq) <str>
     -m | --min-length: minimun length of mapped reads to parse (parseAlignment) <str>
     -o | --output: output result directory <str>
     -p | --pool-prefix: pooled experiment prefix <str>
@@ -34,8 +34,7 @@ function showHelp {
     --full-bed: all transcripts annotation in bed12 <str>
     --index: genome index <str>
     --joinWrapper-loc: # location of joinWrapper.py <str>
-    --longest-bed: mRNA longest annotation in bed12 <str>
-    --motif: MOTIF sequence used to search (RRACH) <str>
+    --motif: MOTIF sequence used to search (DRACH) <str>
     --mtag: -tag parameter in scanMotif.py <str>
     --repeat-bed: repeat bed used for filtering (eg.t/rRNA) <str>
     --keep-tmp-fastq: keep temporary fastqs <bool>
@@ -56,7 +55,7 @@ fi
 TEMP=`getopt -o hb:e:g:i:m:o:p:q:t:, --long help,skip-mapping,skip-pooling,skip-calling, \
   --long keep-tmp-fastq,skip-PCR-am, \
   --long input:,thread:,output:,exp-prefix:,pool-prefix:,index:,min-length:,dbkey:,joinWrapper-loc:, \
-  --long longest-bed:,full-bed:,repeat-bed:,barcode-length:,fasta:,quality:,mkr:,motif:,mtag:, \
+  --long full-bed:,repeat-bed:,barcode-length:,fasta:,quality:,mkr:,motif:,mtag:, \
   -- "$@"`
 
 
@@ -79,7 +78,6 @@ CUSTOM_GENE=
 QUALITY=20
 FASTA=
 GENOME_SIZE=
-LONGEST_BED=
 JOIN_WRAPPER_LOC=
 FULL_BED=
 REPEAT_BED=
@@ -112,7 +110,6 @@ while true; do
     --full-bed ) FULL_BED="$2"; shift 2 ;;
     --index ) BWA_INDEX="$2"; shift 2 ;;
     --joinWrapper-loc ) JOIN_WRAPPER_LOC="$2"; shift 2 ;;
-    --longest-bed ) LONGEST_BED="$2"; shift 2 ;;
     --motif ) MOTIF="$2"; shift 2 ;;
     --mtag ) MOTIF_TAG="$2"; shift 2 ;;
     --repeat-bed ) REPEAT_BED="$2"; shift 2 ;;
@@ -171,7 +168,6 @@ echo "CUSTOM_GENE=$CUSTOM_GENE"
 echo "QUALITY=$QUALITY"
 echo "FASTA=$FASTA"
 echo "GENOME_SIZE=$GENOME_SIZE"
-echo "LONGEST_BED=$LONGEST_BED"
 echo "JOIN_WRAPPER_LOC=$JOIN_WRAPPER_LOC"
 echo "FULL_BED=$FULL_BED"
 echo "REPEAT_BED=$REPEAT_BED"
@@ -377,7 +373,8 @@ else
     cat ${EXP_PREFIX}*.tag.uniq.rgb.bed > ${POOL_PREFIX}.pool.tag.uniq.rgb.bed
     cat ${EXP_PREFIX}*.tag.uniq.mutation.txt > ${POOL_PREFIX}.pool.tag.uniq.mutation.txt
   else
-    cp ${EXP_PREFIX}.tag.uniq.rgb.bed ${POOL_PREFIX}.pool.tag.uniq.rgb.bed
+    mv ${EXP_PREFIX}.tag.uniq.rgb.bed ${POOL_PREFIX}.pool.tag.uniq.rgb.bed
+    mv ${EXP_PREFIX}.tag.uniq.mutation.txt ${POOL_PREFIX}.pool.tag.uniq.mutation.txt
   fi
   
   ## Annotating and visualizing CLIP tags
@@ -478,32 +475,34 @@ else
     > ${POOL_PREFIX}.c2t.CIMS.log 2>&1
 fi
 
-## calculating m/k ratio: mutationFreq(m)/tagNumber(k)
+## calculating m/k ratio: mutationFreq(m)/tagNumber(k),
 awk 'BEGIN{FS="\t";OFS="\t";}{if(FNR==1){$5=$5"(m/k)"; print $0}else{$5=$8/$7;print $0}}' \
   ${POOL_PREFIX}.c2t.CIMS.txt > ${POOL_PREFIX}.c2t.CIMS.mk.txt
 
+## get A site by slop bed by 1nt
 awk 'BEGIN{FS="\t";OFS="\t";}{if(FNR>1){print $1,$2,$3,$4,$5,$6,$7,$8,$9}}' \
-  ${POOL_PREFIX}.c2t.CIMS.mk.txt | sort -k 5,5nr -k 8,8nr -k 7,7n \
-  > ${POOL_PREFIX}.c2t.CIMS.bed
+  ${POOL_PREFIX}.c2t.CIMS.mk.txt | sort -k 5,5nr -k 8,8nr -k 7,7n | \
+  bedtools shift -i stdin -g ${GENOME_SIZE} -p -1 -m 1 > ${POOL_PREFIX}.c2t.CIMS.bed
 
-##enriched: get CIMS, m/k>=0.5
+##enriched: get CIMS, m/k>=0.5, and get A site by slop bed by 1nt
 awk -v mkr="${MKR_RATIO}" -v mfreq=${MUTATE_FREQ} \
   'BEGIN{FS="\t";OFS="\t";}{if($5>=mkr && $8>=mfreq) {print $0}}' \
-  ${POOL_PREFIX}.c2t.CIMS.mk.txt > ${POOL_PREFIX}.c2t.CIMS.enrich.bed
+  ${POOL_PREFIX}.c2t.CIMS.mk.txt | \
+  bedtools shift -i stdin -g ${GENOME_SIZE} -p -1 -m 1 > ${POOL_PREFIX}.c2t.CIMS.enrich.bed
 
-##significant: get CIMS
+##significant: get CIMS and get A site by slop bed by 1nt
 awk 'BEGIN{FS="\t";OFS="\t";}{if(FNR==1){print $0}else{if($9<=0.05) {print $0}}}' \
   ${POOL_PREFIX}.c2t.CIMS.mk.txt > ${POOL_PREFIX}.c2t.CIMS.sig.txt
 
 awk 'BEGIN{FS="\t";OFS="\t";}{if(FNR>1){print $1,$2,$3,$4,$5,$6,$7,$8,$9}}' \
-  ${POOL_PREFIX}.c2t.CIMS.sig.txt | sort -k 5,5nr -k 8,8nr -k 7,7n \
-  > ${POOL_PREFIX}.c2t.CIMS.sig.bed
+  ${POOL_PREFIX}.c2t.CIMS.sig.txt | sort -k 5,5nr -k 8,8nr -k 7,7n | \
+  bedtools shift -i stdin -g ${GENOME_SIZE} -p -1 -m 1 > ${POOL_PREFIX}.c2t.CIMS.sig.bed
 
 ##get m6A sites with ${MOTIF} motif
 for i in `find ./ -type f -name "${POOL_PREFIX}*.bed" | grep "CIMS" | grep -v "${MOTIF}"`;
 do
   prefix=${i%%.bed}
-  sort -t $'\t' -k1,1n -k2,2n ${i} | bedtools shift -i stdin -g ${GENOME_SIZE} -p -1 -m 1 | \
+  sort -t $'\t' -k1,1n -k2,2n ${i} | \
     bedtools slop -i stdin -b $SLOP_B -s -g ${GENOME_SIZE} > ${POOL_PREFIX}.temp.bed
   scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
     -fasta ${FASTA} -motif ${MOTIF} -tag ${MOTIF_TAG} \
@@ -529,21 +528,29 @@ else
   CITS.pl -big -p 0.999 --gap 25 -v \
     ${POOL_PREFIX}.pool.tag.uniq.rgb.bed \
     ${POOL_PREFIX}.del.bed \
-    ${POOL_PREFIX}.CITS.bed \
+    ${POOL_PREFIX}.CITS.tmp.bed \
     > ${POOL_PREFIX}.CITS.log 2>&1
+  ## get A site by slop bed by 1nt
+  cat ${POOL_PREFIX}.CITS.tmp.bed | \
+    bedtools shift -i stdin -g ${GENOME_SIZE} -p -1 -m 1 > ${POOL_PREFIX}.CITS.bed
+  rm -f ${POOL_PREFIX}.CITS.tmp.bed
   ## significant CITS
   CITS.pl -big -p 0.05 --gap 25 -v \
     ${POOL_PREFIX}.pool.tag.uniq.rgb.bed \
     ${POOL_PREFIX}.del.bed \
-    ${POOL_PREFIX}.CITS.sig.bed \
+    ${POOL_PREFIX}.CITS.tmp.bed \
     > ${POOL_PREFIX}.CITS.sig.log 2>&1
+  ## get A site by slop bed by 1nt
+  cat ${POOL_PREFIX}.CITS.tmp.bed | \
+    bedtools shift -i stdin -g ${GENOME_SIZE} -p -1 -m 1 > ${POOL_PREFIX}.CITS.sig.bed
+  rm -f ${POOL_PREFIX}.CITS.tmp.bed
 fi
 
 ##get m6A sites with ${MOTIF} motif
 for i in `find ./ -type f -name "${POOL_PREFIX}*.bed" | grep "CITS" | grep -v "${MOTIF}"`;
 do
   prefix=${i%%.bed}
-  sort -t $'\t' -k1,1n -k2,2n ${i} | bedtools shift -i stdin -g ${GENOME_SIZE} -p -1 -m 1 | \
+  sort -t $'\t' -k1,1n -k2,2n ${i} | \
     bedtools slop -i stdin -b $SLOP_B -s -g ${GENOME_SIZE} > ${POOL_PREFIX}.temp.bed
   scanMotif.py -input ${POOL_PREFIX}.temp.bed -format bed6 \
     -fasta ${FASTA} -motif ${MOTIF} -tag ${MOTIF_TAG} \
@@ -556,13 +563,17 @@ rm ${POOL_PREFIX}.temp.bed
 if [[ ! -d $FINAL_DIR  ]]; then
   mkdir $FINAL_DIR
 fi
+
 cd $FINAL_DIR
 
-cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.${MOTIF}.bed ./
-cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.enrich.${MOTIF}.bed ./
-cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.sig.${MOTIF}.bed ./
-cp $CITS_DIR/${POOL_PREFIX}.CITS.${MOTIF}.bed ./
-cp $CITS_DIR/${POOL_PREFIX}.CITS.sig.${MOTIF}.bed ./
+find $CIMS_DIR -type f -name "${POOL_PREFIX}*.bed" | grep -P "\.CIMS\." | xargs -I {} cp {} ./
+find $CITS_DIR -type f -name "${POOL_PREFIX}*.bed" | grep -P "\.CITS\." | xargs -I {} cp {} ./
+
+#cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.${MOTIF}.bed ./
+#cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.enrich.${MOTIF}.bed ./
+#cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.sig.${MOTIF}.bed ./
+#cp $CITS_DIR/${POOL_PREFIX}.CITS.${MOTIF}.bed ./
+#cp $CITS_DIR/${POOL_PREFIX}.CITS.sig.${MOTIF}.bed ./
 
 ## cat CIMS and CITS and uniq
 function combine {
@@ -596,6 +607,15 @@ function combine {
     }' | sort -k1,1 -k2,2n > $output
 }
 
+## merge bed
+combine ${POOL_PREFIX}.c2t.CIMS.bed \
+  ${POOL_PREFIX}.CITS.bed \
+  ${POOL_PREFIX}.combine.bed
+combine ${POOL_PREFIX}.c2t.CIMS.sig.bed \
+  ${POOL_PREFIX}.CITS.sig.bed \
+  ${POOL_PREFIX}.combine.sig.bed
+
+## merge motif bed
 combine ${POOL_PREFIX}.c2t.CIMS.${MOTIF}.bed \
   ${POOL_PREFIX}.CITS.${MOTIF}.bed \
   ${POOL_PREFIX}.combine.${MOTIF}.bed
@@ -606,22 +626,16 @@ combine ${POOL_PREFIX}.c2t.CIMS.sig.${MOTIF}.bed \
 echo "Pooling CT and Truncation m6A sites done."
 
 ## annotate beds
+## draw metagene plot
 echo "Annotating beds..."
-if [ ! -z $LONGEST_BED ]; then
-  for i in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
-  do
-    temp="${POOL_PREFIX}.tmp"
-    cut -f 1-6 $i > $temp
-    PREFIX=${i%%.bed}
-    bedBinDistribution.pl -input $temp -bed12 $LONGEST_BED \
-      --type count -o ${PREFIX}.count.bin
-    bedBinDistribution.pl -input $temp -bed12 $LONGEST_BED \
-      -o ${PREFIX}.percentage.bin
-    paste ${PREFIX}.count.bin ${PREFIX}.percentage.bin | cut -f 1,2,3,6 > ${PREFIX}.bin
-    sed -i '1i region\tbin\tCount\tPercentage' ${PREFIX}.bin
-    rm -f ${PREFIX}.count.bin ${PREFIX}.percentage.bin
-  done
-fi
+BED_FILES=""
+for bed in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
+do
+  BED_FILES="$BED_FILES $bed"
+done
+
+metagene.py --anno $FULL_BED -i $BED_FILES \
+  --method center -b constant --smooth move --output ${POOL_PREFIX}.metagene.txt
 
 #if [ ! -z $FULL_BED ]; then
 #  ## get mRNA annotation bed12

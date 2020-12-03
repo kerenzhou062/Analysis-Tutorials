@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=rbsSeeker_pipeline    # Job name
+#SBATCH --job-name=miCLIP_rbsSeeker_pipeline    # Job name
 #SBATCH --mail-type=END,FAIL          # Mail events (NONE, BEGIN, END, FAIL, ALL)
 #SBATCH --mail-user=kzhou@coh.org     # Where to send mail 
 #SBATCH -n 10                          # Number of cores
@@ -7,27 +7,26 @@
 #SBATCH -p all                        # default queue is all if you don't specify
 #SBATCH --mem=100G                      # Amount of memory in GB
 #SBATCH --time=120:10:00               # Time limit hrs:min:sec
-#SBATCH --output=rbsSeeker_pipeline.log               # Time limit hrs:min:sec
+#SBATCH --output=miCLIP_rbsSeeker_pipeline.log               # Time limit hrs:min:sec
 
 # NOTE: This requires GNU getopt.  On Mac OS X and FreeBSD, you have to install this
 # separately; see below.
 
 function showHelp {
-  echo -ne "usage: sbatch rbsSeeker_miCLIP_pipeline.sh -n <thread_num> -o <log> --mem <200G> "
-  echo -ne "rbsSeeker_miCLIP_pipeline.sh <options>\n"
+  echo -ne "usage: sbatch miCLIP_rbsSeeker_pipeline.sh -n <thread_num> -o <log> --mem <200G> "
+  echo -ne "miCLIP_rbsSeeker_pipeline.sh <options>\n"
   echo -e "options:
     -h | --help: show help information <bool>
     -b | --barcode-length: barcode length <int>
     -e | --exp-prefix: experiment prefix string <str>
     -f | --fasta: genome fasta file <str>
     -g | --gsize: genome size file <str>
-    -i | --input: input fastq directory (cutadapt) <str>
+    -i | --input: input fastq directory (exp_prefix*.trim.fastq) <str>
     -o | --output: output result directory <str>
     -p | --pool-prefix: pooled experiment prefix <str>
     -t | --thread: # of cpus <int>
     --gtf: genome annotation gtf <str>
     --full-bed: all transcripts annotation in bed12 <str>
-    --longest-bed: mRNA longest annotation in bed12 <str>
     --max-mismatch: --outFilterMismatchNoverLmax in STAR <float>
     --repeat-bed: repeat bed used for filtering (eg.t/rRNA) <str>
     --skip-mapping: skip reads mapping step <bool>
@@ -49,7 +48,7 @@ fi
 TEMP=`getopt -o hb:e:g:i:o:p:t:, --long help,skip-mapping,skip-calling, \
   --long bowtie,STAR,PCR,keep-tmp-fastq, \
   --long input:,thread:,output:,exp-prefix:,pool-prefix:,index:, \
-  --long longest-bed:,full-bed:,gtf:,repeat-bed:,barcode-length:,fasta:, \
+  --long full-bed:,gtf:,repeat-bed:,barcode-length:,fasta:, \
   -- "$@"`
 
 if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
@@ -68,7 +67,6 @@ GENOME_INDEX=
 FASTA=
 GTF=
 GENOME_SIZE=
-LONGEST_BED=
 FULL_BED=
 REPEAT_BED=
 MAX_MISMATCH=0.1
@@ -92,7 +90,6 @@ while true; do
     --gtf ) GTF="$2"; shift 2 ;;
     --full-bed ) FULL_BED="$2"; shift 2 ;;
     --index ) GENOME_INDEX="$2"; shift 2 ;;
-    --longest-bed ) LONGEST_BED="$2"; shift 2 ;;
     --max-mismatch ) MAX_MISMATCH="$2"; shift 2 ;;
     --repeat-bed ) REPEAT_BED="$2"; shift 2 ;;
     --keep-tmp-fastq ) KEEP_TMP_FASTQ=true; shift ;;
@@ -151,7 +148,6 @@ echo "GENOME_INDEX=$GENOME_INDEX"
 echo "FASTA=$FASTA"
 echo "GTF=$GTF"
 echo "GENOME_SIZE=$GENOME_SIZE"
-echo "LONGEST_BED=$LONGEST_BED"
 echo "FULL_BED=$FULL_BED"
 echo "REPEAT_BED=$REPEAT_BED"
 echo "MAX_MISMATCH=$MAX_MISMATCH"
@@ -390,6 +386,7 @@ fi
 if [[ ! -d $FINAL_DIR  ]]; then
   mkdir -p $FINAL_DIR
 fi
+
 cd $FINAL_DIR
 ### link CT and Truncation beds
 ln -sf ${RESULT_DIR}/${POOL_PREFIX}_rbsSeeker_CT.bed ./
@@ -442,21 +439,14 @@ echo "Pooling CT and Truncation m6A sites done."
 
 ## annotate beds
 echo "Annotating beds..."
-if [ ! -z $LONGEST_BED ]; then
-  for i in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
-  do
-    temp="${POOL_PREFIX}.tmp"
-    cut -f 1-6 $i > $temp
-    PREFIX=${i%%.bed}
-    bedBinDistribution.pl -input $temp -bed12 $LONGEST_BED \
-      --type count -o ${PREFIX}.count.bin
-    bedBinDistribution.pl -input $temp -bed12 $LONGEST_BED \
-      -o ${PREFIX}.percentage.bin
-    paste ${PREFIX}.count.bin ${PREFIX}.percentage.bin | cut -f 1,2,3,6 > ${PREFIX}.bin
-    sed -i '1i region\tbin\tCount\tPercentage' ${PREFIX}.bin
-    rm -f ${PREFIX}.count.bin ${PREFIX}.percentage.bin
-  done
-fi
+BED_FILES=""
+for bed in `find ./ -type f -name "${POOL_PREFIX}*.bed"`;
+do
+  BED_FILES="$BED_FILES $bed"
+done
+
+metagene.py --anno $FULL_BED -i $BED_FILES \
+  --method center -b constant --smooth move --output ${POOL_PREFIX}.metagene.txt
 
 #if [ ! -z $FULL_BED ]; then
 #  ## get mRNA annotation bed12
