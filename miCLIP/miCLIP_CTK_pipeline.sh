@@ -566,14 +566,20 @@ fi
 
 cd $FINAL_DIR
 
-find $CIMS_DIR -type f -name "${POOL_PREFIX}*.bed" | grep -P "\.CIMS\." | xargs -I {} cp {} ./
-find $CITS_DIR -type f -name "${POOL_PREFIX}*.bed" | grep -P "\.CITS\." | xargs -I {} cp {} ./
+## filter *.bed file and get coordinates corresponding to "A"
+##CIMS
+for i in `find $CIMS_DIR -type f -name "${POOL_PREFIX}*.bed" | grep -P "\.CIMS\."`;
+do
+  bedName=$(basename $i)
+  getBedBySeq.py -fasta $FASTA -bed $i -seq "A" -output $bedName
+done
 
-#cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.${MOTIF}.bed ./
-#cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.enrich.${MOTIF}.bed ./
-#cp $CIMS_DIR/${POOL_PREFIX}.c2t.CIMS.sig.${MOTIF}.bed ./
-#cp $CITS_DIR/${POOL_PREFIX}.CITS.${MOTIF}.bed ./
-#cp $CITS_DIR/${POOL_PREFIX}.CITS.sig.${MOTIF}.bed ./
+##CITS
+for i in `find $CITS_DIR -type f -name "${POOL_PREFIX}*.bed" | grep -P "\.CITS\."`;
+do
+  bedName=$(basename $i)
+  getBedBySeq.py -fasta $FASTA -bed $i -seq "A" -output $bedName
+done
 
 ## cat CIMS and CITS and uniq
 function combine {

@@ -104,6 +104,8 @@ for key in keyList:
                 else:
                     readCount = int(row[4])
                 seq = idCol.split('=')[0]
+                if len(seq) != 5:
+                    seq = 'none'
                 if site in siteDict:
                     if siteDict[site]['read'] < readCount:
                         siteDict[site]['read'] = readCount
@@ -123,6 +125,14 @@ for key in keyList:
 
 siteFile = os.path.join(args.output, args.prefix + '.integrate.bed')
 idStoreFile = os.path.join(args.output, args.prefix + '.idStore.txt')
+loadFile = os.path.join(args.output, args.prefix + '.loadFile.txt')
+
+with open(loadFile, 'w') as out:
+    for key in keyList:
+        for file in sorted(inputDict[key]):
+            fileName = os.path.basename(file)
+            row = [key, fileName]
+            out.write('\t'.join(row) + '\n')
 
 siteList = sorted(siteDict.keys())
 with open(siteFile, 'w') as sf, open(idStoreFile, 'w') as df:
@@ -139,7 +149,7 @@ with open(siteFile, 'w') as sf, open(idStoreFile, 'w') as df:
             siteType = 'CIMS|CITS'
         else:
             siteType = siteTypeList[0]
-        siteId = '{0}={1}_{2}'.format(siteSeq,siteType.replace('|', '_'), i+1)
+        siteId = '{0}_{1}_{2}'.format(siteSeq,siteType.replace('|', '_'), i+1)
         siteRep = ','.join(siteRepList)
         keyList = sorted(list(set(siteDict[site]['key'])))
         key = ','.join(keyList)

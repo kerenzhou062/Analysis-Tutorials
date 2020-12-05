@@ -388,15 +388,16 @@ if [[ ! -d $FINAL_DIR  ]]; then
 fi
 
 cd $FINAL_DIR
+
 ### link CT and Truncation beds
-ln -sf ${RESULT_DIR}/${POOL_PREFIX}_rbsSeeker_CT.bed ./
-ln -sf ${RESULT_DIR}/${POOL_PREFIX}_rbsSeeker_Truncation.bed ./
+ln -sf ${RESULT_DIR}/${POOL_PREFIX}_rbsSeeker_CT.bed ./${POOL_PREFIX}_rbsSeeker_CIMS.bed
+ln -sf ${RESULT_DIR}/${POOL_PREFIX}_rbsSeeker_Truncation.bed ./${POOL_PREFIX}_rbsSeeker_CITS.bed
 
 echo "Pooling CT and Truncation m6A sites..."
 
-for i in `find ./ -type l -name "${POOL_PREFIX}*.bed" | grep -E "rbsSeeker_(CT|Truncation)"`;
+for i in `find ./ -type l -name "${POOL_PREFIX}*.bed" | grep -E "rbsSeeker_(CIMS|CITS)"`;
 do
-  outputName="${i//_rbsSeeker_/.m6ASite.}"
+  outputName="${i//_rbsSeeker_/.rbsSeeker.}"
   awk 'BEGIN{OFS="\t";FS="\t";}
   {
     if(FNR>1){
@@ -406,13 +407,17 @@ do
       }
     }
   }' $i | sort -k1,1 -k2,2n | \
-  bedtools shift -i stdin -g ${GENOME_SIZE} -m 1 -p -1 > $outputName
+  bedtools shift -i stdin -g ${GENOME_SIZE} -m 1 -p -1 > ${POOL_PREFIX}.tmp.bed
+  ## filter *.bed file and get coordinates corresponding to "A"
+  getBedBySeq.py -fasta $FASTA -bed ${POOL_PREFIX}.tmp.bed -seq "A" -output $outputName
+  unlink $i
+  rm -f ${POOL_PREFIX}.tmp.bed
 done
 
 prefixArr=( "${POOL_PREFIX}" )
 for i in "${prefixArr[@]}"
 do
-  cat ${i}.m6ASite.Truncation.bed ${i}.m6ASite.CT.bed | \
+  cat ${i}.rbsSeeker.CITS.bed ${i}.rbsSeeker.CIMS.bed | \
     awk 'BEGIN{OFS="\t";FS="\t";}
     {
       key = $1"\t"$2"\t"$3":"$6;
@@ -432,7 +437,7 @@ do
         strand = splitArr[2];
         print pos, arrayC[key]"="arrayA[key], arrayB[key], strand;
       }
-    }' | sort -k1,1 -k2,2n > ${i}.m6ASite.combine.bed
+    }' | sort -k1,1 -k2,2n > ${i}.rbsSeeker.combine.bed
 done
 
 echo "Pooling CT and Truncation m6A sites done."
