@@ -8,18 +8,19 @@ command =  matrix(c(
     "adjp",         "q",   2,  "numeric",     "adjp cutoff (0.1)",
     "batchMethod",  "b",   1,  "character",   "Remove hidden batch effect (none|RUVg|spikeins)",
     "control",      "c",   1,  "character",   "Name for control design in colData",
-    "counts",       "g",   1,  "character",   "Gene counts matrix",
+    "counts",       "g",   1,  "character",   "Gene counts matrix (gene_id|tx_id in 1st column)",
     "design",       "d",   1,  "character",   "Design for construction of DESeqDataSet (colname in colData)",
+    "formula",      "k",   1,  "character",   "design formula in DESeqDataSetFromMatrix() function (eg. genotype + treatment + genotype:treatment), will overwrite --control, --treat, --design",
     "filter",       "f",   2,  "integer",     "Filter out genes less than # counts across all samples",
     "keepSpike",    "S",   0,  "logical",     "Keep spikeins reads when passing to DESeq()",
+    "name",         "n",   1,  "character",   "name for extract the results formula in results() (eg. genotypewt.treatmentheat for wt (heat vs normal) vs ko (heat vs normal) )",
     "output" ,      "o",   1,  "character",   "Output directory",
     "prefix",       "e",   1,  "character",   "Prefix for output",
     "pval",         "p",   2,  "numeric",     "pval cutoff (0.05)",
+    "relevel",      "w",   1,  "character",   "relevel the sample data for comparison (eg. 'genotype:wt,treatment:normal')",
     "ruvgCount",    "u",   2,  "numeric",     "Counts cutoff for filtering count matrix with --batchMethod RUVg (5)",
     "ruvgLogfc",    "l",   2,  "numeric",     "pvalue cutoff for filtering count matrix with --batchMethod RUVg (1)",
     "ruvgPval",     "v",   2,  "numeric",     "log2CF cutoff for filtering count matrix with --batchMethod RUVg (0.3)",
-    "selectCol",    "C",   2,  "character",   "Only 'colname' in samplemtx was selected as contrast in results()",
-    "selectRow",    "R",   2,  "character",   "Only 'rowname' from 'selectCol' was selected as contrast in results()",
     "sampleMtx",    "m",   1,  "character",   "Sample relationships matrix",
     "shrink",       "s",   1,  "character",   "Shrinkage method for DE results (none|normal|apeglm|ashr[default])",
     "spiRegex",     "r",   1,  "character",   "Name pattern of spikeins in gene_id (ERCC-)",
@@ -62,9 +63,12 @@ args <- getopt(command)
 ShowHelp(args$help, 'none', TRUE)
 ShowHelp(args$counts, '-g|--counts')
 ShowHelp(args$sampleMtx, '-s|--sampleMtx')
-ShowHelp(args$design, '-d|--design')
-ShowHelp(args$control, '-c|--control')
-ShowHelp(args$treat, '-t|--treat')
+
+if (is.null(args$formula)) {
+  ShowHelp(args$design, '-d|--design')
+  ShowHelp(args$control, '-c|--control')
+  ShowHelp(args$treat, '-t|--treat')
+}
 
 if ( is.null(args$test) ) {
   args$test = 'Wald'
@@ -88,16 +92,6 @@ if ( is.null(args$shrink) ) {
   shrinkVetor <- c('none', 'normal', 'apeglm', 'ashr')
   bool <- isFALSE(args$shrink %in% shrinkVetor)
   ShowHelp(bool, '-s|--shrink', FALSE, TRUE)
-}
-
-if (!is.null(args$selectCol)) {
-  bool <- is.null(args$selectRow)
-  ShowHelp(bool, '-C|--selectCol & -R|--selectRow', FALSE, TRUE)
-}
-
-if (!is.null(args$selectRow)) {
-  bool <- is.null(args$selectCol)
-  ShowHelp(bool, '-C|--selectCol & -R|--selectRow', FALSE, TRUE)
 }
 
 # default values
@@ -134,20 +128,23 @@ keepSpike <- args$keepSpike
 autoBatch <- args$autoBatch
 
 # With the count matrix, cts, and the sample information, colData
-cts <- as.matrix(read.csv(geneCountMtx, sep="\t", row.names="gene_id"))
+cts <- as.matrix(read.csv(geneCountMtx, sep="\t", row.names=1))
 cts <-round(cts, 0)
 colData <- read.csv(sampleMtx, row.names=1, sep="\t")
 
-# judge if --control and --treat in colData
-designs <- unique(as.character(colData[[design]]))
-if ( !(control %in% designs) ) {
-  bool <- TRUE
-  ShowHelp(bool, '-c|--control', FALSE, TRUE)
-}
-
-if ( !(treat %in% designs) ) {
-  bool <- TRUE
-  ShowHelp(bool, '-t|--treat', FALSE, TRUE)
+if (! is.null(design)) {
+  # judge if --control and --treat in colData
+  contrast <- c(design, treat, control)
+  designs <- unique(as.character(colData[[design]]))
+  if ( !(control %in% designs) ) {
+    bool <- TRUE
+    ShowHelp(bool, '-c|--control', FALSE, TRUE)
+  }
+  
+  if ( !(treat %in% designs) ) {
+    bool <- TRUE
+    ShowHelp(bool, '-t|--treat', FALSE, TRUE)
+  }
 }
 
 # check all sample rownames in geneCountMtx colNames
@@ -163,11 +160,12 @@ sampleSize <- nrow(colData)
 filtered <- apply(cts, 1, function(x) length(x[x>filter])>=round(sampleSize/2))
 cts <- cts[filtered,]
 
-contrast <- c(design, treat, control)
-if (!is.null(args$selectCol)) {
-  name <- paste( design, control, '.', args$selectCol, args$selectRow, sep="")
-}else{
+if (!is.null(args$design)) {
   name <- paste( design, treat, 'vs', control, sep="_")
+}
+
+if (!is.null(args$name)) {
+  name <- args$name
 }
 
 # if used spikein, use "RUVSeq" to Estimating the factors of unwanted variation using control genes
@@ -189,10 +187,7 @@ if( args$batchMethod == "spikeins" ){
     cts <- cts[genes,]
   }
   colData <- pData(spikeNorSet)
-
-  if (!is.null(args$selectCol)) {
-    designFormula <- as.formula(paste("~ W_1 +", design, '+', design, ':', args$selectCol, sep=" "))
-  }else{
+  if (!is.null(design)) {
     designFormula <- as.formula(paste("~ W_1 +", design, sep=" "))
   }
 }else{
@@ -201,13 +196,36 @@ if( args$batchMethod == "spikeins" ){
     genes <- rownames(cts)[grep(spiRegex, rownames(cts), invert=TRUE)]
     cts <- cts[genes,]
   }
-  designFormula <- as.formula(paste("~", design, sep=" "))
+  if (!is.null(design)) {
+    designFormula <- as.formula(paste("~", design, sep=""))
+  }
+}
+
+if (!is.null(args$formula)) {
+  if( args$batchMethod == "spikeins" ){
+    designFormula <- as.formula(paste("~ W_1 +", args$formula, sep=""))
+  }else{
+    designFormula <- as.formula(paste("~", args$formula, sep=""))
+  }
 }
 
 # construct a DESeqDataSet object
 dds <- DESeqDataSetFromMatrix(countData = cts,
                               colData = colData,
                               design = designFormula)
+
+## relevel the dds
+if (! is.null(args$relevel)) {
+  ## "phenotype:sgNS,fraction:nuc"
+  relevelVector <- unlist(strsplit(args$relevel, ","))
+  ##[1] "phenotype:sgNS" "fraction:nuc"
+  for (eachRelevel in relevelVector) {
+    eachRelevelVector <- unlist(strsplit(eachRelevel, ":"))
+    relevelName <- eachRelevelVector[1]
+    relevelVal <- eachRelevelVector[2]
+    dds[[relevelName]] <- relevel(dds[[relevelName]], relevelVal)
+  }
+}
 
 featureData <- data.frame(gene=rownames(cts))
 mcols(dds) <- DataFrame(mcols(dds), featureData)
@@ -249,18 +267,23 @@ if (args$batchMethod == 'RUVg') {
   dds$W1 <- set$W_1
   dds$W2 <- set$W_2
   ## re-design factors
-  if (!is.null(args$selectCol)) {
-    design(dds) <- as.formula(paste("~ W1 + W2 +", design, '+', design, ':', args$selectCol, sep=" "))
-  }else{
+  if (!is.null(args$design)) {
     design(dds) <- as.formula(paste("~ W1 + W2 +", design, sep=" "))
+  }
+  if (!is.null(args$formula)) {
+    design(dds) <- as.formula(paste("~ W1 + W2 +", args$formula, sep=" "))
   }
   dds <- DESeq(dds, test=test)
 }
 
 resultsNameVector <- resultsNames(dds)
 resultsNameVector
-name
-contrast
+if ( name %in% resultsNameVector ) {
+  name
+}else{
+  contrast
+}
+
 if ( shrink != 'none' ) {
   if ( name %in% resultsNameVector ) {
     res <- lfcShrink(dds, coef=name, type=shrink)
@@ -317,7 +340,7 @@ write.table(as.data.frame(res), sep="\t", eol = "\n",
             quote = FALSE, row.names=TRUE, file=output.file)
 close(output.file)
 
-scan(pipe(paste("sed -i '1 s/baseMean/geneId\tbaseMean/' ", resultFile, sep = "")))
+scan(pipe(paste("sed -i '1 s/baseMean/uniqId\tbaseMean/' ", resultFile, sep = "")))
 
 # significant output result
 resOrdered <- res[order(res$pvalue),]
@@ -327,4 +350,4 @@ output.file <- file(resultFile, "wb")
 write.table(as.data.frame(resSig), sep="\t", eol = "\n", 
             quote = FALSE, row.names=TRUE, file=output.file)
 close(output.file)
-scan(pipe(paste("sed -i '1 s/baseMean/geneId\tbaseMean/' ", resultFile, sep = "")))
+scan(pipe(paste("sed -i '1 s/baseMean/uniqId\tbaseMean/' ", resultFile, sep = "")))
