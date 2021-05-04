@@ -46,6 +46,9 @@ parser.add_argument('--bamtip', nargs='+', type=str,
 parser.add_argument('--bamtinput', nargs='+', type=str,
                     required=True,
                     help='bam files of treated input samples')
+parser.add_argument('--pairend', action='store_true', 
+                    default=False,
+                    help='the input bams are pair-end')
 parser.add_argument('--expMtx', action='store', type=str,
                     help='The expression matrix from buildExpMatrix.py')
 parser.add_argument('--degMtx', action='store', type=str,
@@ -64,7 +67,7 @@ if len(sys.argv[1:]) == 0:
     parser.exit()
 
 def GetPeakReadInBam(mapArgsList):
-    peakFile, bamFile, uniqBamIndex, strand = mapArgsList
+    peakFile, bamFile, uniqBamIndex, strand, pairendFlag = mapArgsList
     ## get chromosome names from bam.bai
     gsizeTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
     command = 'samtools idxstats {}'.format(bamFile)
@@ -82,21 +85,64 @@ def GetPeakReadInBam(mapArgsList):
             chromLen = row[1]
             totalMapReadNum += int(row[2])
             temp.write('\t'.join([chrom, chromLen]) + '\n')
-    ## sort peaks by chromosome && intersect peaks with sorted bam
-    command = 'bedtools sort -i {} -g {} | '.format(peakFile, gsizeTmp.name)
-    command += 'bedtools intersect -a stdin -b {} -g {} -sorted -split -c {}'.format(bamFile, gsizeTmp.name, strand)
-    peakReadsList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
-    gsizeTmp.close()
-    ## construct peakid-bam-reads
+    ## get final peak-read dictionary
     prDict = {}
-    for line in peakReadsList:
-        if bool(line) is False:
-            continue
-        row = line.strip().split('\t')
-        peakid = row[3]
-        readsNum = row[-1]
-        prDict[peakid] = int(readsNum)
+    if pairendFlag is True:
+        ## sort peaks by chromosomes order in bam
+        sortedPeakTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+        command = 'bedtools sort -i {} -g {} > {}'.format(peakFile, gsizeTmp.name, sortedPeakTmp.name)
+        __ = subprocess.check_output(command, shell=True)
+        ## intersect peaks with sorted bam
+        if strand == '-s':
+            reverseFlag = False
+            unstrandFlag = False
+        elif strand == '-S':
+            reverseFlag = True
+            unstrandFlag = False
+        else:
+            reverseFlag = False
+            unstrandFlag = True
+        command = 'bedtools intersect -abam {} -b {} -g {} -sorted -split -bed -wa -wb'.format(bamFile, sortedPeakTmp.name, gsizeTmp.name)
+        intersecctList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
+        sortedPeakTmp.close()
+        gsizeTmp.close()
+        ## construct peakid-bam-reads
+        intersectDict = defaultdict(dict)
+        for line in intersecctList:
+            if bool(line) is False:
+                continue
+            row = line.strip().split('\t')
+            readid = row[3]
+            readStrand = row[5]
+            peakid = row[15]
+            peakStrand = row[17]
+            readName = readid[:-2]
+            mate = readid[-2:]
+            if reverseFlag is True:
+                if (mate == '/1' and readStrand == peakStrand) or (mate == '/2' and readStrand != peakStrand):
+                    continue
+            elif reverseFlag is False and unstrandFlag is False:
+                if (mate == '/1' and readStrand != peakStrand) or (mate == '/2' and readStrand == peakStrand):
+                    continue
+            readid = readName
+            intersectDict[peakid][readName] = 1
+        for peakid in sorted(intersectDict.keys()):
+            prDict[peakid] = len(intersectDict[peakid].keys())
+    else:
+        ## sort peaks by chromosome && intersect peaks with sorted bam
+        command = 'bedtools sort -i {} -g {} | '.format(peakFile, gsizeTmp.name)
+        command += 'bedtools intersect -a stdin -b {} -g {} -sorted -split -c {}'.format(bamFile, gsizeTmp.name, strand)
+        peakReadsList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
+        gsizeTmp.close()
+        for line in peakReadsList:
+            if bool(line) is False:
+                continue
+            row = line.strip().split('\t')
+            peakid = row[3]
+            readsNum = row[-1]
+            prDict[peakid] = int(readsNum)
     return [uniqBamIndex, prDict]
+
 
 def RunFisherExactTest(peakid):
     controlList = [np.mean(norCountsDict[peakid]['control']['IP']), np.mean(norCountsDict[peakid]['control']['input'])]
@@ -106,6 +152,7 @@ def RunFisherExactTest(peakid):
 
 args.output = os.path.realpath(args.output)
 thread = args.thread
+pairendFlag = args.pairend
 
 ##build bam dict
 ipTypeList  = ['IP', 'input', 'IP', 'input']
@@ -147,10 +194,10 @@ with open(args.treat, 'r') as f, open(treatPeakTmp.name, 'w') as temp:
         temp.write(line)
 
 ## get peaks only found in control or treated groups
-command = 'bedtools intersect -a {} -b {} -v -s -r 1.0 -split'.format(controlPeakTmp.name, treatPeakTmp.name)
+command = 'bedtools intersect -a {} -b {} -f 0.8 -F 0.8 -e -v -s'.format(controlPeakTmp.name, treatPeakTmp.name)
 controlUniqPeakList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
 
-command = 'bedtools intersect -a {} -b {} -v -s -r 1.0 -split'.format(treatPeakTmp.name, controlPeakTmp.name)
+command = 'bedtools intersect -a {} -b {} -f 0.8 -F 0.8 -e -v -s'.format(treatPeakTmp.name, controlPeakTmp.name)
 treatUniqPeakList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
 
 controlPeakTmp.close()
@@ -186,7 +233,7 @@ with open(args.pool, 'r') as f, open(poolPeakTmp.name, 'w') as temp:
         temp.write(line)
 
 # remove peaks that overlap with peaks that only found in control or treated groups
-command = 'bedtools intersect -a {} -b {} -v -s -r 1.0 -split'.format(poolPeakTmp.name, combinePeakTmp.name)
+command = 'bedtools intersect -a {} -b {} -f 0.8 -F 0.8 -e -v -s'.format(poolPeakTmp.name, combinePeakTmp.name)
 poolUniqPeakList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
 
 combinePeakTmp.close()
@@ -284,7 +331,7 @@ if bool(args.bamcip):
     for i in range(len(bamList)):
         for bamFile in bamList[i]:
             uniqBamIndex = bamDict['bamToIndex'][bamFile]
-            poolMapArgsList.append([peakTmp.name, bamFile, uniqBamIndex, strand])
+            poolMapArgsList.append([peakTmp.name, bamFile, uniqBamIndex, strand, pairendFlag])
     peakReadsResultList = []
     with Pool(processes=thread) as pool:
         for i in pool.imap_unordered(GetPeakReadInBam, poolMapArgsList):
@@ -387,6 +434,8 @@ if bool(args.bamcip):
     fisherPvalDict = {}
     for result in fisherTestResList:
         peakid, pvalue = result
+        if float(pvalue) > 0.05:
+            continue
         fisherPvalDict[peakid] = pvalue
 
 with open(args.output, 'w') as out:
@@ -411,6 +460,8 @@ with open(args.output, 'w') as out:
         row.append(peakSource)
         if bool(args.bamcip):
             if 'peakDiffDeseq2' not in peakDict[peakid]:
+                continue
+            if peakid not in fisherPvalDict:
                 continue
             row += peakDict[peakid]['peakDiffDeseq2'] + [fisherPvalDict[peakid]]
         if args.expMtx:
