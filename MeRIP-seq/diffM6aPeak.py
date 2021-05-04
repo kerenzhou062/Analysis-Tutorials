@@ -9,7 +9,10 @@ import subprocess
 import math
 import numpy as np
 import scipy.stats as stats
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
+## used R packages
+from rpy2.robjects.packages import importr
+from rpy2.robjects.vectors import FloatVector
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-c', '--control', action='store', type=str,
@@ -143,6 +146,14 @@ def GetPeakReadInBam(mapArgsList):
             prDict[peakid] = int(readsNum)
     return [uniqBamIndex, prDict]
 
+def GetAjustPvalBH(pvalList):
+    """Benjamini-Hochberg p-value correction for multiple hypothesis testing."""
+    p = np.asfarray(p)
+    orderDescend = p.argsort()[::-1]
+    orderOrig = orderDescend.argsort()
+    steps = float(len(p)) / np.arange(len(p), 0, -1)
+    q = np.minimum(1, np.minimum.accumulate(steps * p[orderDescend]))
+    return q[orderOrig]
 
 def RunFisherExactTest(peakid):
     controlList = [np.mean(norCountsDict[peakid]['control']['IP']), np.mean(norCountsDict[peakid]['control']['input'])]
@@ -153,6 +164,7 @@ def RunFisherExactTest(peakid):
 args.output = os.path.realpath(args.output)
 thread = args.thread
 pairendFlag = args.pairend
+rstats = importr('stats')
 
 ##build bam dict
 ipTypeList  = ['IP', 'input', 'IP', 'input']
@@ -194,10 +206,10 @@ with open(args.treat, 'r') as f, open(treatPeakTmp.name, 'w') as temp:
         temp.write(line)
 
 ## get peaks only found in control or treated groups
-command = 'bedtools intersect -a {} -b {} -f 0.8 -F 0.8 -e -v -s'.format(controlPeakTmp.name, treatPeakTmp.name)
+command = 'bedtools intersect -a {} -b {} -f 0.8 -F 0.8 -e -v -s -split'.format(controlPeakTmp.name, treatPeakTmp.name)
 controlUniqPeakList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
 
-command = 'bedtools intersect -a {} -b {} -f 0.8 -F 0.8 -e -v -s'.format(treatPeakTmp.name, controlPeakTmp.name)
+command = 'bedtools intersect -a {} -b {} -f 0.8 -F 0.8 -e -v -s -split'.format(treatPeakTmp.name, controlPeakTmp.name)
 treatUniqPeakList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
 
 controlPeakTmp.close()
@@ -233,7 +245,7 @@ with open(args.pool, 'r') as f, open(poolPeakTmp.name, 'w') as temp:
         temp.write(line)
 
 # remove peaks that overlap with peaks that only found in control or treated groups
-command = 'bedtools intersect -a {} -b {} -f 0.8 -F 0.8 -e -v -s'.format(poolPeakTmp.name, combinePeakTmp.name)
+command = 'bedtools intersect -a {} -b {} -f 0.8 -F 0.8 -e -v -s -split'.format(poolPeakTmp.name, combinePeakTmp.name)
 poolUniqPeakList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
 
 combinePeakTmp.close()
@@ -431,18 +443,28 @@ if bool(args.bamcip):
     with Pool(processes=thread) as pool:
         for i in pool.imap_unordered(RunFisherExactTest, countsPeakidList):
             fisherTestResList.append(i)
-    fisherPvalDict = {}
+    ## get fisher p-value and BH FDR
+    fisherPeakidList = []
+    fisherPvalList = []
     for result in fisherTestResList:
         peakid, pvalue = result
-        if float(pvalue) > 0.05:
-            continue
-        fisherPvalDict[peakid] = pvalue
+        fisherPeakidList.append(peakid)
+        fisherPvalList.append(float(pvalue))
+    padjList = rstats.p_adjust(FloatVector(fisherPvalList), method = 'BH')
+    ## store pvalue and fdr
+    fisherPvalDict = {}
+    for i in range(len(fisherPeakidList)):
+        peakid = fisherPeakidList[i]
+        pvalue = fisherPvalList[i]
+        padj = padjList[i]
+        fisherPvalDict[peakid] = [pvalue, padj]
+
 
 with open(args.output, 'w') as out:
     # delete fdr
     del nameRow[-3]
     if bool(args.bamcip):
-        nameRow.extend(['mean.normalized.counts.DEseq2', 'diff.log2fc.DESeq2', 'diff.pvalue.fisher'])
+        nameRow.extend(['mean.normalized.counts.DEseq2', 'diff.log2fc.DESeq2', 'diff.pvalue.fisher', 'diff.fdr.fisher'])
     if bool(args.expMtx):
         nameRow.extend(['gene.aveExp.control', 'gene.aveExp.treated'])
     if bool(args.degMtx):
@@ -463,7 +485,7 @@ with open(args.output, 'w') as out:
                 continue
             if peakid not in fisherPvalDict:
                 continue
-            row += peakDict[peakid]['peakDiffDeseq2'] + [fisherPvalDict[peakid]]
+            row += peakDict[peakid]['peakDiffDeseq2'] + fisherPvalDict[peakid]
         if args.expMtx:
             row += peakDict[peakid]['geneExp']
         if args.degMtx:
