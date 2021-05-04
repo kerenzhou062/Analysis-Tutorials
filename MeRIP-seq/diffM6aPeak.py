@@ -464,7 +464,7 @@ with open(args.output, 'w') as out:
     # delete fdr
     del nameRow[-3]
     if bool(args.bamcip):
-        nameRow.extend(['mean.normalized.counts.DEseq2', 'diff.log2fc.DESeq2', 'diff.pvalue.fisher', 'diff.fdr.fisher'])
+        nameRow.extend(['mean.normalized.counts.DEseq2', 'diff.log2fc.DESeq2', 'diff.pvalue.fisher', 'diff.padj.BH'])
     if bool(args.expMtx):
         nameRow.extend(['gene.aveExp.control', 'gene.aveExp.treated'])
     if bool(args.degMtx):
