@@ -1,0 +1,5 @@
+prefix	cell	library_strand	library_type	ip_bam_file	input_bam_file
+HeLa_control_rep1-2	HeLa	fr-firstrand	paired	HeLa_control_IP_rep1.genome.sorted.bam,HeLa_control_IP_rep2.genome.sorted.bam	HeLa_control_input_rep1.genome.sorted.bam,HeLa_control_input_rep2.genome.sorted.bam
+HeLa_treat_rep1-2	HeLa	fr-secondstrand	single	HeLa_treat_IP_rep1.genome.sorted.bam,HeLa_teat_IP_rep2.genome.sorted.bam	HeLa_treat_input_rep1.genome.sorted.bam
+HeLa_shMETTL14_rep1-2	HeLa	unstrand	single	HeLa_shMETTL14_IP_rep1.genome.sorted.bam,HeLa_shMETTL14_IP_rep2.genome.sorted.bam	HeLa_shMETTL14_input_rep1.genome.sorted.bam,HeLa_shMETTL14_input_rep2.genome.sorted.bam
+HeLa_shMETTL3_rep1	HeLa	fr-firstrand	paired	HeLa_shMETTL3_IP_rep1.genome.sorted.bam	HeLa_shMETTL3_input_rep1.genome.sorted.bam

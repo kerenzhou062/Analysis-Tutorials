@@ -1,0 +1,673 @@
+#!/usr/bin/env python3
+import os
+import sys
+import argparse
+import re
+from collections import defaultdict
+import tempfile
+import subprocess
+import math
+import numpy as np
+import scipy.stats as stats
+import networkx as nx
+import itertools
+from multiprocessing import Pool
+## used R packages
+from rpy2.robjects.packages import importr
+from rpy2.robjects.vectors import FloatVector
+## custom modules
+import bedutils
+
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument('-a', '--anno', action='store', type=str,
+                    required=True,
+                    help='transcript annotations in bed12 format \
+                    (4th column [gene_id:gene_name:gene_type:tx_id:tx_name:tx_type]))')
+parser.add_argument('-f', '--filter', action='store', type=int,
+                    default=-1,
+                    help='filter out genes less than # counts across 1/2 samples (--filter in DESeq2Gene.R)')
+parser.add_argument('-l', '--library', action='store', type=str,
+                    choices=['unstranded', 'fr-firstrand','fr-secondstrand'],
+                    default='fr-firstrand',
+                    help='Library protocols of bam')
+parser.add_argument('-n', '--name', nargs='+', type=str,
+                    required=True,
+                    help='names for input --peak (eg. shCont shM3)')
+parser.add_argument('-o', '--output', action='store', type=str,
+                    required=True,
+                    help='The output peak.diff.txt')
+parser.add_argument('-p', '--peak', nargs='+', type=str,
+                    required=True,
+                    help='M6A peak.bed (in bed12 format, 4thCol should be geneid) from (exomePeak|MeTPeak|MoAIMS), required at least 2 files')
+parser.add_argument('-s', '--shrink', action='store', type=str, choices=['none', 'apeglm', 'ashr'],
+                    default='none',
+                    help='The method used for shrinking the fold change (lfcShrink() in DESeq2)')
+parser.add_argument('--bamcip', nargs='+', type=str,
+                    required=True,
+                    help='bam files of conrtol IP samples')
+parser.add_argument('--bamcinput', nargs='+', type=str,
+                    required=True,
+                    help='bam files of conrtol input samples')
+parser.add_argument('--bamtip', nargs='+', type=str,
+                    required=True,
+                    help='bam files of treated IP samples')
+parser.add_argument('--bamtinput', nargs='+', type=str,
+                    required=True,
+                    help='bam files of treated input samples')
+parser.add_argument('--max', action='store', type=int,
+                    default=3500,
+                    help='filter peaks larger than --max')
+parser.add_argument('--min', action='store', type=int,
+                    default=5,
+                    help='filter peaks smaller than --min')
+parser.add_argument('--pairend', action='store_true', 
+                    default=False,
+                    help='the input bams are pair-end')
+parser.add_argument('--pval', action='store', type=float,
+                    default=0.05,
+                    help='cutoff pvalue for significant DM peaks')
+parser.add_argument('--expMtx', action='store', type=str,
+                    help='The expression matrix from buildExpMatrix.py')
+parser.add_argument('--degMtx', action='store', type=str,
+                    help='The differentially expressed gene matrix from DESeq2Gene.R')
+parser.add_argument('--cntKey', action='store', type=str,
+                    help='regex keyword for keepping control samples in --expMtx(required by --expMtx)')
+parser.add_argument('--trtKey', action='store', type=str,
+                    help='regex keyword for keepping treated samples in --expMtx(required by --expMtx)')
+parser.add_argument('--thread', action='store', type=int,
+                    default=1,
+                    help='The number of threads used to run in parallel (will greatly reduce running time)')
+
+args = parser.parse_args()
+if len(sys.argv[1:]) == 0:
+    parser.print_help()
+    parser.exit()
+
+def GetPeakReadInBam(mapArgsList):
+    peakFile, bamFile, uniqBamIndex, strand, pairendFlag = mapArgsList
+    ## get chromosome names from bam.bai
+    gsizeTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+    command = 'samtools idxstats {}'.format(bamFile)
+    idxstatsList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
+    idxstatsList = list(filter(lambda x: (bool(x) and x != '*'), idxstatsList))
+    totalMapReadNum = 0
+    with open(gsizeTmp.name, 'w') as temp:
+        for line in idxstatsList:
+            if bool(line) is False:
+                continue
+            row = line.strip().split('\t')
+            chrom = row[0]
+            if re.match(r'ERCC', chrom):
+                continue
+            chromLen = row[1]
+            totalMapReadNum += int(row[2])
+            temp.write('\t'.join([chrom, chromLen]) + '\n')
+    ## get final peak-read dictionary
+    prDict = {}
+    if pairendFlag is True:
+        ## sort peaks by chromosomes order in bam
+        sortedPeakTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+        command = 'bedtools sort -i {} -g {} > {}'.format(peakFile, gsizeTmp.name, sortedPeakTmp.name)
+        __ = subprocess.check_output(command, shell=True)
+        ## intersect peaks with sorted bam
+        if strand == '-s':
+            reverseFlag = False
+            unstrandFlag = False
+        elif strand == '-S':
+            reverseFlag = True
+            unstrandFlag = False
+        else:
+            reverseFlag = False
+            unstrandFlag = True
+        command = 'bedtools intersect -abam {} -b {} -g {} -sorted -split -bed -wa -wb'.format(bamFile, sortedPeakTmp.name, gsizeTmp.name)
+        intersecctList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
+        sortedPeakTmp.close()
+        gsizeTmp.close()
+        ## construct peakid-bam-reads
+        intersectDict = defaultdict(dict)
+        for line in intersecctList:
+            if bool(line) is False:
+                continue
+            row = line.strip().split('\t')
+            readid = row[3]
+            readStrand = row[5]
+            peakid = row[15]
+            peakStrand = row[17]
+            readName = readid[:-2]
+            mate = readid[-2:]
+            if reverseFlag is True:
+                if (mate == '/1' and readStrand == peakStrand) or (mate == '/2' and readStrand != peakStrand):
+                    continue
+            elif reverseFlag is False and unstrandFlag is False:
+                if (mate == '/1' and readStrand != peakStrand) or (mate == '/2' and readStrand == peakStrand):
+                    continue
+            readid = readName
+            intersectDict[peakid][readName] = 1
+        for peakid in sorted(intersectDict.keys()):
+            prDict[peakid] = len(intersectDict[peakid].keys())
+    else:
+        ## sort peaks by chromosome && intersect peaks with sorted bam
+        command = 'bedtools sort -i {} -g {} | '.format(peakFile, gsizeTmp.name)
+        command += 'bedtools intersect -a stdin -b {} -g {} -sorted -split -c {}'.format(bamFile, gsizeTmp.name, strand)
+        peakReadsList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
+        gsizeTmp.close()
+        for line in peakReadsList:
+            if bool(line) is False:
+                continue
+            row = line.strip().split('\t')
+            peakid = row[3]
+            readsNum = row[-1]
+            prDict[peakid] = int(readsNum)
+    return [uniqBamIndex, prDict]
+
+def GetAjustPvalBH(pvalList):
+    """Benjamini-Hochberg p-value correction for multiple hypothesis testing."""
+    p = np.asfarray(p)
+    orderDescend = p.argsort()[::-1]
+    orderOrig = orderDescend.argsort()
+    steps = float(len(p)) / np.arange(len(p), 0, -1)
+    q = np.minimum(1, np.minimum.accumulate(steps * p[orderDescend]))
+    return q[orderOrig]
+
+def RunFisherExactTest(peakid):
+    controlList = [np.mean(norCountsDict[peakid]['control']['IP']), np.mean(norCountsDict[peakid]['control']['input'])]
+    treatList = [np.mean(norCountsDict[peakid]['treat']['IP']), np.mean(norCountsDict[peakid]['treat']['input'])]
+    oddsratio, pvalue = stats.fisher_exact([controlList, treatList])
+    return [peakid, pvalue]
+
+def FindGraphGroup(pairedEdgeList):
+    ## eg. pairedEdgeList = [("A","B"), ("B","C"), ("C","D"), ("E","F"), ("G","H"), ("H","I"), ("G","I"), ("G","J")]
+    ## return: [ [('A', 'B'), ('B', 'C'), ('C', 'D')], [('E', 'F')], [('G', 'H'), ('H', 'I'), ('G', 'I'), ('G', 'J')] ]
+    ## cunstruct a networkx object with edges and get the connected edges
+    ## connEdgeList : [{'D', 'C', 'A', 'B'}, {'E', 'F'}, {'H', 'J', 'G', 'I'}]
+    G = nx.Graph(pairedEdgeList)
+    connEdgeList = list(nx.connected_components(G))
+    ## create the map dict , for get the unique id for each nodes
+    ## mapdict: {'D': 0, 'C': 0, 'A': 0, 'B': 0, 'E': 1, 'F': 1, 'H': 2, 'J': 2, 'G': 2, 'I': 2}
+    mapdict = {z:x for x, y in enumerate(connEdgeList) for z in y }
+    ## then append the id back to original data for groupby
+    ## newList: [('A', 'B', 0), ('B', 'C', 0), ('C', 'D', 0), ('E', 'F', 1), ('G', 'H', 2), ('H', 'I', 2), ('G', 'I', 2), ('G', 'J', 2)]
+    newList = [ x+(mapdict[x[0]],)for  x in pairedEdgeList]
+    ## using groupby make the same id into one sublist
+    ## [[('A', 'B'), ('B', 'C'), ('C', 'D')], [('E', 'F')], [('G', 'H'), ('H', 'I'), ('G', 'I'), ('G', 'J')]]
+    newList = sorted(newList, key=lambda x: x[2])
+    groupEdgeList = [list(group) for key , group in itertools.groupby(newList,key=lambda x : x[2])]
+    groupEdgeList = list(map(lambda x:list(map(lambda y:y[0:2], x)), groupEdgeList))
+    ## return the final group list
+    return groupEdgeList
+
+def PoolPeak(cpeakRowList, tpeakRowList, clabelRowList, tlabelRowList, mode):
+    ## label1RowList: [ ['shCont_rep1', 'exomePeak'], ['shCont_rep1', 'exomePeak'] ...]
+    ## make peak id unique
+    cpeakTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+    peakRowDict = defaultdict(dict)
+    peakLabelDict = defaultdict(dict)
+    count = 1
+    with open(cpeakTmp.name, 'w') as out:
+        for i in range(len(cpeakRowList)):
+            row = cpeakRowList[i]
+            row[3] = '|'.join([row[3], str(count)])
+            ## record peakid -> row
+            peakRowDict[row[3]] = row
+            ## record peakid -> labelList
+            labelList = clabelRowList[i]
+            peakLabelDict[row[3]] = labelList
+            ## write to temp file
+            out.write('\t'.join(row) + '\n')
+            count += 1
+    tpeakTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+    with open(tpeakTmp.name, 'w') as out:
+        for i in range(len(tpeakRowList)):
+            row = tpeakRowList[i]
+            row[3] = '|'.join([row[3], str(count)])
+            ## record peakid -> row
+            peakRowDict[row[3]] = row
+            ## record peakid -> labelList
+            labelList = tlabelRowList[i]
+            peakLabelDict[row[3]] = labelList
+            ## write to temp file
+            out.write('\t'.join(row) + '\n')
+            count += 1
+    ## get peaks only found in control groups
+    command = 'bedtools intersect -a {} -b {} -v -s -split'.format(cpeakTmp.name, tpeakTmp.name)
+    runResList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
+    cuniqPeakRowList = list(map(lambda x:x.split('\t'), list(filter(lambda x: bool(x), runResList))))
+    cuniqLabelRowList = [clabelRowList[0] for i in cuniqPeakRowList]
+    ## get peaks only found in treated groups
+    command = 'bedtools intersect -a {} -b {} -v -s -split'.format(tpeakTmp.name, cpeakTmp.name)
+    runResList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
+    tuniqPeakRowList = list(map(lambda x:x.split('\t'), list(filter(lambda x: bool(x), runResList))))
+    tuniqLabelRowList = [tlabelRowList[0] for i in tuniqPeakRowList]
+    ## get overlap peaks in control and treated groups
+    command = 'bedtools intersect -a {} -b {} -split -s -wa -wb'.format(cpeakTmp.name, tpeakTmp.name)
+    runResList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
+    overlapPeakRowList = list(map(lambda x:x.split('\t'), list(filter(lambda x: bool(x), runResList))))
+    ## close temp file
+    cpeakTmp.close()
+    tpeakTmp.close()
+    ## construct overlap label
+    overlapLabelList = []
+    for i in range(len(clabelRowList[0])):
+        label = ','.join([clabelRowList[0][i], tlabelRowList[0][i]])
+        overlapLabelList.append(label)
+    ## check whether there are any overlap peaks
+    if len(overlapPeakRowList) == 0:
+        poolPeakRowList = []
+    else:
+        intersectDict = {}
+        idsep = ':=:'
+        for row in overlapPeakRowList:
+            cpeakid = row[3]
+            tpeakid = row[15]
+            cpeakGeneName = cpeakid.split('|')[0]
+            tpeakGeneName = tpeakid.split('|')[0]
+            ## filter out the overlapped peaks on different genes
+            if cpeakGeneName != tpeakGeneName:
+                continue
+            overlapid = idsep.join([cpeakid, tpeakid])
+            intersectDict[overlapid] = 1
+        ## start to pool peaks
+        poolPeakRowList = []
+        if mode == 'mergeGroup':
+            ## get paired peak list and get group peakid list by using FindGraphGroup() function
+            ## groupPeakidList: [[('ENSG00000247746.4|19225', 'ENSG00000247746.4|35224'), ('ENSG00000247746.4|19225', 'ENSG00000247746.4|35225')]]
+            pairedPeakidList = list(map(lambda x:tuple(x.split(idsep)), sorted(intersectDict.keys())))
+            groupPeakidList = FindGraphGroup(pairedPeakidList)
+            ## start to merge bed12 rows
+            ## intersect overlapped peaks, and then merge intersected peaks
+            for group in groupPeakidList:
+                peakidGroupList = []
+                for paired in group:
+                    ## get overlapped peak regions from overlapped peaks
+                    peakidGroupList.append(paired[0])
+                    peakidGroupList.append(paired[1])
+                peakidGroupList = list(set(peakidGroupList))
+                ## merge intersected peaks in same groups
+                bedRow = peakRowDict[peakidGroupList[0]]
+                mergeBed = bedutils.bed12ops(bedRow)
+                for i in range(1, len(peakidGroupList)):
+                    bedRow = peakRowDict[peakidGroupList[i]]
+                    mergeBed = mergeBed.merge(bedRow, score='max')
+                ## if mergeBed larger than --size, then discard the merged group
+                ## just keep the merged regions of 2 loci
+                if mergeBed.a.exonlength > args.max:
+                    for paired in group:
+                        cpeakRow = peakRowDict[paired[0]]
+                        tpeakRow = peakRowDict[paired[1]]
+                        mergeBed = bedutils.bed12ops(cpeakRow)
+                        mergeBed = mergeBed.merge(tpeakRow)
+                        poolPeakRowList.append(list(map(str, mergeBed.list)))
+                else:
+                    poolPeakRowList.append(list(map(str, mergeBed.list)))
+        elif mode == 'intersectGroup':
+            pairedPeakidList = list(map(lambda x:tuple(x.split(idsep)), sorted(intersectDict.keys())))
+            groupPeakidList = FindGraphGroup(pairedPeakidList)
+            for group in groupPeakidList:
+                ## intersect each overlapped loci in a group and then merge.
+                intersectList = []
+                for paired in group:
+                    cpeakRow = peakRowDict[paired[0]]
+                    tpeakRow = peakRowDict[paired[1]]
+                    intersect = bedutils.bed12ops(cpeakRow).intersect(tpeakRow)
+                    intersectList.append(intersect)
+                poolBed = intersectList[0]
+                if len(intersectList) > 1:
+                    for i in range(1, len(intersectList)):
+                        intersect = intersectList[i]
+                        poolBed = poolBed.merge(intersect.list)
+                poolPeakRowList.append(list(map(str, poolBed.list)))
+        else:
+            for overlapid in sorted(intersectDict.keys()):
+                cpeakid, tpeakid = overlapid.split(idsep)
+                cpeakRow = peakRowDict[cpeakid]
+                tpeakRow = peakRowDict[tpeakid]
+                poolBed = bedutils.bed12ops(cpeakRow)
+                if mode == 'merge':
+                    poolBed = poolBed.merge(tpeakRow)
+                else:
+                    poolBed = poolBed.intersect(tpeakRow)
+                poolPeakRowList.append(list(map(str, poolBed.list)))
+    ## construct label row list
+    poolLabelRowList = [overlapLabelList for i in poolPeakRowList]
+    combineLabelRowList = cuniqLabelRowList + tuniqLabelRowList + poolLabelRowList
+    ## pool the unique and merged bed rows
+    combinePeakRowList = cuniqPeakRowList + tuniqPeakRowList + poolPeakRowList
+    ## sort rows by chromosomes and start positions
+    combinePeakRowList = sorted(combinePeakRowList, key=lambda x:(x[0], x[1]))
+    ## construct final peak row list and label row list
+    finalLabelRowList = []
+    finalPeakRowList = []
+    for i in range(len(combinePeakRowList)):
+        combinePeakRow = combinePeakRowList[i]
+        combineLabelRow = combineLabelRowList[i]
+        peakBed = bedutils.buildbed(combinePeakRow)
+        ## filter out peaks that larger or smaller than required
+        if peakBed.exonlength < args.min or peakBed.exonlength > args.max:
+            continue
+        finalPeakRowList.append(combinePeakRow)
+        finalLabelRowList.append(combineLabelRow)
+    return [finalPeakRowList, finalLabelRowList]
+
+
+########### main program ####################
+if len(args.peak) <= 1:
+    sys.errer.write('There are at least 2 input beds for --peak!')
+    sys.exit()
+
+args.output = os.path.realpath(args.output)
+thread = args.thread
+pairendFlag = args.pairend
+rstats = importr('stats')
+
+if len(args.name) != len(args.peak):
+    print('The length of --peak and --name should be the same!')
+    sys.exit()
+
+if os.path.exists(args.anno) is False:
+    print('Invalid --anno file!')
+    sys.exit()
+
+##build bam dict
+ipTypeList  = ['IP', 'input', 'IP', 'input']
+treatTypeList = ['control', 'control', 'treat', 'treat']
+## remove duplicate bam
+bamList = [args.bamcip, args.bamcinput, args.bamtip, args.bamtinput]
+bamList = list(map(lambda x:list(set(x)), bamList))
+
+uniqBamIndexList = []
+bamDict = defaultdict(dict)
+bamDict['bamToIndex'] = defaultdict(dict)
+bamDict['indexToInfo'] = defaultdict(dict)
+for i in range(4):
+    ipType = ipTypeList[i]
+    treatType = treatTypeList[i]
+    bamFileList = bamList[i]
+    for j in range(len(bamFileList)):
+        bamFile = bamFileList[j]
+        uniqBamIndex = '_'.join([str(i), str(j)])
+        bamDict['bamToIndex'][bamFile] = uniqBamIndex
+        bamDict['indexToInfo'][uniqBamIndex]['ipType'] = ipType
+        bamDict['indexToInfo'][uniqBamIndex]['treatType'] = treatType
+        uniqBamIndexList.append(uniqBamIndex)
+
+nameRow = ['#chr', 'chromStart', 'chromEnd', 'name', 'score', 'strand', 'thickStart', 'thickEnd', 'itemRgb', 'blockCount', 'blockSizes', 'blockStarts']
+bedPeakRowList = []
+for bed in args.peak:
+    peakRowList = []
+    with open(bed, 'r') as f:
+        for line in f:
+            if bool(re.match(r'^#', line)):
+                continue
+            row = line.strip().split('\t')
+            peakRowList.append(row)
+    bedPeakRowList.append(peakRowList)
+# merge or intersect peaks from control and treated groups
+peak1RowList = bedPeakRowList[0]
+## label name and software for each bed locus
+label1RowList = [[args.name[0]] for i in peak1RowList]
+for i in range(1, len(args.peak)):
+    peak2RowList = bedPeakRowList[i]
+    label2RowList = [[args.name[i]] for k in peak2RowList]
+    peak1RowList, label1RowList = PoolPeak(peak1RowList, peakRowList, label1RowList, label2RowList, mode = args.mode)
+
+peakLabelDict = {}
+combineRowList = []
+count = 1
+for i in range(len(peak1RowList)):
+    combinePeakRow = peak1RowList[i]
+    ## get exon length
+    peakBed = bedutils.buildbed(combinePeakRow)
+    ## filter peaks larger than --max and --min
+    if peakBed.exonlength > args.max or peakBed.exonlength < args.min:
+        continue
+    combinePeakRow[3] = combinePeakRow[3].split('|')[0] + '|' + str(i + 1)
+    peakLabelDict[combinePeakRow[3]] = label1RowList[i]
+    combineRowList.append(combinePeakRow)
+
+# build expression dict
+expSampleDict = defaultdict(list)
+expDict = defaultdict(dict)
+if bool(args.expMtx):
+    with open(args.expMtx, 'r') as f:
+        expNameRow = list(filter(lambda x: bool(re.search(r'_CQV', x)) is False, f.readline().split('\t')))
+        rowLength = len(expNameRow)
+        for i in range(1,rowLength):
+            if bool(args.cntKey) and bool(args.trtKey):
+                if bool(re.search(r'{}'.format(args.cntKey), expNameRow[i])):
+                    expSampleDict['control'].append(i)
+                if bool(re.search(r'{}'.format(args.trtKey), expNameRow[i])):
+                    expSampleDict['treat'].append(i)
+            else:
+                sys.stderr.write('--cntKey and --trtKey required by --expMtx!')
+                sys.exit()
+        for line in f:
+            row = line.strip().split('\t')
+            geneId = row[0].split('.')[0]
+            expDict[geneId]['control'] = sum(map(lambda x: float(row[x]), expSampleDict['control'])) / len(expSampleDict['control'])
+            expDict[geneId]['treat'] = sum(map(lambda x: float(row[x]), expSampleDict['treat'])) / len(expSampleDict['treat'])
+
+# build differentlly expressed gene dict
+geneDeDict = defaultdict(dict)
+if bool(args.degMtx):
+    with open(args.degMtx, 'r') as f:
+        __ = f.readline()
+        for line in f:
+            row = line.strip().split('\t')
+            geneId = row[0].split('.')[0]
+            log2fc = '{0:.4f}'.format(float(row[-4]))
+            pval = row[-2]
+            if pval == 'NA':
+                pval = '1'
+            geneDeDict[geneId] = [log2fc, pval]
+
+# prepare peak dictionary
+peakidList = list()
+peakDict = defaultdict(dict)
+for i in range(len(combineRowList)):
+    geneId = combineRowList[i][3].split('.')[0]
+    peakid = combineRowList[i][3]
+    peakDict[peakid]['row'] = combineRowList[i]
+    peakidList.append(peakid)
+    peakDict[peakid]['gene'] = geneId
+    ## add expression
+    if bool(expDict):
+        expList = ['NA', 'NA']
+        if 'control' in expDict[geneId]:
+            expList[0] = '{0:.4f}'.format(expDict[geneId]['control'])
+        if 'treat' in expDict[geneId]:
+            expList[1] = '{0:.4f}'.format(expDict[geneId]['treat'])
+        peakDict[peakid]['geneExp'] = expList
+    else:
+        peakDict[peakid]['geneDe'] = list()
+    ## add differential expression
+    if bool(geneDeDict):
+        if geneId not in geneDeDict:
+            peakDict[peakid]['geneDe'] = ['0', '1']
+        else:
+            peakDict[peakid]['geneDe'] = geneDeDict[geneId]
+    else:
+        peakDict[peakid]['geneDe'] = list()
+
+outputDir = os.path.dirname(args.output)
+## calculate reads from samples that cover peaks
+if args.library == 'unstranded':
+    strand = ''
+elif args.library == 'fr-firstrand':
+    strand = '-S'
+else:
+    strand = '-s'
+peakTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+with open(peakTmp.name, 'w') as temp:
+    for row in combineRowList:
+        temp.write('\t'.join(row) + '\n')
+## get the transcripts that do not intersect with peaks
+## this step aims to balance the final reads library
+command = 'bedtools intersect -a {} -b {} -split -s -v'.format(args.anno, peakTmp.name)
+runResList = bytes.decode(subprocess.check_output(command, shell=True)).split('\n')
+nonPeakTxRowList = list(map(lambda x:x.split('\t'), list(filter(lambda x: bool(x), runResList))))
+## delete lib temp
+peakTmp.close()
+## label non peak tx
+for i in range(len(nonPeakTxRowList)):
+    nonPeakTxRow = nonPeakTxRowList[i]
+    nonPeakTxRow[3] = ':'.join(['NonPeak', nonPeakTxRow[3].split(':')[0], str(i)])
+
+## construct final library
+finalLibRowList = combineRowList + nonPeakTxRowList
+libTmp = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+with open(libTmp.name, 'w') as temp:
+    for row in finalLibRowList:
+        temp.write('\t'.join(row) + '\n')
+
+# run peaks-reads in bams in parallel
+poolMapArgsList = []
+for i in range(len(bamList)):
+    for bamFile in bamList[i]:
+        uniqBamIndex = bamDict['bamToIndex'][bamFile]
+        poolMapArgsList.append([libTmp.name, bamFile, uniqBamIndex, strand, pairendFlag])
+peakReadsResultList = []
+with Pool(processes=thread) as pool:
+    for i in pool.imap_unordered(GetPeakReadInBam, poolMapArgsList):
+        peakReadsResultList.append(i)
+## delete peak temp
+libTmp.close()
+
+## construct final peak-reads dictionary
+peakReadDict = defaultdict(dict)
+for result in peakReadsResultList:
+    uniqBamIndex, prDict = result
+    for peakid in sorted(prDict.keys()):
+        peakReadDict[peakid][uniqBamIndex] = prDict[peakid]
+
+## construct the sample matrix requried by DESeq2Gene.R
+sampleMtx = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+with open(sampleMtx.name, 'w') as temp:
+    row = ['sample', 'condition', 'antibody\n']
+    temp.write('\t'.join(row))
+    for uniqBamIndex in bamDict['indexToInfo'].keys():
+        ipType = bamDict['indexToInfo'][uniqBamIndex]['ipType']
+        treatType = bamDict['indexToInfo'][uniqBamIndex]['treatType']
+        row = ["X" + uniqBamIndex, treatType, ipType + '\n']
+        temp.write('\t'.join(row))
+
+## construct the peak-counts matrix
+peakCountsMtx = tempfile.NamedTemporaryFile(suffix='.tmp', delete=True)
+#peakCountsMtx = 'peak.counts.matrix'
+with open(peakCountsMtx.name, 'w') as temp:
+    row = ['gene_id'] + list(map(lambda x: "X" + x, uniqBamIndexList))
+    temp.write('\t'.join(row) + '\n')
+    for peakid in sorted(peakReadDict.keys()):
+        row = [peakid]
+        for uniqBamIndex in uniqBamIndexList:
+            if uniqBamIndex not in peakReadDict[peakid]:
+                counts = 0
+            else:
+                counts = peakReadDict[peakid][uniqBamIndex]
+            row.append(str(counts))
+        temp.write('\t'.join(row) + '\n')
+
+## run DESeq2Gene.R, m6a_peak_diff.DESeq2.txt, m6a_peak_diff.sig.DESeq2.txt, m6a_peak_diff.normalized.counts.txt
+command = 'DESeq2Gene.R --sampleMtx {} --counts {} \
+    --formula "condition + antibody + condition:antibody" --relevel "condition:control,antibody:input" \
+    --name "conditiontreat.antibodyIP" -f "{}" --norcounts \
+    --test "Wald" --pval 1 --adjp 0.1 --shrink "{}" --prefix "m6a_peak_diff" --output {}'.format(sampleMtx.name, peakCountsMtx.name, args.filter, args.shrink, outputDir)
+__ = subprocess.check_output(command, shell=True)
+## delete temporary files
+sampleMtx.close()
+peakCountsMtx.close()
+## get results from DESeq2
+deseqDict = defaultdict(dict)
+deseqResFile = os.path.join(outputDir, 'm6a_peak_diff.DESeq2.txt')
+with open(deseqResFile, 'r') as f:
+    row = f.readline().strip().split('\t')
+    headerDict = defaultdict(dict)
+    for i in range(len(row)):
+        headerDict[row[i]] = i
+    for line in f:
+        row = line.strip().split('\t')
+        peakid = row[headerDict['uniqId']]
+        baseMean = row[headerDict['baseMean']]
+        if float(baseMean) == 0:
+            continue
+        if float(pval) > args.pval:
+            continue
+        log2Fold = row[headerDict['log2FoldChange']]
+        pval = row[headerDict['pvalue']]
+        pvalAdj = row[5]
+        valueRow = [baseMean, log2Fold, pval, pvalAdj]
+        deseqDict[peakid]['peakDiffDeseq2'] = valueRow
+
+## run fisher test
+#norCountsFile = os.path.join(outputDir, 'm6a_peak_diff.normalized.counts.txt')
+#norCountsDict = defaultdict(dict)
+#with open(norCountsFile, 'r') as f:
+#    sampleHeaderIndexDict = defaultdict(dict)
+#    hrow = f.readline().strip().split('\t')
+#    for i in range(len(hrow)):
+#        ## start from sample
+#        sampleHeaderIndexDict[i+1] = hrow[i].replace('X', '')
+#    for line in f:
+#        #start from peakid
+#        row = line.strip().split()
+#        peakid = row[0]
+#        if peakid not in peakDict:
+#            continue
+#        for i in range(1, len(row)):
+#            uniqBamIndex = sampleHeaderIndexDict[i]
+#            ipType = bamDict['indexToInfo'][uniqBamIndex]['ipType']
+#            treatType = bamDict['indexToInfo'][uniqBamIndex]['treatType']
+#            if treatType not in norCountsDict[peakid]:
+#                norCountsDict[peakid][treatType] = defaultdict(list)
+#            norCountsDict[peakid][treatType][ipType].append(float(row[i]))
+#delete files from DESeq2Gene.R
+os.remove(os.path.join(outputDir, 'm6a_peak_diff.DESeq2.txt'))
+os.remove(os.path.join(outputDir, 'm6a_peak_diff.sig.DESeq2.txt'))
+os.remove(os.path.join(outputDir, 'm6a_peak_diff.normalized.counts.txt'))
+os.remove(os.path.join(outputDir, 'm6a_peak_diff.MA.pdf'))
+os.remove(os.path.join(outputDir, 'm6a_peak_diff.pvalue.histogram.pdf'))
+os.remove(os.path.join(outputDir, 'm6a_peak_diff.pvalueNorCounts.bar.pdf'))
+
+## run fisher exact test parallel
+#countsPeakidList = sorted(norCountsDict.keys())
+#fisherTestResList = []
+#with Pool(processes=thread) as pool:
+#    for i in pool.imap_unordered(RunFisherExactTest, countsPeakidList):
+#        fisherTestResList.append(i)
+#
+### get fisher p-value and BH FDR
+#fisherPeakidList = []
+#fisherPvalList = []
+#for result in fisherTestResList:
+#    peakid, pvalue = result
+#    fisherPeakidList.append(peakid)
+#    fisherPvalList.append(float(pvalue))
+#padjList = rstats.p_adjust(FloatVector(fisherPvalList), method = 'BH')
+### store pvalue and fdr
+#fisherPvalDict = {}
+#for i in range(len(fisherPeakidList)):
+#    peakid = fisherPeakidList[i]
+#    pvalue = fisherPvalList[i]
+#    padj = padjList[i]
+#    fisherPvalDict[peakid] = [pvalue, padj]
+
+## output results
+with open(args.output, 'w') as out:
+    nameRow.extend(['source', 'mean.normalized.counts.DEseq2', 'diff.log2fc.DESeq2', 'diff.pval.DESeq2', 'diff.adjp.DESeq2'])
+    if bool(args.expMtx):
+        nameRow.extend(['gene.aveExp.control', 'gene.aveExp.treated'])
+    if bool(args.degMtx):
+        nameRow.extend(['gene.DE.log2fc', 'gene.DE.pval'])
+    out.write('\t'.join(nameRow) + '\n')
+    for peakid in peakidList:
+        row = peakDict[peakid]['row']
+        row[3] = row[3].split('|')[0]
+        labelList = peakLabelDict[peakid]
+        row.extend(labelList)
+        if peakid not in deseqDict:
+            continue
+        row += peakDict[peakid]['peakDiffDeseq2']
+        if args.expMtx:
+            row += peakDict[peakid]['geneExp']
+        if args.degMtx:
+            row += peakDict[peakid]['geneDe']
+        out.write('\t'.join(map(str, row)) + '\n')

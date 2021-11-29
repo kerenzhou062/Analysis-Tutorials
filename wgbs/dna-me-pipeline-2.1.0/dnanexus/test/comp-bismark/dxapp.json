@@ -1,0 +1,70 @@
+{
+  "name": "comp-bismark",
+  "title": "Compares bismark methlythation pipeline results",
+  "summary": "comp-bismark",
+  "dxapi": "1.0.0",
+  "version": "0.0.1",
+  "categories": [],
+  "inputSpec": [
+    {
+      "name": "data_dir",
+      "label": "Directory of outputs to compare dx results to",
+      "class": "string",
+      "optional": false
+    },
+    {
+      "name": "test_dir",
+      "label": "Directory of dx results",
+      "class": "string",
+      "optional": false
+    }
+  ],
+  "outputSpec": [
+    {
+      "name": "bam_diff",
+      "label": "Bam diff file",
+      "class": "file"
+    },
+    {
+      "name": "report_diff",
+      "label": "Report diff file",
+      "class": "file"
+    },
+    {
+      "name": "cg_bed_diff",
+      "label": "CG BED is same",
+      "class": "boolean"
+    },
+    {
+      "name": "chh_bed_diff",
+      "label": "CHH BED is same",
+      "class": "boolean"
+    },
+    {
+      "name": "chg_bed_diff",
+      "label": "CHG BED is same",
+      "class": "boolean"
+    }
+  ],
+  "runSpec": {
+    "interpreter": "bash",
+    "file": "src/comp-bismark.sh",
+    "execDepends": [
+      {"name":"gawk"}
+    ],
+    "systemRequirements": {
+      "main": {
+        "instanceType": "mem3_hdd2_x4"
+      },
+      "myEntryPoint": {
+        "instanceType": "mem3_hdd2_x4"
+      }
+    }
+  },
+  "access": {
+    "network": [
+      "*"
+    ]
+  },
+  "authorizedUsers": []
+}
